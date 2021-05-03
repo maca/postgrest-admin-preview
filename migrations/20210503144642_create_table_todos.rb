@@ -7,7 +7,11 @@ Sequel.migration do
       Bool :done, null: false, default: false
     end
 
-    run "grant select on api.todos to web_anon"
+    run <<-SQL
+      grant select on api.todos to todo_anon;
+      grant all on api.todos to todo_user;
+      grant usage, select on sequence api.todos_id_seq to todo_user;
+    SQL
   end
 
   down do
