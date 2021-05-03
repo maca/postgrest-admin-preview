@@ -24,6 +24,11 @@ type Msg
     = UpdateSchema (Result Http.Error String)
 
 
+type Error
+    = HttpError Http.Error
+    | DecodeError Decode.Error
+
+
 type alias Model =
     { schema : Maybe Schema
     }
@@ -44,25 +49,31 @@ main =
         }
 
 
+
+-- Update
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         UpdateSchema result ->
-            case result of
-                Ok body ->
-                    case Decode.decodeString Schema.decoder body of
-                        Ok schema ->
-                            let
-                                _ =
-                                    Debug.log "schema" schema
-                            in
-                            ( { model | schema = Just schema }, Cmd.none )
-
-                        Err _ ->
-                            ( model, Cmd.none )
+            case decodeSchema result of
+                Ok schema ->
+                    ( { model | schema = Just schema }, Cmd.none )
 
                 Err _ ->
                     ( model, Cmd.none )
+
+
+decodeSchema : Result Http.Error String -> Result Error Schema
+decodeSchema result =
+    Result.mapError HttpError result
+        |> Result.andThen
+            (Decode.decodeString Schema.decoder >> Result.mapError DecodeError)
+
+
+
+-- View
 
 
 view : Model -> Html Msg
@@ -70,6 +81,10 @@ view _ =
     div
         []
         [ text "Hello" ]
+
+
+
+-- Subscriptions and Commands
 
 
 subscriptions : Model -> Sub Msg
