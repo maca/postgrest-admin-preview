@@ -3,7 +3,6 @@ Sequel.migration do
     run <<-SQL
       drop role if exists todo_user;
       create role todo_user nologin;
-      grant todo_user to todo_authenticator;
     SQL
   end
 
