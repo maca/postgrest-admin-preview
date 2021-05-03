@@ -1,0 +1,20 @@
+# -*- restclient -*-
+#
+# Gets  all Github APIs, formats JSON, shows response status and headers underneath.
+# Also sends a User-Agent header, because the Github API requires this.
+#
+:token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoidG9kb191c2VyIn0.gm7S31FmVXlluCKr2ZBXBolkei2n06gNGJaw1IUJBEk
+:headers = <<
+Authorization: Bearer :token
+Content-Type: application/json
+#
+
+
+GET http://localhost:3000/todos
+
+#
+
+PATCH http://localhost:3000/todos
+:headers
+
+{"done": false}
