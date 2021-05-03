@@ -14,15 +14,17 @@ type Definition
 
 
 type Value
-    = Value
+    = PFloat (Maybe Float)
+    | PInt (Maybe Int)
+    | PString (Maybe String)
+    | PBool (Maybe Bool)
+    | PArray (Maybe (List Value))
+    | PObject (Maybe (Dict String Value))
+    | BadValue String
 
 
-type alias Field =
-    { fieldType : String
-    , default : Maybe Value
-    , required : Bool
-    , name : String
-    }
+type Field
+    = Field String Value Bool
 
 
 decoder : Decoder Schema
@@ -40,23 +42,49 @@ fieldsDecoder =
 propertiesDecoder : List String -> Decoder (List Field)
 propertiesDecoder required =
     let
-        partialFieldDecoder =
-            Decode.map2 Field
-                (Decode.field "format" typeDecoder)
-                (Decode.maybe <| Decode.field "default" defaultDecoder)
-
-        mapField ( name, const ) =
-            const (List.member name required) name
+        mapField ( name, value ) =
+            Field name value (List.member name required)
     in
     Decode.map (List.map mapField)
-        (Decode.field "properties" (Decode.keyValuePairs partialFieldDecoder))
+        (Decode.field "properties" (Decode.keyValuePairs valueDecoder))
 
 
-typeDecoder : Decoder String
-typeDecoder =
-    Decode.string
+valueDecoder : Decoder Value
+valueDecoder =
+    let
+        map cons dec =
+            Decode.map cons (Decode.maybe <| Decode.field "default" dec)
+    in
+    Decode.map2 Tuple.pair
+        (Decode.field "type" Decode.string)
+        (Decode.field "format" Decode.string)
+        |> Decode.andThen
+            (\data ->
+                case data of
+                    ( "number", _ ) ->
+                        map PFloat Decode.float
 
+                    ( "integer", _ ) ->
+                        map PInt Decode.int
 
-defaultDecoder : Decoder Value
-defaultDecoder =
-    Decode.succeed Value
+                    ( "boolean", _ ) ->
+                        map PBool Decode.bool
+
+                    ( "string", _ ) ->
+                        map PString Decode.string
+
+                    ( "array", _ ) ->
+                        map PArray <| Decode.list valueDecoder
+
+                    ( "object", _ ) ->
+                        map PObject <| Decode.dict valueDecoder
+
+                    ( k, v ) ->
+                        Decode.succeed <|
+                            BadValue <|
+                                "unknown type ("
+                                    ++ k
+                                    ++ ", "
+                                    ++ v
+                                    ++ ")"
+            )
