@@ -2,6 +2,7 @@ module Main exposing (main)
 
 import Browser exposing (UrlRequest)
 import Browser.Navigation as Nav
+import Dict
 import Html exposing (..)
 import Html.Attributes exposing (class, href)
 import Http
@@ -9,7 +10,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Postgrest.Client as PG
 import Result
-import Schema exposing (Definition, Schema, Value(..))
+import Schema exposing (Schema, Value(..))
 import String.Extra as String
 import Url exposing (Url)
 import Url.Parser as Parser exposing (Parser)
@@ -124,12 +125,12 @@ sideMenu model =
         [ class "resources-menu" ]
         [ ul
             []
-            (Maybe.map (List.map menuItem) model.schema |> Maybe.withDefault [])
+            (Maybe.map (Dict.keys >> List.map menuItem) model.schema |> Maybe.withDefault [])
         ]
 
 
-menuItem : Definition -> Html Msg
-menuItem { name } =
+menuItem : String -> Html Msg
+menuItem name =
     li
         []
         [ a [ href <| "/" ++ name ] [ text <| String.humanize name ] ]
@@ -150,18 +151,15 @@ mainContent model =
 
 listing : String -> Model -> Html Msg
 listing name { schema } =
-    case Maybe.map (List.filter (.name >> (==) name)) schema of
-        Just [ { fields } ] ->
+    case Maybe.map (Dict.get name) schema of
+        Just (Just fields) ->
             let
-                toHeaders =
-                    .name >> String.humanize >> text >> List.singleton >> th []
-
-                toValue =
-                    .value >> displayValue >> List.singleton >> td []
+                toHeader =
+                    String.humanize >> text >> List.singleton >> th []
             in
             table
                 []
-                [ thead [] [ tr [] (List.map toHeaders fields) ]
+                [ thead [] [ tr [] (Dict.keys fields |> List.map toHeader) ]
                 , tbody [] [ tr [] [] ]
                 ]
 

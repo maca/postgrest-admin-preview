@@ -1,4 +1,4 @@
-module Schema exposing (Definition, Field, Schema, Value(..), decoder)
+module Schema exposing (Field, Schema, Value(..), decoder)
 
 import Basics.Extra exposing (uncurry)
 import Dict exposing (Dict)
@@ -17,19 +17,12 @@ import Regex exposing (Regex)
 
 
 type alias Schema =
-    List Definition
-
-
-type alias Definition =
-    { name : String
-    , fields : List Field
-    }
+    Dict String (Dict String Field)
 
 
 type alias Field =
-    { name : String
+    { required : Bool
     , value : Value
-    , required : Bool
     }
 
 
@@ -55,22 +48,21 @@ type Triple a b c
 
 decoder : Decoder Schema
 decoder =
-    Decode.map (List.map <| uncurry Definition)
-        (field "definitions" (Decode.keyValuePairs fieldsDecoder))
+    field "definitions" (Decode.dict fieldsDecoder)
 
 
-fieldsDecoder : Decoder (List Field)
+fieldsDecoder : Decoder (Dict String Field)
 fieldsDecoder =
     field "required" (Decode.list string) |> andThen propertiesDecoder
 
 
-propertiesDecoder : List String -> Decoder (List Field)
+propertiesDecoder : List String -> Decoder (Dict String Field)
 propertiesDecoder required =
     let
         mapField ( name, value ) =
-            Field name value (List.member name required)
+            ( name, Field (List.member name required) value )
     in
-    Decode.map (List.map mapField)
+    Decode.map (Dict.fromList << List.map mapField)
         (field "properties" (Decode.keyValuePairs valueDecoder))
 
 
