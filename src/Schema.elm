@@ -1,4 +1,4 @@
-module Schema exposing (Definition(..), Field, Schema, decoder)
+module Schema exposing (Definition, Field, Schema, Value(..), decoder)
 
 import Basics.Extra exposing (uncurry)
 import Dict exposing (Dict)
@@ -20,12 +20,21 @@ type alias Schema =
     List Definition
 
 
-type Definition
-    = Definition String (List Field)
+type alias Definition =
+    { name : String
+    , fields : List Field
+    }
 
 
-type Field
-    = Field String Value Bool
+type alias Field =
+    { name : String
+    , value : Value
+    , required : Bool
+    }
+
+
+type alias Column =
+    ( String, String )
 
 
 type Value
@@ -38,10 +47,6 @@ type Value
     | PPrimaryKeyString (Maybe String)
     | PPrimaryKeyInt (Maybe Int)
     | BadValue String
-
-
-type alias Column =
-    ( String, String )
 
 
 type Triple a b c
