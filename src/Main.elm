@@ -1,27 +1,37 @@
 module Main exposing (main)
 
-import Browser
+import Browser exposing (UrlRequest)
+import Browser.Navigation as Nav
 import Html
     exposing
         ( Attribute
         , Html
+        , a
         , div
         , h1
         , h2
+        , li
+        , section
         , text
         , textarea
+        , ul
         )
-import Html.Attributes exposing (style)
+import Html.Attributes exposing (href, style)
 import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Postgrest.Client as PG
 import Result
-import Schema exposing (Schema)
+import Schema exposing (Definition(..), Schema)
+import String.Extra as String
+import Url exposing (Url)
 
 
 type Msg
     = UpdateSchema (Result Http.Error String)
+    | LinkClicked Browser.UrlRequest
+    | UrlChanged Url.Url
+    | NoOp
 
 
 type Error
@@ -30,7 +40,9 @@ type Error
 
 
 type alias Model =
-    { schema : Maybe Schema
+    { url : Url.Url
+    , key : Nav.Key
+    , schema : Maybe Schema
     }
 
 
@@ -41,12 +53,19 @@ host =
 
 main : Program () Model Msg
 main =
-    Browser.element
-        { init = always ( Model Nothing, getSchema )
+    Browser.application
+        { init = init
         , update = update
         , view = view
         , subscriptions = subscriptions
+        , onUrlRequest = LinkClicked
+        , onUrlChange = UrlChanged
         }
+
+
+init : () -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
+init () url key =
+    ( Model url key Nothing, getSchema )
 
 
 
@@ -64,6 +83,20 @@ update msg model =
                 Err _ ->
                     ( model, Cmd.none )
 
+        LinkClicked urlRequest ->
+            case urlRequest of
+                Browser.Internal url ->
+                    ( model, Nav.pushUrl model.key (Url.toString url) )
+
+                Browser.External href ->
+                    ( model, Nav.load href )
+
+        UrlChanged url ->
+            ( { model | url = url }, Cmd.none )
+
+        NoOp ->
+            ( model, Cmd.none )
+
 
 decodeSchema : Result Http.Error String -> Result Error Schema
 decodeSchema result =
@@ -76,11 +109,34 @@ decodeSchema result =
 -- View
 
 
-view : Model -> Html Msg
-view _ =
-    div
+view : Model -> Browser.Document Msg
+view model =
+    { title = "Admin"
+    , body = body model
+    }
+
+
+body : Model -> List (Html Msg)
+body model =
+    [ sideMenu model ]
+
+
+sideMenu : Model -> Html Msg
+sideMenu model =
+    let
+        items =
+            Maybe.map (List.map menuItem) model.schema
+                |> Maybe.withDefault []
+    in
+    section
         []
-        [ text "Hello" ]
+        [ ul [] items ]
+
+
+menuItem (Definition name _) =
+    li
+        []
+        [ a [ href <| "/" ++ name ] [ text <| String.humanize name ] ]
 
 
 

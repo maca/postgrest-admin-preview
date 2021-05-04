@@ -1,4 +1,4 @@
-module Schema exposing (Field, Schema, decoder)
+module Schema exposing (Definition(..), Field, Schema, decoder)
 
 import Basics.Extra exposing (uncurry)
 import Dict exposing (Dict)
