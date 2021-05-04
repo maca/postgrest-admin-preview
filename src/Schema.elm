@@ -2,7 +2,18 @@ module Schema exposing (Field, Schema, decoder)
 
 import Basics.Extra exposing (uncurry)
 import Dict exposing (Dict)
-import Json.Decode as Decode exposing (Decoder)
+import Json.Decode as Decode
+    exposing
+        ( Decoder
+        , andThen
+        , bool
+        , field
+        , float
+        , int
+        , maybe
+        , string
+        )
+import Regex exposing (Regex)
 
 
 type alias Schema =
@@ -13,30 +24,39 @@ type Definition
     = Definition String (List Field)
 
 
+type Field
+    = Field String Value Bool
+
+
 type Value
     = PFloat (Maybe Float)
     | PInt (Maybe Int)
     | PString (Maybe String)
     | PBool (Maybe Bool)
-    | PArray (Maybe (List Value))
-    | PObject (Maybe (Dict String Value))
+    | PForeignKeyString Column (Maybe String)
+    | PForeignKeyInt Column (Maybe Int)
+    | PPrimaryKeyString (Maybe String)
+    | PPrimaryKeyInt (Maybe Int)
     | BadValue String
 
 
-type Field
-    = Field String Value Bool
+type alias Column =
+    ( String, String )
+
+
+type Triple a b c
+    = Triple a b c
 
 
 decoder : Decoder Schema
 decoder =
     Decode.map (List.map <| uncurry Definition)
-        (Decode.field "definitions" (Decode.keyValuePairs fieldsDecoder))
+        (field "definitions" (Decode.keyValuePairs fieldsDecoder))
 
 
 fieldsDecoder : Decoder (List Field)
 fieldsDecoder =
-    Decode.field "required" (Decode.list Decode.string)
-        |> Decode.andThen propertiesDecoder
+    field "required" (Decode.list string) |> andThen propertiesDecoder
 
 
 propertiesDecoder : List String -> Decoder (List Field)
@@ -46,40 +66,39 @@ propertiesDecoder required =
             Field name value (List.member name required)
     in
     Decode.map (List.map mapField)
-        (Decode.field "properties" (Decode.keyValuePairs valueDecoder))
+        (field "properties" (Decode.keyValuePairs valueDecoder))
 
 
 valueDecoder : Decoder Value
 valueDecoder =
-    let
-        map cons dec =
-            Decode.map cons (Decode.maybe <| Decode.field "default" dec)
-    in
-    Decode.map2 Tuple.pair
-        (Decode.field "type" Decode.string)
-        (Decode.field "format" Decode.string)
-        |> Decode.andThen
+    Decode.map3 Triple
+        (field "type" string)
+        (field "format" string)
+        (maybe <| field "description" string)
+        |> andThen
             (\data ->
                 case data of
-                    ( "number", _ ) ->
-                        map PFloat Decode.float
+                    Triple "number" _ _ ->
+                        mapValue PFloat float
 
-                    ( "integer", _ ) ->
-                        map PInt Decode.int
+                    Triple "integer" _ maybeDesc ->
+                        Decode.oneOf
+                            [ mapPrimaryKey PPrimaryKeyInt int maybeDesc
+                            , mapForeignKey PForeignKeyInt int maybeDesc
+                            , mapValue PInt int
+                            ]
 
-                    ( "boolean", _ ) ->
-                        map PBool Decode.bool
+                    Triple "string" _ maybeDesc ->
+                        Decode.oneOf
+                            [ mapPrimaryKey PPrimaryKeyString string maybeDesc
+                            , mapForeignKey PForeignKeyString string maybeDesc
+                            , mapValue PString string
+                            ]
 
-                    ( "string", _ ) ->
-                        map PString Decode.string
+                    Triple "boolean" _ _ ->
+                        mapValue PBool bool
 
-                    ( "array", _ ) ->
-                        map PArray <| Decode.list valueDecoder
-
-                    ( "object", _ ) ->
-                        map PObject <| Decode.dict valueDecoder
-
-                    ( k, v ) ->
+                    Triple k v _ ->
                         Decode.succeed <|
                             BadValue <|
                                 "unknown type ("
@@ -88,3 +107,50 @@ valueDecoder =
                                     ++ v
                                     ++ ")"
             )
+
+
+mapPrimaryKey : (Maybe a -> Value) -> Decoder a -> Maybe String -> Decoder Value
+mapPrimaryKey const dec maybeDesc =
+    case Maybe.map (Regex.contains primaryKeyRegex) maybeDesc of
+        Just True ->
+            mapValue const dec
+
+        _ ->
+            Decode.fail ""
+
+
+mapForeignKey :
+    (Column -> Maybe a -> Value)
+    -> Decoder a
+    -> Maybe String
+    -> Decoder Value
+mapForeignKey const dec maybeDesc =
+    let
+        matchFn =
+            List.concatMap .submatches << Regex.find foreignKeyRegex
+    in
+    case Maybe.map matchFn maybeDesc of
+        Just [ Just table, Just col ] ->
+            mapValue (const ( table, col )) dec
+
+        _ ->
+            Decode.fail ""
+
+
+mapValue : (Maybe a -> Value) -> Decoder a -> Decoder Value
+mapValue cons dec =
+    Decode.map cons (maybe <| field "default" dec)
+
+
+primaryKeyRegex : Regex
+primaryKeyRegex =
+    Regex.fromString
+        "Primary Key"
+        |> Maybe.withDefault Regex.never
+
+
+foreignKeyRegex : Regex
+foreignKeyRegex =
+    Regex.fromString
+        "fk table='(\\w+)' column='(\\w+)'"
+        |> Maybe.withDefault Regex.never
