@@ -200,7 +200,9 @@ listing name result { schema, route } =
         Just (Just fields) ->
             let
                 fieldNames =
-                    Dict.keys fields
+                    Dict.toList fields
+                        |> List.sortWith sortFields
+                        |> List.map Tuple.first
 
                 toHeader =
                     String.humanize >> text >> List.singleton >> th []
@@ -216,6 +218,44 @@ listing name result { schema, route } =
 
         _ ->
             notFound
+
+
+sortFields ( name, a ) ( _, b ) =
+    case ( a.value, b.value ) of
+        ( PForeignKeyString _ _, PPrimaryKeyString _ ) ->
+            GT
+
+        ( PForeignKeyInt _ _, PPrimaryKeyInt _ ) ->
+            GT
+
+        ( PPrimaryKeyString _, _ ) ->
+            LT
+
+        ( PPrimaryKeyInt _, _ ) ->
+            LT
+
+        ( PForeignKeyString _ _, _ ) ->
+            LT
+
+        ( PForeignKeyInt _ _, _ ) ->
+            LT
+
+        ( PString _, PPrimaryKeyString _ ) ->
+            GT
+
+        ( PString _, PPrimaryKeyInt _ ) ->
+            GT
+
+        ( PString _, _ ) ->
+            [ "title", "name", "first name", "last name" ]
+                |> List.indexedMap (flip Tuple.pair)
+                |> Dict.fromList
+                |> Dict.get name
+                |> Maybe.map (toFloat >> flip compare (1 / 0))
+                |> Maybe.withDefault GT
+
+        _ ->
+            EQ
 
 
 displayRows : List String -> Route -> Html Msg
