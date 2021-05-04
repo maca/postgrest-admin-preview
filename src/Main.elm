@@ -1,5 +1,6 @@
-module Main exposing (main)
+module Main exposing (Error, main)
 
+import Basics.Extra exposing (flip)
 import Browser exposing (UrlRequest)
 import Browser.Navigation as Nav
 import Dict
@@ -9,27 +10,33 @@ import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Postgrest.Client as PG
+import Record exposing (Record)
 import Result
 import Schema exposing (Schema, Value(..))
 import String.Extra as String
+import Task
 import Url exposing (Url)
+import Url.Builder as Url
 import Url.Parser as Parser exposing (Parser)
 
 
 type Msg
-    = UpdateSchema (Result Http.Error String)
-    | UpdateListing (Result Http.Error String)
+    = FetchedSchema (Result Http.Error String)
+    | FetchedListing (Result Error (List Record))
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url.Url
+    | Failure (Result Error Never)
 
 
 type Error
     = HttpError Http.Error
     | DecodeError Decode.Error
+    | PGError PG.Error
+    | DefinitionMissing String
 
 
 type Route
-    = Listing String
+    = Listing (Maybe (List Record)) String
     | Root
     | NotFound
 
@@ -38,12 +45,9 @@ type alias Model =
     { route : Route
     , key : Nav.Key
     , schema : Maybe Schema
+    , host : String
+    , jwt : PG.JWT
     }
-
-
-host : String
-host =
-    "http://localhost:3000"
 
 
 main : Program () Model Msg
@@ -60,7 +64,14 @@ main =
 
 init : () -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init () url key =
-    ( Model (getRoute url) key Nothing, getSchema )
+    let
+        jwt =
+            PG.jwt "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoidG9kb191c2VyIn0.gm7S31FmVXlluCKr2ZBXBolkei2n06gNGJaw1IUJBEk"
+
+        host =
+            "http://localhost:3000"
+    in
+    ( Model (getRoute url) key Nothing host jwt, getSchema host )
 
 
 
@@ -70,16 +81,30 @@ init () url key =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        UpdateSchema result ->
+        FetchedSchema result ->
             case decodeSchema result of
                 Ok schema ->
-                    ( { model | schema = Just schema }, Cmd.none )
+                    urlChanged { model | schema = Just schema }
 
                 Err _ ->
                     ( model, Cmd.none )
 
-        UpdateListing result ->
-            ( model, Cmd.none )
+        FetchedListing result ->
+            case result of
+                Ok resources ->
+                    case model.route of
+                        Listing _ resourcesName ->
+                            let
+                                route =
+                                    Listing (Just <| resources) resourcesName
+                            in
+                            ( { model | route = route }, Cmd.none )
+
+                        _ ->
+                            ( model, Cmd.none )
+
+                Err _ ->
+                    ( model, Cmd.none )
 
         LinkClicked urlRequest ->
             case urlRequest of
@@ -90,7 +115,20 @@ update msg model =
                     ( model, Nav.load href )
 
         UrlChanged url ->
-            ( { model | route = getRoute url }, Cmd.none )
+            urlChanged { model | route = getRoute url }
+
+        Failure _ ->
+            ( model, Cmd.none )
+
+
+urlChanged : Model -> ( Model, Cmd Msg )
+urlChanged model =
+    case model.route of
+        Listing Nothing resourcesName ->
+            ( model, fetchResources model resourcesName )
+
+        _ ->
+            ( model, Cmd.none )
 
 
 decodeSchema : Result Http.Error String -> Result Error Schema
@@ -98,6 +136,10 @@ decodeSchema result =
     Result.mapError HttpError result
         |> Result.andThen
             (Decode.decodeString Schema.decoder >> Result.mapError DecodeError)
+
+
+
+-- View
 
 
 view : Model -> Browser.Document Msg
@@ -125,7 +167,10 @@ sideMenu model =
         [ class "resources-menu" ]
         [ ul
             []
-            (Maybe.map (Dict.keys >> List.map menuItem) model.schema |> Maybe.withDefault [])
+            (Maybe.map (Dict.keys >> List.sort >> List.map menuItem)
+                model.schema
+                |> Maybe.withDefault []
+            )
         ]
 
 
@@ -142,25 +187,28 @@ mainContent model =
         Root ->
             text ""
 
-        Listing name ->
-            listing name model
+        Listing result name ->
+            listing name result model
 
         NotFound ->
             notFound
 
 
-listing : String -> Model -> Html Msg
-listing name { schema } =
+listing : String -> Maybe (List Record) -> Model -> Html Msg
+listing name result { schema, route } =
     case Maybe.map (Dict.get name) schema of
         Just (Just fields) ->
             let
+                fieldNames =
+                    Dict.keys fields
+
                 toHeader =
                     String.humanize >> text >> List.singleton >> th []
             in
             table
                 []
-                [ thead [] [ tr [] (Dict.keys fields |> List.map toHeader) ]
-                , tbody [] [ tr [] [] ]
+                [ thead [] [ tr [] <| List.map toHeader fieldNames ]
+                , displayRows fieldNames route
                 ]
 
         Nothing ->
@@ -168,6 +216,25 @@ listing name { schema } =
 
         _ ->
             notFound
+
+
+displayRows : List String -> Route -> Html Msg
+displayRows names route =
+    case route of
+        Listing (Just records) _ ->
+            tbody [] <| List.map (displayRow names) records
+
+        _ ->
+            text ""
+
+
+displayRow : List String -> Record -> Html Msg
+displayRow names record =
+    let
+        toTd =
+            displayValue >> List.singleton >> td []
+    in
+    tr [] <| List.filterMap (flip Dict.get record >> Maybe.map toTd) names
 
 
 displayValue : Value -> Html Msg
@@ -221,10 +288,39 @@ subscriptions _ =
     Sub.none
 
 
-getSchema : Cmd Msg
-getSchema =
+getSchema : String -> Cmd Msg
+getSchema host =
     Http.get
-        { url = host, expect = Http.expectString UpdateSchema }
+        { url = host, expect = Http.expectString FetchedSchema }
+
+
+fail : Error -> Cmd Msg
+fail msg =
+    Task.fail msg |> Task.attempt Failure
+
+
+
+-- Http interactions
+
+
+fetchResources : Model -> String -> Cmd Msg
+fetchResources model resourcesName =
+    let
+        msg =
+            FetchedListing << Result.mapError PGError
+    in
+    endpoint model resourcesName
+        |> Maybe.map PG.getMany
+        |> Maybe.map (PG.toCmd model.jwt msg)
+        |> Maybe.withDefault (fail <| DefinitionMissing resourcesName)
+
+
+endpoint : Model -> String -> Maybe (PG.Endpoint Record)
+endpoint { host, schema } resourcesName =
+    schema
+        |> Maybe.andThen (Dict.get resourcesName)
+        |> Maybe.map Record.decoder
+        |> Maybe.map (PG.endpoint (Url.crossOrigin host [ resourcesName ] []))
 
 
 
@@ -240,5 +336,5 @@ routeParser : Parser (Route -> a) a
 routeParser =
     Parser.oneOf
         [ Parser.map Root Parser.top
-        , Parser.map Listing Parser.string
+        , Parser.map (Listing Nothing) Parser.string
         ]
