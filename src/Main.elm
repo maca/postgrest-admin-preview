@@ -99,14 +99,12 @@ update msg model =
 
         FetchedListing result ->
             case result of
-                Ok resources ->
+                Ok rss ->
                     case model.route of
-                        Listing _ resourcesName ->
-                            let
-                                route =
-                                    Listing (Just <| resources) resourcesName
-                            in
-                            ( { model | route = route }, Cmd.none )
+                        Listing _ name ->
+                            ( { model | route = Listing (Just <| rss) name }
+                            , Cmd.none
+                            )
 
                         _ ->
                             ( model, Cmd.none )
@@ -119,11 +117,9 @@ update msg model =
                 Ok record ->
                     case model.route of
                         Detail _ path ->
-                            let
-                                route =
-                                    Detail (Just <| record) path
-                            in
-                            ( { model | route = route }, Cmd.none )
+                            ( { model | route = Detail (Just <| record) path }
+                            , Cmd.none
+                            )
 
                         _ ->
                             ( model, Cmd.none )
@@ -217,7 +213,7 @@ mainContent model =
             listing name maybeRecords model
 
         Detail maybeRecord _ ->
-            text "record"
+            detail maybeRecord model
 
         NotFound ->
             notFound
@@ -246,6 +242,43 @@ listing name result { schema, route } =
             notFound
 
 
+detail : Maybe Record -> Model -> Html Msg
+detail maybeRecord { schema } =
+    case maybeRecord of
+        Just record ->
+            let
+                defaultLabel =
+                    Record.primaryKey record
+                        |> Maybe.map displayValue
+                        |> Maybe.withDefault (text "")
+            in
+            section
+                []
+                [ h1 []
+                    [ recordLabel record
+                        |> Maybe.map text
+                        |> Maybe.withDefault defaultLabel
+                    ]
+                ]
+
+        Nothing ->
+            notFound
+
+
+recordLabel : Record -> Maybe String
+recordLabel record =
+    List.filterMap (recordLabelHelp record) recordIdentifiers |> List.head
+
+
+recordLabelHelp record fieldName =
+    case Dict.get fieldName record of
+        Just (PString label) ->
+            label
+
+        _ ->
+            Nothing
+
+
 displayRows : Schema -> List String -> Route -> Html Msg
 displayRows schema names route =
     case route of
@@ -260,13 +293,13 @@ displayRow : Schema -> List String -> Record -> Html Msg
 displayRow schema names record =
     let
         toTd =
-            displayValue schema >> List.singleton >> td []
+            displayValue >> List.singleton >> td []
     in
     tr [] <| List.filterMap (flip Dict.get record >> Maybe.map toTd) names
 
 
-displayValue : Schema -> Value -> Html Msg
-displayValue schema val =
+displayValue : Value -> Html Msg
+displayValue val =
     case val of
         PFloat (Just float) ->
             text <| String.fromFloat float
@@ -428,12 +461,7 @@ routeParser : Parser (Route -> a) a
 routeParser =
     Parser.oneOf
         [ Parser.map Root Parser.top
-        , resourceParser
+        , Parser.map (\res id -> Detail Nothing ( res, id ))
+            (Parser.string </> Parser.string)
         , Parser.map (Listing Nothing) Parser.string
         ]
-
-
-resourceParser : Parser (Route -> a) a
-resourceParser =
-    Parser.map (\res id -> Detail Nothing ( res, id ))
-        (Parser.string </> Parser.string)

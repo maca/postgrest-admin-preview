@@ -1,4 +1,4 @@
-module Record exposing (Record, decoder)
+module Record exposing (Record, decoder, primaryKey)
 
 import Basics.Extra exposing (curry, flip)
 import Dict exposing (Dict)
@@ -14,7 +14,7 @@ import Json.Decode as Decode
         , string
         )
 import Postgrest.Client as PG
-import PrimaryKey
+import PrimaryKey exposing (PrimaryKey)
 import Schema exposing (Definition)
 import Value exposing (Column, Value(..))
 
@@ -79,3 +79,20 @@ decoderFold identifiers definition name _ prevDec =
                     map BadValue dict Decode.value
     in
     Decode.andThen foldFun prevDec
+
+
+primaryKey : Record -> Maybe Value
+primaryKey record =
+    Dict.values record
+        |> List.filterMap primaryKeyHelp
+        |> List.head
+
+
+primaryKeyHelp : Value -> Maybe Value
+primaryKeyHelp value =
+    case value of
+        PPrimaryKey _ ->
+            Just value
+
+        _ ->
+            Nothing
