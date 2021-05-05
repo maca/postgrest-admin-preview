@@ -86,13 +86,7 @@ valueDecoder =
                         mapValue PBool bool
 
                     Triple k v _ ->
-                        Decode.succeed <|
-                            BadValue <|
-                                "unknown type ("
-                                    ++ k
-                                    ++ ", "
-                                    ++ v
-                                    ++ ")"
+                        Decode.map BadValue (field "default" Decode.value)
             )
 
 
@@ -119,7 +113,7 @@ mapForeignKey maybeDesc =
     in
     case Maybe.map matchFn maybeDesc of
         Just [ Just table, Just col ] ->
-            mapValue (PForeignKey ( table, col )) PrimaryKey.decoder
+            mapValue (PForeignKey ( table, col ) Nothing) PrimaryKey.decoder
 
         _ ->
             Decode.fail ""

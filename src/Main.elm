@@ -14,6 +14,7 @@ import PrimaryKey
 import Record exposing (Record)
 import Result
 import Schema exposing (Schema)
+import Set
 import String.Extra as String
 import Task
 import Url exposing (Url)
@@ -253,7 +254,7 @@ displayValue schema val =
         PBool (Just False) ->
             text "false"
 
-        PForeignKey column (Just pk) ->
+        PForeignKey column ref (Just pk) ->
             text <| PrimaryKey.toString pk
 
         PPrimaryKey (Just pk) ->
@@ -274,10 +275,10 @@ sortFields ( name, a ) ( _, b ) =
         ( _, PPrimaryKey _ ) ->
             GT
 
-        ( PForeignKey _ _, _ ) ->
+        ( PForeignKey _ _ _, _ ) ->
             LT
 
-        ( _, PForeignKey _ _ ) ->
+        ( _, PForeignKey _ _ _ ) ->
             GT
 
         ( PString _, _ ) ->
@@ -331,10 +332,34 @@ fetchResources { host, schema, jwt } resourcesName =
     case Dict.get resourcesName schema of
         Just definition ->
             let
+                resources name =
+                    Dict.get name schema
+                        |> Maybe.map
+                            (Dict.keys
+                                >> Set.fromList
+                                >> Set.intersect
+                                    (recordIdentifiers |> Set.fromList)
+                                >> Set.toList
+                                >> PG.attributes
+                                >> PG.resource name
+                            )
+
+                references =
+                    Dict.values definition
+                        |> List.filterMap
+                            (.value
+                                >> Value.foreignKeyReference
+                                >> Maybe.andThen (Tuple.first >> resources)
+                            )
+
+                attrs =
+                    Dict.keys definition
+                        |> List.map PG.attribute
+
                 params =
-                    []
+                    [ PG.select (attrs ++ references) ]
             in
-            Record.decoder definition
+            Record.decoder recordIdentifiers definition
                 |> PG.endpoint (Url.crossOrigin host [ resourcesName ] [])
                 |> PG.getMany
                 |> PG.setParams params
