@@ -13,19 +13,20 @@ import Postgrest.Client as PG
 import PrimaryKey
 import Record exposing (Record)
 import Result
-import Schema exposing (Schema)
+import Schema exposing (Field, Schema)
 import Set
 import String.Extra as String
 import Task
 import Url exposing (Url)
 import Url.Builder as Url
-import Url.Parser as Parser exposing (Parser)
+import Url.Parser as Parser exposing ((</>), Parser)
 import Value exposing (Column, Value(..))
 
 
 type Msg
     = FetchedSchema (Result Http.Error String)
     | FetchedListing (Result Error (List Record))
+    | FetchedRecord (Result Error Record)
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url.Url
     | Failure (Result Error Never)
@@ -40,6 +41,7 @@ type Error
 
 type Route
     = Listing (Maybe (List Record)) String
+    | Detail (Maybe Record) ( String, String )
     | Root
     | NotFound
 
@@ -73,8 +75,11 @@ init () url key =
 
         host =
             "http://localhost:3000"
+
+        schema =
+            Dict.fromList []
     in
-    ( Model (getRoute url) key (Dict.fromList []) host jwt, getSchema host )
+    ( Model (getRoute [] url) key schema host jwt, getSchema host )
 
 
 
@@ -109,6 +114,23 @@ update msg model =
                 Err _ ->
                     ( model, Cmd.none )
 
+        FetchedRecord result ->
+            case result of
+                Ok record ->
+                    case model.route of
+                        Detail _ path ->
+                            let
+                                route =
+                                    Detail (Just <| record) path
+                            in
+                            ( { model | route = route }, Cmd.none )
+
+                        _ ->
+                            ( model, Cmd.none )
+
+                Err _ ->
+                    ( model, Cmd.none )
+
         LinkClicked urlRequest ->
             case urlRequest of
                 Browser.Internal url ->
@@ -118,7 +140,8 @@ update msg model =
                     ( model, Nav.load href )
 
         UrlChanged url ->
-            urlChanged { model | route = getRoute url }
+            urlChanged
+                { model | route = getRoute (model.schema |> Dict.keys) url }
 
         Failure _ ->
             ( model, Cmd.none )
@@ -128,7 +151,10 @@ urlChanged : Model -> ( Model, Cmd Msg )
 urlChanged model =
     case model.route of
         Listing Nothing resourcesName ->
-            ( model, fetchResources model resourcesName )
+            ( model, fetchResources resourcesName model )
+
+        Detail Nothing path ->
+            ( model, fetchResource path model )
 
         _ ->
             ( model, Cmd.none )
@@ -187,8 +213,11 @@ mainContent model =
         Root ->
             text ""
 
-        Listing result name ->
-            listing name result model
+        Listing maybeRecords name ->
+            listing name maybeRecords model
+
+        Detail maybeRecord _ ->
+            text "record"
 
         NotFound ->
             notFound
@@ -214,7 +243,7 @@ listing name result { schema, route } =
                 ]
 
         Nothing ->
-            text ""
+            notFound
 
 
 displayRows : Schema -> List String -> Route -> Html Msg
@@ -255,7 +284,7 @@ displayValue schema val =
             text "false"
 
         PForeignKey column ref (Just pk) ->
-            text <| PrimaryKey.toString pk
+            recordLink column ref <| PrimaryKey.toString pk
 
         PPrimaryKey (Just pk) ->
             text <| PrimaryKey.toString pk
@@ -267,6 +296,13 @@ displayValue schema val =
             text "-"
 
 
+recordLink : ( String, String ) -> Maybe String -> String -> Html Msg
+recordLink ( col, _ ) ref id =
+    a [ href <| Url.absolute [ col, id ] [] ]
+        [ Maybe.map text ref |> Maybe.withDefault (text id) ]
+
+
+sortFields : ( String, Field ) -> ( String, Field ) -> Order
 sortFields ( name, a ) ( _, b ) =
     case ( a.value, b.value ) of
         ( PPrimaryKey _, _ ) ->
@@ -327,8 +363,8 @@ fail msg =
 -- Http interactions
 
 
-fetchResources : Model -> String -> Cmd Msg
-fetchResources { host, schema, jwt } resourcesName =
+fetchResources : String -> Model -> Cmd Msg
+fetchResources resourcesName { host, schema, jwt } =
     case Dict.get resourcesName schema of
         Just definition ->
             let
@@ -369,18 +405,38 @@ fetchResources { host, schema, jwt } resourcesName =
             fail <| DefinitionMissing resourcesName
 
 
+fetchResource : ( String, String ) -> Model -> Cmd Msg
+fetchResource ( resourcesName, id ) { schema, host, jwt } =
+    case Dict.get resourcesName schema of
+        Just definition ->
+            Record.decoder recordIdentifiers definition
+                |> PG.endpoint (Url.crossOrigin host [ resourcesName ] [])
+                |> PG.getOne
+                |> PG.setParams []
+                |> PG.toCmd jwt (FetchedRecord << Result.mapError PGError)
 
--- Url parsing
+        Nothing ->
+            fail <| DefinitionMissing resourcesName
 
 
-getRoute : Url -> Route
-getRoute url =
-    Parser.parse routeParser url |> Maybe.withDefault NotFound
+getRoute : List String -> Url -> Route
+getRoute resourceNames url =
+    Parser.parse (routeParser resourceNames) url
+        |> Maybe.withDefault NotFound
 
 
-routeParser : Parser (Route -> a) a
-routeParser =
-    Parser.oneOf
-        [ Parser.map Root Parser.top
-        , Parser.map (Listing Nothing) Parser.string
-        ]
+routeParser : List String -> Parser (Route -> a) a
+routeParser resourceNames =
+    resourceNames
+        |> List.map resourceParser
+        |> (++)
+            [ Parser.map Root Parser.top
+            , Parser.map (Listing Nothing) Parser.string
+            ]
+        |> Parser.oneOf
+
+
+resourceParser : String -> Parser (Route -> a) a
+resourceParser resource =
+    Parser.map (\id -> Detail Nothing ( resource, id ))
+        (Parser.s resource </> Parser.string)
