@@ -79,7 +79,7 @@ init () url key =
         schema =
             Dict.fromList []
     in
-    ( Model (getRoute [] url) key schema host jwt, getSchema host )
+    ( Model (getRoute url) key schema host jwt, getSchema host )
 
 
 
@@ -141,7 +141,7 @@ update msg model =
 
         UrlChanged url ->
             urlChanged
-                { model | route = getRoute (model.schema |> Dict.keys) url }
+                { model | route = getRoute url }
 
         Failure _ ->
             ( model, Cmd.none )
@@ -419,24 +419,21 @@ fetchResource ( resourcesName, id ) { schema, host, jwt } =
             fail <| DefinitionMissing resourcesName
 
 
-getRoute : List String -> Url -> Route
-getRoute resourceNames url =
-    Parser.parse (routeParser resourceNames) url
-        |> Maybe.withDefault NotFound
+getRoute : Url -> Route
+getRoute url =
+    Parser.parse routeParser url |> Maybe.withDefault NotFound
 
 
-routeParser : List String -> Parser (Route -> a) a
-routeParser resourceNames =
-    resourceNames
-        |> List.map resourceParser
-        |> (++)
-            [ Parser.map Root Parser.top
-            , Parser.map (Listing Nothing) Parser.string
-            ]
-        |> Parser.oneOf
+routeParser : Parser (Route -> a) a
+routeParser =
+    Parser.oneOf
+        [ Parser.map Root Parser.top
+        , resourceParser
+        , Parser.map (Listing Nothing) Parser.string
+        ]
 
 
-resourceParser : String -> Parser (Route -> a) a
-resourceParser resource =
-    Parser.map (\id -> Detail Nothing ( resource, id ))
-        (Parser.s resource </> Parser.string)
+resourceParser : Parser (Route -> a) a
+resourceParser =
+    Parser.map (\res id -> Detail Nothing ( res, id ))
+        (Parser.string </> Parser.string)
