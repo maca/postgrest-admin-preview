@@ -10,14 +10,16 @@ import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Postgrest.Client as PG
+import PrimaryKey
 import Record exposing (Record)
 import Result
-import Schema exposing (Schema, Value(..))
+import Schema exposing (Schema)
 import String.Extra as String
 import Task
 import Url exposing (Url)
 import Url.Builder as Url
 import Url.Parser as Parser exposing (Parser)
+import Value exposing (Column, Value(..))
 
 
 type Msg
@@ -44,7 +46,7 @@ type Route
 type alias Model =
     { route : Route
     , key : Nav.Key
-    , schema : Maybe Schema
+    , schema : Schema
     , host : String
     , jwt : PG.JWT
     }
@@ -71,7 +73,7 @@ init () url key =
         host =
             "http://localhost:3000"
     in
-    ( Model (getRoute url) key Nothing host jwt, getSchema host )
+    ( Model (getRoute url) key (Dict.fromList []) host jwt, getSchema host )
 
 
 
@@ -84,7 +86,7 @@ update msg model =
         FetchedSchema result ->
             case decodeSchema result of
                 Ok schema ->
-                    urlChanged { model | schema = Just schema }
+                    urlChanged { model | schema = schema }
 
                 Err _ ->
                     ( model, Cmd.none )
@@ -167,10 +169,7 @@ sideMenu model =
         [ class "resources-menu" ]
         [ ul
             []
-            (Maybe.map (Dict.keys >> List.sort >> List.map menuItem)
-                model.schema
-                |> Maybe.withDefault []
-            )
+            (Dict.keys model.schema |> List.sort |> List.map menuItem)
         ]
 
 
@@ -196,8 +195,8 @@ mainContent model =
 
 listing : String -> Maybe (List Record) -> Model -> Html Msg
 listing name result { schema, route } =
-    case Maybe.map (Dict.get name) schema of
-        Just (Just fields) ->
+    case Dict.get name schema of
+        Just fields ->
             let
                 fieldNames =
                     Dict.toList fields
@@ -210,76 +209,35 @@ listing name result { schema, route } =
             table
                 []
                 [ thead [] [ tr [] <| List.map toHeader fieldNames ]
-                , displayRows fieldNames route
+                , displayRows schema fieldNames route
                 ]
 
         Nothing ->
             text ""
 
-        _ ->
-            notFound
 
-
-sortFields ( name, a ) ( _, b ) =
-    case ( a.value, b.value ) of
-        ( PForeignKeyString _ _, PPrimaryKeyString _ ) ->
-            GT
-
-        ( PForeignKeyInt _ _, PPrimaryKeyInt _ ) ->
-            GT
-
-        ( PPrimaryKeyString _, _ ) ->
-            LT
-
-        ( PPrimaryKeyInt _, _ ) ->
-            LT
-
-        ( PForeignKeyString _ _, _ ) ->
-            LT
-
-        ( PForeignKeyInt _ _, _ ) ->
-            LT
-
-        ( PString _, PPrimaryKeyString _ ) ->
-            GT
-
-        ( PString _, PPrimaryKeyInt _ ) ->
-            GT
-
-        ( PString _, _ ) ->
-            [ "title", "name", "first name", "last name" ]
-                |> List.indexedMap (flip Tuple.pair)
-                |> Dict.fromList
-                |> Dict.get name
-                |> Maybe.map (toFloat >> flip compare (1 / 0))
-                |> Maybe.withDefault GT
-
-        _ ->
-            EQ
-
-
-displayRows : List String -> Route -> Html Msg
-displayRows names route =
+displayRows : Schema -> List String -> Route -> Html Msg
+displayRows schema names route =
     case route of
         Listing (Just records) _ ->
-            tbody [] <| List.map (displayRow names) records
+            tbody [] <| List.map (displayRow schema names) records
 
         _ ->
             text ""
 
 
-displayRow : List String -> Record -> Html Msg
-displayRow names record =
+displayRow : Schema -> List String -> Record -> Html Msg
+displayRow schema names record =
     let
         toTd =
-            displayValue >> List.singleton >> td []
+            displayValue schema >> List.singleton >> td []
     in
     tr [] <| List.filterMap (flip Dict.get record >> Maybe.map toTd) names
 
 
-displayValue : Value -> Html Msg
-displayValue value =
-    case value of
+displayValue : Schema -> Value -> Html Msg
+displayValue schema val =
+    case val of
         PFloat (Just float) ->
             text <| String.fromFloat float
 
@@ -295,17 +253,11 @@ displayValue value =
         PBool (Just False) ->
             text "false"
 
-        PForeignKeyString ( assoc, _ ) (Just string) ->
-            text string
+        PForeignKey column (Just pk) ->
+            text <| PrimaryKey.toString pk
 
-        PForeignKeyInt ( assoc, _ ) (Just int) ->
-            text <| String.fromInt int
-
-        PPrimaryKeyString (Just string) ->
-            text string
-
-        PPrimaryKeyInt (Just int) ->
-            text <| String.fromInt int
+        PPrimaryKey (Just pk) ->
+            text <| PrimaryKey.toString pk
 
         BadValue _ ->
             text "?"
@@ -314,9 +266,40 @@ displayValue value =
             text "-"
 
 
+sortFields ( name, a ) ( _, b ) =
+    case ( a.value, b.value ) of
+        ( PPrimaryKey _, _ ) ->
+            LT
+
+        ( _, PPrimaryKey _ ) ->
+            GT
+
+        ( PForeignKey _ _, _ ) ->
+            LT
+
+        ( _, PForeignKey _ _ ) ->
+            GT
+
+        ( PString _, _ ) ->
+            recordIdentifiers
+                |> List.indexedMap (flip Tuple.pair)
+                |> Dict.fromList
+                |> Dict.get name
+                |> Maybe.map (toFloat >> flip compare (1 / 0))
+                |> Maybe.withDefault GT
+
+        _ ->
+            EQ
+
+
 notFound : Html Msg
 notFound =
     text "Not found"
+
+
+recordIdentifiers : List String
+recordIdentifiers =
+    [ "title", "name", "first name", "last name" ]
 
 
 
@@ -344,23 +327,21 @@ fail msg =
 
 
 fetchResources : Model -> String -> Cmd Msg
-fetchResources model resourcesName =
-    let
-        msg =
-            FetchedListing << Result.mapError PGError
-    in
-    endpoint model resourcesName
-        |> Maybe.map PG.getMany
-        |> Maybe.map (PG.toCmd model.jwt msg)
-        |> Maybe.withDefault (fail <| DefinitionMissing resourcesName)
+fetchResources { host, schema, jwt } resourcesName =
+    case Dict.get resourcesName schema of
+        Just definition ->
+            let
+                params =
+                    []
+            in
+            Record.decoder definition
+                |> PG.endpoint (Url.crossOrigin host [ resourcesName ] [])
+                |> PG.getMany
+                |> PG.setParams params
+                |> PG.toCmd jwt (FetchedListing << Result.mapError PGError)
 
-
-endpoint : Model -> String -> Maybe (PG.Endpoint Record)
-endpoint { host, schema } resourcesName =
-    schema
-        |> Maybe.andThen (Dict.get resourcesName)
-        |> Maybe.map Record.decoder
-        |> Maybe.map (PG.endpoint (Url.crossOrigin host [ resourcesName ] []))
+        Nothing ->
+            fail <| DefinitionMissing resourcesName
 
 
 

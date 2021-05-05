@@ -12,7 +12,9 @@ import Json.Decode as Decode
         , string
         )
 import Postgrest.Client as PG
-import Schema exposing (Definition, Value(..))
+import PrimaryKey
+import Schema exposing (Definition)
+import Value exposing (Column, Value(..))
 
 
 type alias Record =
@@ -44,17 +46,11 @@ decoderHelp definition ( name, raw ) =
         Just (PBool _) ->
             map PBool bool
 
-        Just (PForeignKeyString column _) ->
-            map (PForeignKeyString column) string
+        Just (PForeignKey column _) ->
+            map (PForeignKey column) PrimaryKey.decoder
 
-        Just (PForeignKeyInt column _) ->
-            map (PForeignKeyInt column) int
-
-        Just (PPrimaryKeyString _) ->
-            map PPrimaryKeyString string
-
-        Just (PPrimaryKeyInt _) ->
-            map PPrimaryKeyInt int
+        Just (PPrimaryKey _) ->
+            map PPrimaryKey PrimaryKey.decoder
 
         _ ->
             ( name, BadValue "?" )

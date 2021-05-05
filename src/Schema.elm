@@ -1,4 +1,4 @@
-module Schema exposing (Definition, Field, Schema, Value(..), decoder)
+module Schema exposing (Definition, Field, Schema, decoder)
 
 import Basics.Extra exposing (uncurry)
 import Dict exposing (Dict)
@@ -13,7 +13,9 @@ import Json.Decode as Decode
         , maybe
         , string
         )
+import PrimaryKey exposing (PrimaryKey(..))
 import Regex exposing (Regex)
+import Value exposing (Column, Value(..))
 
 
 type alias Schema =
@@ -28,22 +30,6 @@ type alias Field =
     { required : Bool
     , value : Value
     }
-
-
-type alias Column =
-    ( String, String )
-
-
-type Value
-    = PFloat (Maybe Float)
-    | PInt (Maybe Int)
-    | PString (Maybe String)
-    | PBool (Maybe Bool)
-    | PForeignKeyString Column (Maybe String)
-    | PForeignKeyInt Column (Maybe Int)
-    | PPrimaryKeyString (Maybe String)
-    | PPrimaryKeyInt (Maybe Int)
-    | BadValue String
 
 
 type Triple a b c
@@ -84,15 +70,15 @@ valueDecoder =
 
                     Triple "integer" _ maybeDesc ->
                         Decode.oneOf
-                            [ mapPrimaryKey PPrimaryKeyInt int maybeDesc
-                            , mapForeignKey PForeignKeyInt int maybeDesc
+                            [ mapPrimaryKey maybeDesc
+                            , mapForeignKey maybeDesc
                             , mapValue PInt int
                             ]
 
                     Triple "string" _ maybeDesc ->
                         Decode.oneOf
-                            [ mapPrimaryKey PPrimaryKeyString string maybeDesc
-                            , mapForeignKey PForeignKeyString string maybeDesc
+                            [ mapPrimaryKey maybeDesc
+                            , mapForeignKey maybeDesc
                             , mapValue PString string
                             ]
 
@@ -110,29 +96,30 @@ valueDecoder =
             )
 
 
-mapPrimaryKey : (Maybe a -> Value) -> Decoder a -> Maybe String -> Decoder Value
-mapPrimaryKey const dec maybeDesc =
+primaryKeyDecoder : Decoder (Maybe PrimaryKey)
+primaryKeyDecoder =
+    field "default" <| maybe PrimaryKey.decoder
+
+
+mapPrimaryKey : Maybe String -> Decoder Value
+mapPrimaryKey maybeDesc =
     case Maybe.map (Regex.contains primaryKeyRegex) maybeDesc of
         Just True ->
-            mapValue const dec
+            mapValue PPrimaryKey PrimaryKey.decoder
 
         _ ->
             Decode.fail ""
 
 
-mapForeignKey :
-    (Column -> Maybe a -> Value)
-    -> Decoder a
-    -> Maybe String
-    -> Decoder Value
-mapForeignKey const dec maybeDesc =
+mapForeignKey : Maybe String -> Decoder Value
+mapForeignKey maybeDesc =
     let
         matchFn =
             List.concatMap .submatches << Regex.find foreignKeyRegex
     in
     case Maybe.map matchFn maybeDesc of
         Just [ Just table, Just col ] ->
-            mapValue (const ( table, col )) dec
+            mapValue (PForeignKey ( table, col )) PrimaryKey.decoder
 
         _ ->
             Decode.fail ""
