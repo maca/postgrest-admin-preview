@@ -442,10 +442,22 @@ fetchResource : ( String, String ) -> Model -> Cmd Msg
 fetchResource ( resourcesName, id ) { schema, host, jwt } =
     case Dict.get resourcesName schema of
         Just definition ->
+            let
+                foldFun name field default =
+                    case field.value of
+                        PPrimaryKey _ ->
+                            name
+
+                        _ ->
+                            default
+
+                pkName =
+                    Dict.foldl foldFun "" definition
+            in
             Record.decoder recordIdentifiers definition
                 |> PG.endpoint (Url.crossOrigin host [ resourcesName ] [])
                 |> PG.getOne
-                |> PG.setParams []
+                |> PG.setParams [ PG.param pkName <| PG.eq <| PG.string id ]
                 |> PG.toCmd jwt (FetchedRecord << Result.mapError PGError)
 
         Nothing ->
