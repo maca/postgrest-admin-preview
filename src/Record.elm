@@ -10,7 +10,6 @@ import Json.Decode as Decode
         , float
         , int
         , maybe
-        , nullable
         , string
         )
 import Postgrest.Client as PG
@@ -48,19 +47,19 @@ decoderFold identifiers definition name _ prevDec =
         foldFun dict =
             case Dict.get name definition |> Maybe.map .value of
                 Just (PFloat _) ->
-                    nullable float |> map PFloat dict
+                    maybe float |> map PFloat dict
 
                 Just (PInt _) ->
-                    nullable int |> map PInt dict
+                    maybe int |> map PInt dict
 
                 Just (PString _) ->
-                    nullable string |> map PString dict
+                    maybe string |> map PString dict
 
                 Just (PBool _) ->
-                    nullable bool |> map PBool dict
+                    maybe bool |> map PBool dict
 
                 Just (PPrimaryKey _) ->
-                    nullable PrimaryKey.decoder
+                    maybe PrimaryKey.decoder
                         |> map PPrimaryKey dict
 
                 Just (PForeignKey ( table, col ) _ _) ->
@@ -69,11 +68,11 @@ decoderFold identifiers definition name _ prevDec =
                             insert dict <| PForeignKey ( table, col ) d pk
 
                         refDec i =
-                            Decode.at [ table, i ] (nullable string)
+                            maybe <| Decode.at [ table, i ] string
                     in
                     Decode.map2 mapFun
                         (Decode.oneOf <| List.map refDec identifiers)
-                        (Decode.field name (nullable PrimaryKey.decoder))
+                        (maybe <| Decode.field name PrimaryKey.decoder)
 
                 _ ->
                     map BadValue dict Decode.value

@@ -13,7 +13,7 @@ import Postgrest.Client as PG
 import PrimaryKey
 import Record exposing (Record)
 import Result
-import Schema exposing (Field, Schema)
+import Schema exposing (Definition, Field, Schema)
 import Set
 import String.Extra as String
 import Task
@@ -143,6 +143,25 @@ update msg model =
             ( model, Cmd.none )
 
 
+joins : Schema -> Definition -> List PG.Selectable
+joins schema definition =
+    let
+        mapFun name =
+            Dict.keys
+                >> Set.fromList
+                >> Set.intersect (recordIdentifiers |> Set.fromList)
+                >> Set.toList
+                >> PG.attributes
+                >> PG.resource name
+
+        resources ( name, _ ) =
+            Dict.get name schema |> Maybe.map (mapFun name)
+    in
+    Dict.values definition
+        |> List.filterMap
+            (.value >> Value.foreignKeyReference >> Maybe.andThen resources)
+
+
 urlChanged : Model -> ( Model, Cmd Msg )
 urlChanged model =
     case model.route of
@@ -212,16 +231,16 @@ mainContent model =
         Listing maybeRecords name ->
             listing name maybeRecords model
 
-        Detail maybeRecord _ ->
-            detail maybeRecord model
+        Detail maybeRecord path ->
+            detail path maybeRecord model
 
         NotFound ->
             notFound
 
 
 listing : String -> Maybe (List Record) -> Model -> Html Msg
-listing name result { schema, route } =
-    case Dict.get name schema of
+listing resourcesName result { schema, route } =
+    case Dict.get resourcesName schema of
         Just fields ->
             let
                 fieldNames =
@@ -235,29 +254,23 @@ listing name result { schema, route } =
             table
                 []
                 [ thead [] [ tr [] <| List.map toHeader fieldNames ]
-                , displayRows schema fieldNames route
+                , displayRows resourcesName schema fieldNames route
                 ]
 
         Nothing ->
             notFound
 
 
-detail : Maybe Record -> Model -> Html Msg
-detail maybeRecord { schema } =
+detail : ( String, String ) -> Maybe Record -> Model -> Html Msg
+detail ( resourcesName, id ) maybeRecord { schema } =
     case maybeRecord of
         Just record ->
-            let
-                defaultLabel =
-                    Record.primaryKey record
-                        |> Maybe.map displayValue
-                        |> Maybe.withDefault (text "")
-            in
             section
                 []
                 [ h1 []
                     [ recordLabel record
                         |> Maybe.map text
-                        |> Maybe.withDefault defaultLabel
+                        |> Maybe.withDefault (text id)
                     ]
                 ]
 
@@ -279,27 +292,28 @@ recordLabelHelp record fieldName =
             Nothing
 
 
-displayRows : Schema -> List String -> Route -> Html Msg
-displayRows schema names route =
+displayRows : String -> Schema -> List String -> Route -> Html Msg
+displayRows resourcesName schema names route =
     case route of
         Listing (Just records) _ ->
-            tbody [] <| List.map (displayRow schema names) records
+            tbody [] <|
+                List.map (displayRow resourcesName schema names) records
 
         _ ->
             text ""
 
 
-displayRow : Schema -> List String -> Record -> Html Msg
-displayRow schema names record =
+displayRow : String -> Schema -> List String -> Record -> Html Msg
+displayRow resourcesName schema names record =
     let
         toTd =
-            displayValue >> List.singleton >> td []
+            displayValue resourcesName >> List.singleton >> td []
     in
     tr [] <| List.filterMap (flip Dict.get record >> Maybe.map toTd) names
 
 
-displayValue : Value -> Html Msg
-displayValue val =
+displayValue : String -> Value -> Html Msg
+displayValue resourcesName val =
     case val of
         PFloat (Just float) ->
             text <| String.fromFloat float
@@ -320,7 +334,13 @@ displayValue val =
             recordLink column ref <| PrimaryKey.toString pk
 
         PPrimaryKey (Just pk) ->
-            text <| PrimaryKey.toString pk
+            let
+                id =
+                    PrimaryKey.toString pk
+            in
+            a
+                [ href <| Url.absolute [ resourcesName, id ] [] ]
+                [ text id ]
 
         BadValue _ ->
             text "?"
@@ -401,32 +421,11 @@ fetchResources resourcesName { host, schema, jwt } =
     case Dict.get resourcesName schema of
         Just definition ->
             let
-                resources name =
-                    Dict.get name schema
-                        |> Maybe.map
-                            (Dict.keys
-                                >> Set.fromList
-                                >> Set.intersect
-                                    (recordIdentifiers |> Set.fromList)
-                                >> Set.toList
-                                >> PG.attributes
-                                >> PG.resource name
-                            )
-
-                references =
-                    Dict.values definition
-                        |> List.filterMap
-                            (.value
-                                >> Value.foreignKeyReference
-                                >> Maybe.andThen (Tuple.first >> resources)
-                            )
-
                 attrs =
-                    Dict.keys definition
-                        |> List.map PG.attribute
+                    Dict.keys definition |> List.map PG.attribute
 
                 params =
-                    [ PG.select (attrs ++ references) ]
+                    [ PG.select (attrs ++ joins schema definition) ]
             in
             Record.decoder recordIdentifiers definition
                 |> PG.endpoint (Url.crossOrigin host [ resourcesName ] [])
@@ -453,11 +452,19 @@ fetchResource ( resourcesName, id ) { schema, host, jwt } =
 
                 pkName =
                     Dict.foldl foldFun "" definition
+
+                attrs =
+                    Dict.keys definition |> List.map PG.attribute
+
+                params =
+                    [ PG.select (attrs ++ joins schema definition)
+                    , PG.param pkName <| PG.eq <| PG.string id
+                    ]
             in
             Record.decoder recordIdentifiers definition
                 |> PG.endpoint (Url.crossOrigin host [ resourcesName ] [])
                 |> PG.getOne
-                |> PG.setParams [ PG.param pkName <| PG.eq <| PG.string id ]
+                |> PG.setParams params
                 |> PG.toCmd jwt (FetchedRecord << Result.mapError PGError)
 
         Nothing ->
