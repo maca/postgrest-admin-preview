@@ -7,8 +7,10 @@ import Dict
 import Html exposing (..)
 import Html.Attributes
     exposing
-        ( checked
+        ( attribute
+        , checked
         , class
+        , disabled
         , for
         , href
         , id
@@ -16,7 +18,7 @@ import Html.Attributes
         , type_
         , value
         )
-import Html.Events exposing (onInput)
+import Html.Events exposing (onInput, onSubmit)
 import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -38,7 +40,9 @@ type Msg
     = FetchedSchema (Result Http.Error String)
     | FetchedListing (Result Error (List Record))
     | FetchedRecord (Result Error Record)
+    | UpdatedRecord (Result Error Record)
     | InputChanged String Value
+    | FormSubmitted
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url.Url
     | Failure (Result Error Never)
@@ -48,12 +52,12 @@ type Error
     = HttpError Http.Error
     | DecodeError Decode.Error
     | PGError PG.Error
-    | DefinitionMissing String
+    | BadSchema String
 
 
 type Route
     = Listing (Maybe (List Record)) String
-    | Detail (Maybe Record) ( String, String )
+    | Detail Bool (Maybe Record) ( String, String )
     | Root
     | NotFound
 
@@ -128,10 +132,29 @@ update msg model =
             case result of
                 Ok record ->
                     case model.route of
-                        Detail _ path ->
-                            ( { model | route = Detail (Just <| record) path }
-                            , Cmd.none
-                            )
+                        Detail _ _ path ->
+                            let
+                                route =
+                                    Detail True (Just <| record) path
+                            in
+                            ( { model | route = route }, Cmd.none )
+
+                        _ ->
+                            ( model, Cmd.none )
+
+                Err _ ->
+                    ( model, Cmd.none )
+
+        UpdatedRecord result ->
+            case result of
+                Ok record ->
+                    case model.route of
+                        Detail _ _ path ->
+                            let
+                                route =
+                                    Detail True (Just <| record) path
+                            in
+                            ( { model | route = route }, Cmd.none )
 
                         _ ->
                             ( model, Cmd.none )
@@ -141,12 +164,24 @@ update msg model =
 
         InputChanged name value ->
             case model.route of
-                Detail (Just record) path ->
+                Detail _ (Just record) path ->
                     let
                         route =
-                            Detail (Just <| Dict.insert name value record) path
+                            Detail False
+                                (Just <| Dict.insert name value record)
+                                path
                     in
                     ( { model | route = route }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        FormSubmitted ->
+            case model.route of
+                Detail False (Just record) path ->
+                    ( { model | route = Detail True (Just record) path }
+                    , saveRecord path model record
+                    )
 
                 _ ->
                     ( model, Cmd.none )
@@ -192,7 +227,7 @@ urlChanged model =
         Listing Nothing resourcesName ->
             ( model, fetchResources resourcesName model )
 
-        Detail Nothing path ->
+        Detail _ Nothing path ->
             ( model, fetchResource path model )
 
         _ ->
@@ -252,8 +287,8 @@ mainContent model =
         Listing maybeRecords name ->
             listing name maybeRecords model
 
-        Detail maybeRecord path ->
-            detail path maybeRecord model
+        Detail saved maybeRecord path ->
+            detail saved path maybeRecord model
 
         NotFound ->
             notFound
@@ -282,8 +317,8 @@ listing resourcesName result { schema, route } =
             notFound
 
 
-detail : ( String, String ) -> Maybe Record -> Model -> Html Msg
-detail ( resourcesName, id ) maybeRecord model =
+detail : Bool -> ( String, String ) -> Maybe Record -> Model -> Html Msg
+detail saved ( resourcesName, id ) maybeRecord model =
     case maybeRecord of
         Just record ->
             section
@@ -294,23 +329,31 @@ detail ( resourcesName, id ) maybeRecord model =
                         |> (++) (String.humanize resourcesName ++ " - ")
                         |> text
                     ]
-                , recordForm resourcesName record model
+                , recordForm saved resourcesName record model
                 ]
 
         Nothing ->
             notFound
 
 
-recordForm : String -> Record -> Model -> Html Msg
-recordForm resourcesName record { schema } =
+recordForm : Bool -> String -> Record -> Model -> Html Msg
+recordForm saved resourcesName record { schema } =
     case Dict.get resourcesName schema of
         Just description ->
+            let
+                fields =
+                    Dict.toList record
+                        |> List.sortWith sortValues
+                        |> List.map valueInput
+            in
             form
-                [ class "resource-form" ]
-                (Dict.toList record
-                    |> List.sortWith sortValues
-                    |> List.map field
-                )
+                [ class "resource-form"
+                , attribute "autocomplete" "off"
+                , onSubmit FormSubmitted
+                ]
+                [ fieldset [] fields
+                , fieldset [] [ button [ disabled saved ] [ text "Save" ] ]
+                ]
 
         Nothing ->
             text ""
@@ -406,8 +449,8 @@ updateValue value string =
             other
 
 
-field : ( String, Value ) -> Html Msg
-field ( fieldName, val ) =
+valueInput : ( String, Value ) -> Html Msg
+valueInput ( fieldName, val ) =
     let
         default =
             Maybe.withDefault ""
@@ -532,7 +575,7 @@ fail msg =
 
 
 fetchResources : String -> Model -> Cmd Msg
-fetchResources resourcesName { host, schema, jwt } =
+fetchResources resourcesName ({ schema, jwt } as model) =
     case Dict.get resourcesName schema of
         Just definition ->
             let
@@ -542,31 +585,22 @@ fetchResources resourcesName { host, schema, jwt } =
                 params =
                     [ PG.select (attrs ++ joins schema definition) ]
             in
-            Record.decoder recordIdentifiers definition
-                |> PG.endpoint (Url.crossOrigin host [ resourcesName ] [])
+            recordEndpoint resourcesName model definition
                 |> PG.getMany
                 |> PG.setParams params
                 |> PG.toCmd jwt (FetchedListing << Result.mapError PGError)
 
         Nothing ->
-            fail <| DefinitionMissing resourcesName
+            fail <| BadSchema resourcesName
 
 
 fetchResource : ( String, String ) -> Model -> Cmd Msg
-fetchResource ( resourcesName, id ) { schema, host, jwt } =
+fetchResource ( resourcesName, id ) ({ schema, jwt } as model) =
     case Dict.get resourcesName schema of
         Just definition ->
             let
-                foldFun name f default =
-                    case f.value of
-                        PPrimaryKey _ ->
-                            name
-
-                        _ ->
-                            default
-
                 pkName =
-                    Dict.foldl foldFun "" definition
+                    primaryKeyName definition |> Maybe.withDefault ""
 
                 attrs =
                     Dict.keys definition |> List.map PG.attribute
@@ -576,14 +610,60 @@ fetchResource ( resourcesName, id ) { schema, host, jwt } =
                     , PG.param pkName <| PG.eq <| PG.string id
                     ]
             in
-            Record.decoder recordIdentifiers definition
-                |> PG.endpoint (Url.crossOrigin host [ resourcesName ] [])
+            recordEndpoint resourcesName model definition
                 |> PG.getOne
                 |> PG.setParams params
                 |> PG.toCmd jwt (FetchedRecord << Result.mapError PGError)
 
         Nothing ->
-            fail <| DefinitionMissing resourcesName
+            fail <| BadSchema resourcesName
+
+
+saveRecord : ( String, String ) -> Model -> Record -> Cmd Msg
+saveRecord ( resourcesName, id ) ({ schema, jwt } as model) record =
+    let
+        defAndPkName =
+            Dict.get resourcesName schema
+                |> Maybe.map (\d -> ( d, primaryKeyName d ))
+    in
+    case defAndPkName of
+        Just ( definition, Just pkName ) ->
+            let
+                endpoint =
+                    recordEndpoint resourcesName model definition
+
+                pk =
+                    PG.primaryKey ( pkName, PG.string )
+            in
+            PG.patchByPrimaryKey endpoint pk id (Record.encode record)
+                |> PG.toCmd jwt (UpdatedRecord << Result.mapError PGError)
+
+        _ ->
+            fail <| BadSchema resourcesName
+
+
+primaryKeyName : Definition -> Maybe String
+primaryKeyName definition =
+    let
+        foldFun name f default =
+            case f.value of
+                PPrimaryKey _ ->
+                    Just name
+
+                _ ->
+                    default
+    in
+    Dict.foldl foldFun Nothing definition
+
+
+recordEndpoint : String -> Model -> Definition -> PG.Endpoint Record
+recordEndpoint resourcesName { host } definition =
+    Record.decoder recordIdentifiers definition
+        |> PG.endpoint (Url.crossOrigin host [ resourcesName ] [])
+
+
+
+-- Routes
 
 
 getRoute : Url -> Route
@@ -595,7 +675,7 @@ routeParser : Parser (Route -> a) a
 routeParser =
     Parser.oneOf
         [ Parser.map Root Parser.top
-        , Parser.map (\res id -> Detail Nothing ( res, id ))
+        , Parser.map (\res id -> Detail False Nothing ( res, id ))
             (Parser.string </> Parser.string)
         , Parser.map (Listing Nothing) Parser.string
         ]

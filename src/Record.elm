@@ -1,4 +1,4 @@
-module Record exposing (Record, decoder, primaryKey)
+module Record exposing (Record, decoder, encode, primaryKey)
 
 import Basics.Extra exposing (curry, flip)
 import Dict exposing (Dict)
@@ -12,6 +12,7 @@ import Json.Decode as Decode
         , maybe
         , string
         )
+import Json.Encode as Encode
 import Postgrest.Client as PG
 import PrimaryKey exposing (PrimaryKey)
 import Schema exposing (Definition)
@@ -27,6 +28,11 @@ decoder identifiers definition =
     definition
         |> Dict.foldl (decoderFold identifiers definition)
             (Decode.succeed Dict.empty)
+
+
+encode : Record -> Encode.Value
+encode record =
+    Encode.dict identity Value.encode record
 
 
 decoderFold :

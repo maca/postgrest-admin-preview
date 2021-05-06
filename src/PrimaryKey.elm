@@ -1,11 +1,22 @@
-module PrimaryKey exposing (PrimaryKey(..), decoder, toString)
+module PrimaryKey exposing (PrimaryKey(..), decoder, encode, toString)
 
 import Json.Decode as Decode exposing (Decoder, field, int, maybe, string)
+import Json.Encode as Encode
 
 
 type PrimaryKey
     = PrimaryKeyInt Int
     | PrimaryKeyString String
+
+
+encode : PrimaryKey -> Encode.Value
+encode pk =
+    case pk of
+        PrimaryKeyInt int ->
+            Encode.int int
+
+        PrimaryKeyString string ->
+            Encode.string string
 
 
 decoder : Decoder PrimaryKey

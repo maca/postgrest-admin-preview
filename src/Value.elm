@@ -1,6 +1,7 @@
-module Value exposing (Column, Value(..), foreignKeyReference)
+module Value exposing (Column, Value(..), encode, foreignKeyReference)
 
 import Json.Decode as Decode
+import Json.Encode as Encode
 import PrimaryKey exposing (PrimaryKey(..))
 
 
@@ -16,6 +17,35 @@ type Value
     | PPrimaryKey (Maybe PrimaryKey)
     | PForeignKey Column (Maybe String) (Maybe PrimaryKey)
     | BadValue Decode.Value
+
+
+encode : Value -> Encode.Value
+encode value =
+    let
+        enc e =
+            Maybe.map e >> Maybe.withDefault Encode.null
+    in
+    case value of
+        PFloat mfloat ->
+            enc Encode.float mfloat
+
+        PInt mint ->
+            enc Encode.int mint
+
+        PString mstring ->
+            enc Encode.string mstring
+
+        PBool mbool ->
+            enc Encode.bool mbool
+
+        PPrimaryKey mpk ->
+            enc PrimaryKey.encode mpk
+
+        PForeignKey _ _ mpk ->
+            enc PrimaryKey.encode mpk
+
+        BadValue val ->
+            Encode.null
 
 
 foreignKeyReference : Value -> Maybe Column
