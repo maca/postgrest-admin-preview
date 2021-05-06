@@ -24,16 +24,16 @@ type alias Record =
     Dict String Value
 
 
+encode : Record -> Encode.Value
+encode record =
+    Encode.dict identity Value.encode record
+
+
 decoder : List String -> Definition -> Decoder Record
 decoder identifiers definition =
     definition
         |> Dict.foldl (decoderFold identifiers definition)
             (Decode.succeed Dict.empty)
-
-
-encode : Record -> Encode.Value
-encode record =
-    Encode.dict identity Value.encode record
 
 
 decoderFold :
