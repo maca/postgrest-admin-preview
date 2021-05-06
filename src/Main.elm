@@ -238,6 +238,16 @@ decodeSchema result =
             (Decode.decodeString Schema.decoder >> Result.mapError DecodeError)
 
 
+error : String -> Model -> Model
+error message model =
+    { model | message = Just <| Error message }
+
+
+confirmation : String -> Model -> Model
+confirmation message model =
+    { model | message = Just <| Confirmation message }
+
+
 
 -- View
 
@@ -448,16 +458,6 @@ displayValue resourcesName val =
 
         _ ->
             text "-"
-
-
-error : String -> Model -> Model
-error message model =
-    { model | message = Just <| Error message }
-
-
-confirmation : String -> Model -> Model
-confirmation message model =
-    { model | message = Just <| Confirmation message }
 
 
 updateValue : Value -> String -> Value
