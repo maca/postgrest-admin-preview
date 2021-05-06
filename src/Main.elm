@@ -5,7 +5,18 @@ import Browser exposing (UrlRequest)
 import Browser.Navigation as Nav
 import Dict
 import Html exposing (..)
-import Html.Attributes exposing (class, href)
+import Html.Attributes
+    exposing
+        ( checked
+        , class
+        , for
+        , href
+        , id
+        , step
+        , type_
+        , value
+        )
+import Html.Events exposing (onInput)
 import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -27,6 +38,7 @@ type Msg
     = FetchedSchema (Result Http.Error String)
     | FetchedListing (Result Error (List Record))
     | FetchedRecord (Result Error Record)
+    | InputChanged String Value
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url.Url
     | Failure (Result Error Never)
@@ -127,6 +139,18 @@ update msg model =
                 Err _ ->
                     ( model, Cmd.none )
 
+        InputChanged name value ->
+            case model.route of
+                Detail (Just record) path ->
+                    let
+                        route =
+                            Detail (Just <| Dict.insert name value record) path
+                    in
+                    ( { model | route = route }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
         LinkClicked urlRequest ->
             case urlRequest of
                 Browser.Internal url ->
@@ -209,10 +233,7 @@ sideMenu : Model -> Html Msg
 sideMenu model =
     aside
         [ class "resources-menu" ]
-        [ ul
-            []
-            (Dict.keys model.schema |> List.sort |> List.map menuItem)
-        ]
+        [ ul [] (Dict.keys model.schema |> List.sort |> List.map menuItem) ]
 
 
 menuItem : String -> Html Msg
@@ -262,20 +283,37 @@ listing resourcesName result { schema, route } =
 
 
 detail : ( String, String ) -> Maybe Record -> Model -> Html Msg
-detail ( resourcesName, id ) maybeRecord { schema } =
+detail ( resourcesName, id ) maybeRecord model =
     case maybeRecord of
         Just record ->
             section
                 []
                 [ h1 []
                     [ recordLabel record
-                        |> Maybe.map text
-                        |> Maybe.withDefault (text id)
+                        |> Maybe.withDefault id
+                        |> (++) (String.humanize resourcesName ++ " - ")
+                        |> text
                     ]
+                , recordForm resourcesName record model
                 ]
 
         Nothing ->
             notFound
+
+
+recordForm : String -> Record -> Model -> Html Msg
+recordForm resourcesName record { schema } =
+    case Dict.get resourcesName schema of
+        Just description ->
+            form
+                [ class "resource-form" ]
+                (Dict.toList record
+                    |> List.sortWith sortValues
+                    |> List.map field
+                )
+
+        Nothing ->
+            text ""
 
 
 recordLabel : Record -> Maybe String
@@ -349,15 +387,110 @@ displayValue resourcesName val =
             text "-"
 
 
+updateValue : Value -> String -> Value
+updateValue value string =
+    case value of
+        PString _ ->
+            PString <| Just string
+
+        PFloat _ ->
+            PFloat <| String.toFloat string
+
+        PInt _ ->
+            PInt <| String.toInt string
+
+        PBool _ ->
+            case string of
+                "on" ->
+                    PBool <| Just True
+
+                "off" ->
+                    PBool <| Just True
+
+                _ ->
+                    PBool Nothing
+
+        other ->
+            other
+
+
+field : ( String, Value ) -> Html Msg
+field ( fieldName, val ) =
+    let
+        default =
+            Maybe.withDefault ""
+
+        l =
+            label [ for fieldName ] [ text <| String.humanize fieldName ]
+
+        ev =
+            onInput <| (InputChanged fieldName << updateValue val)
+
+        i attrs =
+            input ([ ev, id fieldName ] ++ attrs) []
+    in
+    case val of
+        PString maybe ->
+            div []
+                [ l, i [ type_ "text", value <| default maybe ] ]
+
+        PFloat maybe ->
+            div []
+                [ l
+                , i
+                    [ type_ "number"
+                    , step "0.1"
+                    , value <| default <| Maybe.map String.fromFloat maybe
+                    ]
+                ]
+
+        PInt maybe ->
+            div []
+                [ l
+                , i
+                    [ type_ "number"
+                    , step "1"
+                    , value <| default <| Maybe.map String.fromInt maybe
+                    ]
+                ]
+
+        PBool maybe ->
+            let
+                attrs =
+                    Maybe.map (checked >> List.singleton) maybe
+                        |> Maybe.withDefault []
+            in
+            div []
+                [ l, i <| [ type_ "checkbox" ] ++ attrs ]
+
+        _ ->
+            text ""
+
+
 recordLink : ( String, String ) -> Maybe String -> String -> Html Msg
 recordLink ( col, _ ) ref id =
     a [ href <| Url.absolute [ col, id ] [] ]
         [ Maybe.map text ref |> Maybe.withDefault (text id) ]
 
 
+notFound : Html Msg
+notFound =
+    text "Not found"
+
+
+recordIdentifiers : List String
+recordIdentifiers =
+    [ "title", "name", "full name", "email", "first name", "last name" ]
+
+
 sortFields : ( String, Field ) -> ( String, Field ) -> Order
-sortFields ( name, a ) ( _, b ) =
-    case ( a.value, b.value ) of
+sortFields a b =
+    sortValues (Tuple.mapSecond .value a) (Tuple.mapSecond .value b)
+
+
+sortValues : ( String, Value ) -> ( String, Value ) -> Order
+sortValues ( name, a ) ( _, b ) =
+    case ( a, b ) of
         ( PPrimaryKey _, _ ) ->
             LT
 
@@ -380,16 +513,6 @@ sortFields ( name, a ) ( _, b ) =
 
         _ ->
             EQ
-
-
-notFound : Html Msg
-notFound =
-    text "Not found"
-
-
-recordIdentifiers : List String
-recordIdentifiers =
-    [ "title", "name", "first name", "last name" ]
 
 
 
@@ -442,8 +565,8 @@ fetchResource ( resourcesName, id ) { schema, host, jwt } =
     case Dict.get resourcesName schema of
         Just definition ->
             let
-                foldFun name field default =
-                    case field.value of
+                foldFun name f default =
+                    case f.value of
                         PPrimaryKey _ ->
                             name
 
