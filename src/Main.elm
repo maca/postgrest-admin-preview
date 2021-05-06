@@ -18,7 +18,7 @@ import Html.Attributes
         , type_
         , value
         )
-import Html.Events exposing (onInput, onSubmit)
+import Html.Events exposing (onClick, onInput, onSubmit)
 import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -43,6 +43,7 @@ type Msg
     | RecordUpdated (Result Error Record)
     | InputChanged String Value
     | FormSubmitted
+    | MessageDismissed
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url.Url
     | Failure (Result Error Never)
@@ -62,12 +63,18 @@ type Route
     | NotFound
 
 
+type Message
+    = Confirmation String
+    | Error String
+
+
 type alias Model =
     { route : Route
     , key : Nav.Key
     , schema : Schema
     , host : String
     , jwt : PG.JWT
+    , message : Maybe Message
     }
 
 
@@ -94,8 +101,17 @@ init () url key =
 
         schema =
             Dict.fromList []
+
+        model =
+            { route = getRoute url
+            , key = key
+            , schema = schema
+            , host = host
+            , jwt = jwt
+            , message = Nothing
+            }
     in
-    ( Model (getRoute url) key schema host jwt, getSchema host )
+    ( model, getSchema host )
 
 
 
@@ -139,7 +155,8 @@ update msg model =
         RecordUpdated result ->
             case result of
                 Ok record ->
-                    recordFetched record model
+                    confirmation "Update succeed" model
+                        |> recordFetched record
 
                 Err _ ->
                     ( model, Cmd.none )
@@ -153,7 +170,7 @@ update msg model =
                                 (Just <| Dict.insert name value record)
                                 path
                     in
-                    ( { model | route = route }, Cmd.none )
+                    ( { model | route = route, message = Nothing }, Cmd.none )
 
                 _ ->
                     ( model, Cmd.none )
@@ -168,6 +185,9 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        MessageDismissed ->
+            ( { model | message = Nothing }, Cmd.none )
+
         LinkClicked urlRequest ->
             case urlRequest of
                 Browser.Internal url ->
@@ -178,7 +198,7 @@ update msg model =
 
         UrlChanged url ->
             urlChanged
-                { model | route = getRoute url }
+                { model | route = getRoute url, message = Nothing }
 
         Failure _ ->
             ( model, Cmd.none )
@@ -236,7 +256,7 @@ body model =
         [ sideMenu model
         , div
             [ class "main-area" ]
-            [ mainContent model ]
+            [ displayMessage model, displayMainContent model ]
         ]
     ]
 
@@ -257,10 +277,6 @@ menuItem name =
 
 displayMessage : Model -> Html Msg
 displayMessage { message } =
-    let
-        _ =
-            Debug.log "message" message
-    in
     case message of
         Just (Error msg) ->
             displayMessageHelp "error" msg
@@ -275,7 +291,11 @@ displayMessage { message } =
 displayMessageHelp : String -> String -> Html Msg
 displayMessageHelp messageType message =
     div [ class "message", class messageType ]
-        [ p [] [ text message ] ]
+        [ div []
+            [ i [ class "icono-cross", onClick MessageDismissed ] []
+            ]
+        , p [] [ text message ]
+        ]
 
 
 displayMainContent : Model -> Html Msg
@@ -317,8 +337,8 @@ displayListing resourcesName result { schema, route } =
             notFound
 
 
-detail : Bool -> ( String, String ) -> Maybe Record -> Model -> Html Msg
-detail saved ( resourcesName, id ) maybeRecord model =
+displayDetail : Bool -> ( String, String ) -> Maybe Record -> Model -> Html Msg
+displayDetail saved ( resourcesName, id ) maybeRecord model =
     case maybeRecord of
         Just record ->
             section
@@ -428,6 +448,16 @@ displayValue resourcesName val =
 
         _ ->
             text "-"
+
+
+error : String -> Model -> Model
+error message model =
+    { model | message = Just <| Error message }
+
+
+confirmation : String -> Model -> Model
+confirmation message model =
+    { model | message = Just <| Confirmation message }
 
 
 updateValue : Value -> String -> Value
