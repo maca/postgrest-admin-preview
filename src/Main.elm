@@ -131,10 +131,10 @@ update msg model =
 
         ListingFetched result ->
             case result of
-                Ok rss ->
+                Ok records ->
                     case model.route of
                         Listing _ name ->
-                            ( { model | route = Listing (Just <| rss) name }
+                            ( { model | route = Listing (Just <| records) name }
                             , Cmd.none
                             )
 
@@ -318,9 +318,9 @@ displayMainContent model =
 
 
 displayListing : String -> Maybe (List Record) -> Model -> Html Msg
-displayListing resourcesName result { schema, route } =
-    case Dict.get resourcesName schema of
-        Just fields ->
+displayListing resourcesName mrecords { schema } =
+    case ( Dict.get resourcesName schema, mrecords ) of
+        ( Just fields, Just records ) ->
             let
                 fieldNames =
                     Dict.toList fields
@@ -333,11 +333,14 @@ displayListing resourcesName result { schema, route } =
             table
                 []
                 [ thead [] [ tr [] <| List.map toHeader fieldNames ]
-                , displayRows resourcesName schema fieldNames route
+                , tbody [] <|
+                    List.map
+                        (displayRow resourcesName schema fieldNames)
+                        records
                 ]
 
-        Nothing ->
-            notFound
+        _ ->
+            loading
 
 
 displayDetail : Bool -> ( String, String ) -> Maybe Record -> Model -> Html Msg
@@ -394,17 +397,6 @@ recordLabelHelp record fieldName =
 
         _ ->
             Nothing
-
-
-displayRows : String -> Schema -> List String -> Route -> Html Msg
-displayRows resourcesName schema names route =
-    case route of
-        Listing (Just records) _ ->
-            tbody [] <|
-                List.map (displayRow resourcesName schema names) records
-
-        _ ->
-            text ""
 
 
 displayRow : String -> Schema -> List String -> Record -> Html Msg
@@ -534,6 +526,11 @@ recordLink ( col, _ ) ref id =
 notFound : Html Msg
 notFound =
     text "Not found"
+
+
+loading : Html Msg
+loading =
+    text ""
 
 
 recordIdentifiers : List String
