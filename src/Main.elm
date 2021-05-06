@@ -15,15 +15,16 @@ import Html.Attributes
         , href
         , id
         , step
+        , target
         , type_
         , value
         )
-import Html.Events exposing (onClick, onInput, onSubmit)
+import Html.Events as Events exposing (onClick, onInput, onSubmit)
 import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Postgrest.Client as PG
-import PrimaryKey
+import PrimaryKey exposing (PrimaryKey)
 import Record exposing (Record)
 import Result
 import Schema exposing (Schema)
@@ -42,11 +43,12 @@ type Msg
     | ListingFetched (Result Error (List Record))
     | RecordFetched (Result Error Record)
     | RecordUpdated (Result Error Record)
+    | RecordLinkClicked String String
     | InputChanged String Value
     | FormSubmitted
     | MessageDismissed
     | LinkClicked Browser.UrlRequest
-    | UrlChanged Url.Url
+    | UrlChanged Url
     | Failure (Result Error Never)
 
 
@@ -161,6 +163,11 @@ update msg model =
 
                 Err _ ->
                     ( model, Cmd.none )
+
+        RecordLinkClicked resourcesName id ->
+            ( model
+            , Nav.pushUrl model.key <| Url.absolute [ resourcesName, id ] []
+            )
 
         InputChanged name value ->
             case model.route of
@@ -298,10 +305,10 @@ displayMainContent model =
 displayListing : String -> Maybe (List Record) -> Model -> Html Msg
 displayListing resourcesName mrecords { schema } =
     case ( Dict.get resourcesName schema, mrecords ) of
-        ( Just fields, Just records ) ->
+        ( Just definition, Just records ) ->
             let
                 fieldNames =
-                    Dict.toList fields
+                    Dict.toList definition
                         |> List.sortWith sortFields
                         |> List.map Tuple.first
 
@@ -313,7 +320,7 @@ displayListing resourcesName mrecords { schema } =
                 [ thead [] [ tr [] <| List.map toHeader fieldNames ]
                 , tbody [] <|
                     List.map
-                        (displayRow resourcesName schema fieldNames)
+                        (displayRow resourcesName fieldNames)
                         records
                 ]
 
@@ -400,13 +407,31 @@ recordLabelHelp record fieldName =
             Nothing
 
 
-displayRow : String -> Schema -> List String -> Record -> Html Msg
-displayRow resourcesName schema names record =
+displayRow : String -> List String -> Record -> Html Msg
+displayRow resourcesName names record =
     let
         toTd =
             displayValue resourcesName >> List.singleton >> td []
+
+        id =
+            Record.primaryKey record
+                |> Maybe.map PrimaryKey.toString
+                |> Maybe.withDefault ""
     in
-    tr [] <| List.filterMap (flip Dict.get record >> Maybe.map toTd) names
+    List.filterMap (flip Dict.get record >> Maybe.map toTd) names
+        |> tr
+            [ class "listing-row"
+            , clickRecord resourcesName id
+            ]
+
+
+clickRecord resourcesName id =
+    let
+        msg =
+            RecordLinkClicked resourcesName id
+    in
+    Events.custom "click" <|
+        Decode.map (eventConfig True True) (Decode.succeed msg)
 
 
 displayValue : String -> Value -> Html Msg
@@ -427,17 +452,11 @@ displayValue resourcesName val =
         PBool (Just False) ->
             text "false"
 
-        PForeignKey column ref (Just pk) ->
-            recordLink column ref <| PrimaryKey.toString pk
+        PForeignKey ( res, _ ) mlabel (Just primaryKey) ->
+            recordLink res primaryKey mlabel
 
-        PPrimaryKey (Just pk) ->
-            let
-                id =
-                    PrimaryKey.toString pk
-            in
-            a
-                [ href <| Url.absolute [ resourcesName, id ] [] ]
-                [ text id ]
+        PPrimaryKey (Just primaryKey) ->
+            recordLink resourcesName primaryKey Nothing
 
         BadValue _ ->
             text "?"
@@ -518,10 +537,18 @@ valueInput ( fieldName, val ) =
             text ""
 
 
-recordLink : ( String, String ) -> Maybe String -> String -> Html Msg
-recordLink ( col, _ ) ref id =
-    a [ href <| Url.absolute [ col, id ] [] ]
-        [ Maybe.map text ref |> Maybe.withDefault (text id) ]
+recordLink : String -> PrimaryKey -> Maybe String -> Html Msg
+recordLink resourcesName primaryKey mtext =
+    let
+        id =
+            PrimaryKey.toString primaryKey
+    in
+    a
+        [ href <| Url.absolute [ resourcesName, id ] []
+        , target "_self"
+        , clickRecord resourcesName id
+        ]
+        [ text <| Maybe.withDefault id mtext ]
 
 
 notFound : Html Msg
@@ -697,6 +724,18 @@ recordEndpoint : String -> Model -> Definition -> PG.Endpoint Record
 recordEndpoint resourcesName { host } definition =
     Record.decoder recordIdentifiers definition
         |> PG.endpoint (Url.crossOrigin host [ resourcesName ] [])
+
+
+eventConfig :
+    Bool
+    -> Bool
+    -> msg
+    -> { message : msg, stopPropagation : Bool, preventDefault : Bool }
+eventConfig stopPropagation preventDefault msg =
+    { message = msg
+    , stopPropagation = stopPropagation
+    , preventDefault = preventDefault
+    }
 
 
 

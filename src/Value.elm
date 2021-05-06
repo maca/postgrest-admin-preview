@@ -3,6 +3,7 @@ module Value exposing
     , Value(..)
     , encode
     , foreignKeyReference
+    , isForeignKey
     , isPrimaryKey
     , toPrimaryKey
     )
@@ -58,7 +59,17 @@ encode value =
 isPrimaryKey : Value -> Bool
 isPrimaryKey value =
     case value of
-        PPrimaryKey mprimaryKey ->
+        PPrimaryKey _ ->
+            True
+
+        _ ->
+            False
+
+
+isForeignKey : Value -> Bool
+isForeignKey value =
+    case value of
+        PForeignKey _ _ _ ->
             True
 
         _ ->
