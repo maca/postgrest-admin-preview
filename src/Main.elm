@@ -184,25 +184,6 @@ update msg model =
             ( model, Cmd.none )
 
 
-joins : Schema -> Definition -> List PG.Selectable
-joins schema definition =
-    let
-        mapFun name =
-            Dict.keys
-                >> Set.fromList
-                >> Set.intersect (recordIdentifiers |> Set.fromList)
-                >> Set.toList
-                >> PG.attributes
-                >> PG.resource name
-
-        resources ( name, _ ) =
-            Dict.get name schema |> Maybe.map (mapFun name)
-    in
-    Dict.values definition
-        |> List.filterMap
-            (.value >> Value.foreignKeyReference >> Maybe.andThen resources)
-
-
 urlChanged : Model -> ( Model, Cmd Msg )
 urlChanged model =
     case model.route of
@@ -274,24 +255,47 @@ menuItem name =
         [ a [ href <| "/" ++ name ] [ text <| String.humanize name ] ]
 
 
-mainContent : Model -> Html Msg
-mainContent model =
+displayMessage : Model -> Html Msg
+displayMessage { message } =
+    let
+        _ =
+            Debug.log "message" message
+    in
+    case message of
+        Just (Error msg) ->
+            displayMessageHelp "error" msg
+
+        Just (Confirmation msg) ->
+            displayMessageHelp "confirmation" msg
+
+        Nothing ->
+            text ""
+
+
+displayMessageHelp : String -> String -> Html Msg
+displayMessageHelp messageType message =
+    div [ class "message", class messageType ]
+        [ p [] [ text message ] ]
+
+
+displayMainContent : Model -> Html Msg
+displayMainContent model =
     case model.route of
         Root ->
             text ""
 
         Listing maybeRecords name ->
-            listing name maybeRecords model
+            displayListing name maybeRecords model
 
         Detail saved maybeRecord path ->
-            detail saved path maybeRecord model
+            displayDetail saved path maybeRecord model
 
         NotFound ->
             notFound
 
 
-listing : String -> Maybe (List Record) -> Model -> Html Msg
-listing resourcesName result { schema, route } =
+displayListing : String -> Maybe (List Record) -> Model -> Html Msg
+displayListing resourcesName result { schema, route } =
     case Dict.get resourcesName schema of
         Just fields ->
             let
@@ -575,11 +579,8 @@ fetchResources resourcesName ({ schema, jwt } as model) =
     case Dict.get resourcesName schema of
         Just definition ->
             let
-                attrs =
-                    Dict.keys definition |> List.map PG.attribute
-
                 params =
-                    [ PG.select (attrs ++ joins schema definition) ]
+                    [ PG.select <| selects schema definition ]
             in
             recordEndpoint resourcesName model definition
                 |> PG.getMany
@@ -598,11 +599,11 @@ fetchResource ( resourcesName, id ) ({ schema, jwt } as model) =
                 pkName =
                     primaryKeyName definition |> Maybe.withDefault ""
 
-                attrs =
-                    Dict.keys definition |> List.map PG.attribute
+                selectParams =
+                    PG.select <| selects schema definition
 
                 params =
-                    [ PG.select (attrs ++ joins schema definition)
+                    [ selectParams
                     , PG.param pkName <| PG.eq <| PG.string id
                     ]
             in
@@ -630,12 +631,36 @@ saveRecord ( resourcesName, id ) ({ schema, jwt } as model) record =
 
                 pk =
                     PG.primaryKey ( pkName, PG.string )
+
+                params =
+                    [ PG.select <| selects schema definition ]
             in
             PG.patchByPrimaryKey endpoint pk id (Record.encode record)
+                |> PG.setParams params
                 |> PG.toCmd jwt (RecordUpdated << Result.mapError PGError)
 
         _ ->
             fail <| BadSchema resourcesName
+
+
+selects : Schema -> Definition -> List PG.Selectable
+selects schema definition =
+    let
+        mapFun name =
+            Dict.keys
+                >> Set.fromList
+                >> Set.intersect (recordIdentifiers |> Set.fromList)
+                >> Set.toList
+                >> PG.attributes
+                >> PG.resource name
+
+        resources ( name, _ ) =
+            Dict.get name schema |> Maybe.map (mapFun name)
+    in
+    Dict.values definition
+        |> List.filterMap
+            (.value >> Value.foreignKeyReference >> Maybe.andThen resources)
+        |> (++) (Dict.keys definition |> List.map PG.attribute)
 
 
 primaryKeyName : Definition -> Maybe String
