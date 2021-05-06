@@ -37,10 +37,10 @@ import Value exposing (Column, Value(..))
 
 
 type Msg
-    = FetchedSchema (Result Http.Error String)
-    | FetchedListing (Result Error (List Record))
-    | FetchedRecord (Result Error Record)
-    | UpdatedRecord (Result Error Record)
+    = SchemaFetched (Result Http.Error String)
+    | ListingFetched (Result Error (List Record))
+    | RecordFetched (Result Error Record)
+    | RecordUpdated (Result Error Record)
     | InputChanged String Value
     | FormSubmitted
     | LinkClicked Browser.UrlRequest
@@ -105,7 +105,7 @@ init () url key =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        FetchedSchema result ->
+        SchemaFetched result ->
             case decodeSchema result of
                 Ok schema ->
                     urlChanged { model | schema = schema }
@@ -113,7 +113,7 @@ update msg model =
                 Err _ ->
                     ( model, Cmd.none )
 
-        FetchedListing result ->
+        ListingFetched result ->
             case result of
                 Ok rss ->
                     case model.route of
@@ -128,36 +128,18 @@ update msg model =
                 Err _ ->
                     ( model, Cmd.none )
 
-        FetchedRecord result ->
+        RecordFetched result ->
             case result of
                 Ok record ->
-                    case model.route of
-                        Detail _ _ path ->
-                            let
-                                route =
-                                    Detail True (Just <| record) path
-                            in
-                            ( { model | route = route }, Cmd.none )
-
-                        _ ->
-                            ( model, Cmd.none )
+                    recordFetched record model
 
                 Err _ ->
                     ( model, Cmd.none )
 
-        UpdatedRecord result ->
+        RecordUpdated result ->
             case result of
                 Ok record ->
-                    case model.route of
-                        Detail _ _ path ->
-                            let
-                                route =
-                                    Detail True (Just <| record) path
-                            in
-                            ( { model | route = route }, Cmd.none )
-
-                        _ ->
-                            ( model, Cmd.none )
+                    recordFetched record model
 
                 Err _ ->
                     ( model, Cmd.none )
@@ -229,6 +211,20 @@ urlChanged model =
 
         Detail _ Nothing path ->
             ( model, fetchResource path model )
+
+        _ ->
+            ( model, Cmd.none )
+
+
+recordFetched : Record -> Model -> ( Model, Cmd Msg )
+recordFetched record model =
+    case model.route of
+        Detail _ _ path ->
+            let
+                route =
+                    Detail True (Just <| record) path
+            in
+            ( { model | route = route }, Cmd.none )
 
         _ ->
             ( model, Cmd.none )
@@ -562,7 +558,7 @@ subscriptions _ =
 getSchema : String -> Cmd Msg
 getSchema host =
     Http.get
-        { url = host, expect = Http.expectString FetchedSchema }
+        { url = host, expect = Http.expectString SchemaFetched }
 
 
 fail : Error -> Cmd Msg
@@ -588,7 +584,7 @@ fetchResources resourcesName ({ schema, jwt } as model) =
             recordEndpoint resourcesName model definition
                 |> PG.getMany
                 |> PG.setParams params
-                |> PG.toCmd jwt (FetchedListing << Result.mapError PGError)
+                |> PG.toCmd jwt (ListingFetched << Result.mapError PGError)
 
         Nothing ->
             fail <| BadSchema resourcesName
@@ -613,7 +609,7 @@ fetchResource ( resourcesName, id ) ({ schema, jwt } as model) =
             recordEndpoint resourcesName model definition
                 |> PG.getOne
                 |> PG.setParams params
-                |> PG.toCmd jwt (FetchedRecord << Result.mapError PGError)
+                |> PG.toCmd jwt (RecordFetched << Result.mapError PGError)
 
         Nothing ->
             fail <| BadSchema resourcesName
@@ -636,7 +632,7 @@ saveRecord ( resourcesName, id ) ({ schema, jwt } as model) record =
                     PG.primaryKey ( pkName, PG.string )
             in
             PG.patchByPrimaryKey endpoint pk id (Record.encode record)
-                |> PG.toCmd jwt (UpdatedRecord << Result.mapError PGError)
+                |> PG.toCmd jwt (RecordUpdated << Result.mapError PGError)
 
         _ ->
             fail <| BadSchema resourcesName
