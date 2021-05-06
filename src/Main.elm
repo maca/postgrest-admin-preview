@@ -37,7 +37,7 @@ import Value exposing (Column, Value(..))
 
 
 type Msg
-    = SchemaFetched (Result Http.Error String)
+    = SchemaFetched (Result Error Schema)
     | ListingFetched (Result Error (List Record))
     | RecordFetched (Result Error Record)
     | RecordUpdated (Result Error Record)
@@ -122,7 +122,7 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         SchemaFetched result ->
-            case decodeSchema result of
+            case result of
                 Ok schema ->
                     urlChanged { model | schema = schema }
 
@@ -229,13 +229,6 @@ recordFetched record model =
 
         _ ->
             ( model, Cmd.none )
-
-
-decodeSchema : Result Http.Error String -> Result Error Schema
-decodeSchema result =
-    Result.mapError HttpError result
-        |> Result.andThen
-            (Decode.decodeString Schema.decoder >> Result.mapError DecodeError)
 
 
 error : String -> Model -> Model
@@ -589,15 +582,24 @@ subscriptions _ =
     Sub.none
 
 
-getSchema : String -> Cmd Msg
-getSchema host =
-    Http.get
-        { url = host, expect = Http.expectString SchemaFetched }
-
-
 fail : Error -> Cmd Msg
 fail msg =
     Task.fail msg |> Task.attempt Failure
+
+
+getSchema : String -> Cmd Msg
+getSchema host =
+    Http.get
+        { url = host
+        , expect = Http.expectString (SchemaFetched << decodeSchema)
+        }
+
+
+decodeSchema : Result Http.Error String -> Result Error Schema
+decodeSchema result =
+    Result.mapError HttpError result
+        |> Result.andThen
+            (Decode.decodeString Schema.decoder >> Result.mapError DecodeError)
 
 
 
