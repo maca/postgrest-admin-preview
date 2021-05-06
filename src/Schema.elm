@@ -1,4 +1,4 @@
-module Schema exposing (Definition, Field, Schema, decoder)
+module Schema exposing (Schema, decoder)
 
 import Basics.Extra exposing (uncurry)
 import Dict exposing (Dict)
@@ -15,21 +15,12 @@ import Json.Decode as Decode
         )
 import PrimaryKey exposing (PrimaryKey(..))
 import Regex exposing (Regex)
+import Schema.Definition as Definition exposing (Definition, Field)
 import Value exposing (Column, Value(..))
 
 
 type alias Schema =
     Dict String Definition
-
-
-type alias Definition =
-    Dict String Field
-
-
-type alias Field =
-    { required : Bool
-    , value : Value
-    }
 
 
 type Triple a b c

@@ -16,7 +16,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Postgrest.Client as PG
 import PrimaryKey exposing (PrimaryKey)
-import Schema exposing (Definition)
+import Schema.Definition exposing (Definition)
 import Value exposing (Column, Value(..))
 
 
@@ -87,18 +87,8 @@ decoderFold identifiers definition name _ prevDec =
     Decode.andThen foldFun prevDec
 
 
-primaryKey : Record -> Maybe Value
+primaryKey : Record -> Maybe PrimaryKey
 primaryKey record =
     Dict.values record
-        |> List.filterMap primaryKeyHelp
+        |> List.filterMap Value.toPrimaryKey
         |> List.head
-
-
-primaryKeyHelp : Value -> Maybe Value
-primaryKeyHelp value =
-    case value of
-        PPrimaryKey _ ->
-            Just value
-
-        _ ->
-            Nothing

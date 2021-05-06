@@ -1,4 +1,11 @@
-module Value exposing (Column, Value(..), encode, foreignKeyReference)
+module Value exposing
+    ( Column
+    , Value(..)
+    , encode
+    , foreignKeyReference
+    , isPrimaryKey
+    , toPrimaryKey
+    )
 
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -46,6 +53,26 @@ encode value =
 
         BadValue val ->
             Encode.null
+
+
+isPrimaryKey : Value -> Bool
+isPrimaryKey value =
+    case value of
+        PPrimaryKey mprimaryKey ->
+            True
+
+        _ ->
+            False
+
+
+toPrimaryKey : Value -> Maybe PrimaryKey
+toPrimaryKey value =
+    case value of
+        PPrimaryKey mprimaryKey ->
+            mprimaryKey
+
+        _ ->
+            Nothing
 
 
 foreignKeyReference : Value -> Maybe Column

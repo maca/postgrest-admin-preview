@@ -26,7 +26,8 @@ import Postgrest.Client as PG
 import PrimaryKey
 import Record exposing (Record)
 import Result
-import Schema exposing (Definition, Field, Schema)
+import Schema exposing (Schema)
+import Schema.Definition as Definition exposing (Definition, Field)
 import Set
 import String.Extra as String
 import Task
@@ -626,7 +627,7 @@ fetchResource ( resourcesName, id ) ({ schema, jwt } as model) =
         Just definition ->
             let
                 pkName =
-                    primaryKeyName definition |> Maybe.withDefault ""
+                    Definition.primaryKeyName definition |> Maybe.withDefault ""
 
                 selectParams =
                     PG.select <| selects schema definition
@@ -650,7 +651,7 @@ saveRecord ( resourcesName, id ) ({ schema, jwt } as model) record =
     let
         defAndPkName =
             Dict.get resourcesName schema
-                |> Maybe.map (\d -> ( d, primaryKeyName d ))
+                |> Maybe.map (\d -> ( d, Definition.primaryKeyName d ))
     in
     case defAndPkName of
         Just ( definition, Just pkName ) ->
@@ -690,20 +691,6 @@ selects schema definition =
         |> List.filterMap
             (.value >> Value.foreignKeyReference >> Maybe.andThen resources)
         |> (++) (Dict.keys definition |> List.map PG.attribute)
-
-
-primaryKeyName : Definition -> Maybe String
-primaryKeyName definition =
-    let
-        foldFun name f default =
-            case f.value of
-                PPrimaryKey _ ->
-                    Just name
-
-                _ ->
-                    default
-    in
-    Dict.foldl foldFun Nothing definition
 
 
 recordEndpoint : String -> Model -> Definition -> PG.Endpoint Record
