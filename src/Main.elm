@@ -278,29 +278,6 @@ menuItem name =
         [ a [ href <| "/" ++ name ] [ text <| String.humanize name ] ]
 
 
-displayMessage : Model -> Html Msg
-displayMessage { message } =
-    case message of
-        Just (Error msg) ->
-            displayMessageHelp "error" msg
-
-        Just (Confirmation msg) ->
-            displayMessageHelp "confirmation" msg
-
-        Nothing ->
-            text ""
-
-
-displayMessageHelp : String -> String -> Html Msg
-displayMessageHelp messageType message =
-    div [ class "message", class messageType ]
-        [ div []
-            [ i [ class "icono-cross", onClick MessageDismissed ] []
-            ]
-        , p [] [ text message ]
-        ]
-
-
 displayMainContent : Model -> Html Msg
 displayMainContent model =
     case model.route of
@@ -383,6 +360,29 @@ recordForm saved resourcesName record { schema } =
 
         Nothing ->
             text ""
+
+
+displayMessage : Model -> Html Msg
+displayMessage { message } =
+    case message of
+        Just (Error msg) ->
+            displayMessageHelp "error" msg
+
+        Just (Confirmation msg) ->
+            displayMessageHelp "confirmation" msg
+
+        Nothing ->
+            text ""
+
+
+displayMessageHelp : String -> String -> Html Msg
+displayMessageHelp messageType message =
+    div [ class "message", class messageType ]
+        [ div []
+            [ i [ class "icono-cross", onClick MessageDismissed ] []
+            ]
+        , p [] [ text message ]
+        ]
 
 
 recordLabel : Record -> Maybe String
