@@ -469,7 +469,7 @@ updateValue : Value -> String -> Value
 updateValue value string =
     case value of
         PString _ ->
-            PString <| Just string
+            PString <| String.nonBlank string
 
         PFloat _ ->
             PFloat <| String.toFloat string
