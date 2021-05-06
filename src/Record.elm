@@ -10,6 +10,7 @@ import Json.Decode as Decode
         , float
         , int
         , maybe
+        , nullable
         , string
         )
 import Json.Encode as Encode
@@ -74,7 +75,7 @@ decoderFold identifiers definition name _ prevDec =
                             insert dict <| PForeignKey ( table, col ) d pk
 
                         refDec i =
-                            maybe <| Decode.at [ table, i ] string
+                            Decode.at [ table, i ] (nullable string)
                     in
                     Decode.map2 mapFun
                         (Decode.oneOf <| List.map refDec identifiers)
