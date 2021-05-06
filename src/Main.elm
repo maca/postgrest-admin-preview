@@ -399,16 +399,8 @@ updateValue value string =
         PInt _ ->
             PInt <| String.toInt string
 
-        PBool _ ->
-            case string of
-                "on" ->
-                    PBool <| Just True
-
-                "off" ->
-                    PBool <| Just True
-
-                _ ->
-                    PBool Nothing
+        PBool prev ->
+            PBool <| Maybe.map not prev
 
         other ->
             other
