@@ -1,7 +1,8 @@
-module Record exposing (Record, decoder, encode, primaryKey)
+module Record exposing (Record, decoder, encode, id, primaryKey, primaryKeyName)
 
 import Basics.Extra exposing (curry, flip)
 import Dict exposing (Dict)
+import Dict.Extra as Dict
 import Json.Decode as Decode
     exposing
         ( Decoder
@@ -26,7 +27,20 @@ type alias Record =
 
 encode : Record -> Encode.Value
 encode record =
-    Encode.dict identity Value.encode record
+    case primaryKeyName record of
+        Just pkName ->
+            record
+                |> Dict.remove pkName
+                |> Encode.dict identity Value.encode
+
+        Nothing ->
+            Encode.null
+
+
+primaryKeyName : Record -> Maybe String
+primaryKeyName record =
+    Dict.find (\_ v -> Value.isPrimaryKey v) record
+        |> Maybe.map Tuple.first
 
 
 decoder : List String -> Definition -> Decoder Record
@@ -34,6 +48,18 @@ decoder identifiers definition =
     definition
         |> Dict.foldl (decoderFold identifiers definition)
             (Decode.succeed Dict.empty)
+
+
+id : Record -> Maybe String
+id record =
+    primaryKey record |> Maybe.map PrimaryKey.toString
+
+
+primaryKey : Record -> Maybe PrimaryKey
+primaryKey record =
+    Dict.values record
+        |> List.filterMap Value.toPrimaryKey
+        |> List.head
 
 
 decoderFold :
@@ -85,10 +111,3 @@ decoderFold identifiers definition name _ prevDec =
                     map BadValue dict Decode.value
     in
     Decode.andThen foldFun prevDec
-
-
-primaryKey : Record -> Maybe PrimaryKey
-primaryKey record =
-    Dict.values record
-        |> List.filterMap Value.toPrimaryKey
-        |> List.head

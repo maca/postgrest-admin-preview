@@ -16,7 +16,8 @@
             "elm/url": "1.0.0",
             "elm-community/basics-extra": "4.1.0",
             "elm-community/dict-extra": "2.4.0",
-            "elm-community/string-extra": "4.0.1"
+            "elm-community/string-extra": "4.0.1",
+            "joshforisha/elm-inflect": "1.0.0"
         },
         "indirect": {
             "elm/bytes": "1.0.8",

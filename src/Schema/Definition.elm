@@ -1,4 +1,4 @@
-module Schema.Definition exposing (Definition, Field, primaryKeyName)
+module Schema.Definition exposing (Definition, Field, primaryKeyName, toRecord)
 
 import Dict exposing (Dict)
 import Dict.Extra as Dict
@@ -14,6 +14,11 @@ type alias Field =
 
 type alias Definition =
     Dict String Field
+
+
+toRecord : Definition -> Dict String Value
+toRecord definition =
+    Dict.map (\_ v -> v.value) definition
 
 
 primaryKeyName : Definition -> Maybe String
