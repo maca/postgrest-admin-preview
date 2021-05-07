@@ -59,8 +59,8 @@ encode value =
             Encode.null
 
 
-update : Value -> String -> Value
-update value string =
+update : String -> Value -> Value
+update string value =
     case value of
         PString _ ->
             PString <| String.nonBlank string

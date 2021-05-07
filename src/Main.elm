@@ -4,6 +4,7 @@ import Basics.Extra exposing (flip)
 import Browser exposing (UrlRequest)
 import Browser.Navigation as Nav
 import Dict
+import Field exposing (Field)
 import Html exposing (..)
 import Html.Attributes
     exposing
@@ -32,7 +33,7 @@ import PrimaryKey exposing (PrimaryKey)
 import Record exposing (Record)
 import Result
 import Schema exposing (Schema)
-import Schema.Definition as Definition exposing (Column, Definition)
+import Schema.Definition as Definition exposing (Column(..), Definition)
 import Set
 import String.Extra as String
 import Task
@@ -50,7 +51,7 @@ type Msg
     | RecordSaved (Result Error Record)
     | RecordNew Record
     | RecordLinkClicked String String
-    | InputChanged String Value
+    | InputChanged String Field
     | FormSubmitted
     | MessageDismissed
     | LinkClicked Browser.UrlRequest
@@ -224,15 +225,15 @@ update msg model =
             , Nav.pushUrl model.key <| Url.absolute [ resourcesName, id ] []
             )
 
-        InputChanged name value ->
+        InputChanged name field ->
             case model.route of
                 Edit (Just record) params ->
-                    ( updateRecord Edit params name value record model
+                    ( updateRecord Edit params name field record model
                     , Cmd.none
                     )
 
                 New (Just record) params ->
-                    ( updateRecord New params name value record model
+                    ( updateRecord New params name field record model
                     , Cmd.none
                     )
 
@@ -322,17 +323,17 @@ updateRecord :
     (Maybe Record -> RecordParams a -> Route)
     -> RecordParams a
     -> String
-    -> Value
+    -> Field
     -> Record
     -> Model
     -> Model
-updateRecord route params name value record model =
+updateRecord route params name field record model =
     let
-        updateFun =
-            Just << Dict.insert name value
+        mrecord =
+            Just <| Dict.insert name field record
     in
     { model
-        | route = route (updateFun record) { params | changed = True }
+        | route = route mrecord { params | changed = True }
         , message = Nothing
     }
 
@@ -460,7 +461,7 @@ recordForm changed resourcesName record { schema } =
             let
                 fields =
                     Dict.toList record
-                        |> List.sortWith sortValues
+                        |> List.sortWith sortFields
                         |> List.map valueInput
             in
             form
@@ -478,19 +479,19 @@ recordForm changed resourcesName record { schema } =
             notFound
 
 
-valueInput : ( String, Value ) -> Html Msg
-valueInput ( name, val ) =
-    case val of
+valueInput : ( String, Field ) -> Html Msg
+valueInput ( name, { value } as field ) =
+    case value of
         PString maybe ->
-            formInput [] "text" name val maybe
+            formInput [] "text" name field maybe
 
         PFloat maybe ->
             Maybe.map String.fromFloat maybe
-                |> formInput [] "number" name val
+                |> formInput [] "number" name field
 
         PInt maybe ->
             Maybe.map String.fromInt maybe
-                |> formInput [] "number" name val
+                |> formInput [] "number" name field
 
         PBool maybe ->
             let
@@ -498,11 +499,11 @@ valueInput ( name, val ) =
                     Maybe.map (checked >> List.singleton) maybe
                         |> Maybe.withDefault []
             in
-            formInput attrs "checkbox" name val Nothing
+            formInput attrs "checkbox" name field Nothing
 
         PTime maybe ->
             Maybe.map (Iso8601.fromTime >> String.slice 0 19) maybe
-                |> formInput [] "datetime-local" name val
+                |> formInput [] "datetime-local" name field
 
         _ ->
             text ""
@@ -548,7 +549,7 @@ recordLabel record =
 
 recordLabelHelp : Record -> String -> Maybe String
 recordLabelHelp record fieldName =
-    case Dict.get fieldName record of
+    case Dict.get fieldName record |> Maybe.map .value of
         Just (PString label) ->
             label
 
@@ -582,9 +583,9 @@ clickRecord resourcesName id =
         Decode.map (EventConfig True True) (Decode.succeed msg)
 
 
-displayValue : String -> Value -> Html Msg
-displayValue resourcesName val =
-    case val of
+displayValue : String -> Field -> Html Msg
+displayValue resourcesName { value } =
+    case value of
         PFloat (Just float) ->
             text <| String.fromFloat float
 
@@ -620,15 +621,15 @@ formInput :
     List (Html.Attribute Msg)
     -> String
     -> String
-    -> Value
+    -> Field
     -> Maybe String
     -> Html Msg
-formInput attributes t name val mstring =
+formInput attributes t name field mstring =
     let
         input_ =
             Html.input
                 (attributes
-                    ++ [ onInput <| (InputChanged name << Value.update val)
+                    ++ [ onInput <| (InputChanged name << Field.update field)
                        , id name
                        , type_ t
                        , value <| Maybe.withDefault "" mstring
@@ -672,8 +673,13 @@ recordIdentifiers =
 
 
 sortColumns : ( String, Column ) -> ( String, Column ) -> Order
-sortColumns a b =
-    sortValues (Tuple.mapSecond .value a) (Tuple.mapSecond .value b)
+sortColumns ( name, Column _ val ) ( name_, Column _ val_ ) =
+    sortValues ( name, val ) ( name_, val_ )
+
+
+sortFields : ( String, Field ) -> ( String, Field ) -> Order
+sortFields ( name, field ) ( name_, field_ ) =
+    sortValues ( name, field.value ) ( name_, field_.value )
 
 
 sortValues : ( String, Value ) -> ( String, Value ) -> Order
@@ -833,10 +839,13 @@ selects schema definition =
 
         resources ( name, _ ) =
             Dict.get name schema |> Maybe.map (mapFun name)
+
+        filteMapFun (Column _ val) =
+            Value.foreignKeyReference val
+                |> Maybe.andThen resources
     in
     Dict.values definition
-        |> List.filterMap
-            (.value >> Value.foreignKeyReference >> Maybe.andThen resources)
+        |> List.filterMap filteMapFun
         |> (++) (Dict.keys definition |> List.map PG.attribute)
 
 

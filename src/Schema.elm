@@ -15,7 +15,7 @@ import Json.Decode as Decode
         )
 import PrimaryKey exposing (PrimaryKey(..))
 import Regex exposing (Regex)
-import Schema.Definition as Definition exposing (Column, Definition)
+import Schema.Definition as Definition exposing (Column(..), Definition)
 import Time.Extra as Time
 import Value exposing (Value(..))
 
