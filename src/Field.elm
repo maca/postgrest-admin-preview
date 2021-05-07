@@ -70,8 +70,15 @@ formInput tagger attributes t name field mstring =
                        ]
                 )
                 []
+
+        labelText =
+            if field.required then
+                String.humanize name ++ "*"
+
+            else
+                String.humanize name
     in
     div []
-        [ label [ for name ] [ text <| String.humanize name ]
+        [ label [ for name ] [ text <| labelText ]
         , input_
         ]

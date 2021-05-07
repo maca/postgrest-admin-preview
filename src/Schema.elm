@@ -101,8 +101,7 @@ mapPrimaryKey maybeDesc =
 
 primaryKeyRegex : Regex
 primaryKeyRegex =
-    Regex.fromString
-        "Primary Key"
+    Regex.fromString "Primary Key"
         |> Maybe.withDefault Regex.never
 
 
@@ -122,6 +121,5 @@ mapForeignKey maybeDesc =
 
 foreignKeyRegex : Regex
 foreignKeyRegex =
-    Regex.fromString
-        "fk table='(\\w+)' column='(\\w+)'"
+    Regex.fromString "fk table='(\\w+)' column='(\\w+)'"
         |> Maybe.withDefault Regex.never

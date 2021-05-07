@@ -21,7 +21,7 @@ type alias Definition =
 
 toRecord : Definition -> Dict String Field
 toRecord definition =
-    Dict.map (\_ (Column _ value) -> Field Nothing False value) definition
+    Dict.map (\_ (Column req value) -> Field Nothing req value) definition
 
 
 primaryKeyName : Definition -> Maybe String
