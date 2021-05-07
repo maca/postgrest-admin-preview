@@ -610,42 +610,18 @@ updateValue value string =
 
 
 valueInput : ( String, Value ) -> Html Msg
-valueInput ( fieldName, val ) =
-    let
-        withDefault =
-            Maybe.withDefault ""
-
-        l =
-            label [ for fieldName ] [ text <| String.humanize fieldName ]
-
-        ev =
-            onInput <| (InputChanged fieldName << updateValue val)
-
-        i attrs =
-            input ([ ev, id fieldName ] ++ attrs) []
-    in
+valueInput ( name, val ) =
     case val of
         PString maybe ->
-            div []
-                [ l, i [ type_ "text", value <| withDefault maybe ] ]
+            inputWrapper [] "text" name val maybe
 
         PFloat maybe ->
-            div []
-                [ l
-                , i
-                    [ type_ "number"
-                    , value <| withDefault <| Maybe.map String.fromFloat maybe
-                    ]
-                ]
+            Maybe.map String.fromFloat maybe
+                |> inputWrapper [] "number" name val
 
         PInt maybe ->
-            div []
-                [ l
-                , i
-                    [ type_ "number"
-                    , value <| withDefault <| Maybe.map String.fromInt maybe
-                    ]
-                ]
+            Maybe.map String.fromInt maybe
+                |> inputWrapper [] "number" name val
 
         PBool maybe ->
             let
@@ -653,24 +629,47 @@ valueInput ( fieldName, val ) =
                     Maybe.map (checked >> List.singleton) maybe
                         |> Maybe.withDefault []
             in
-            div []
-                [ l, i <| [ type_ "checkbox" ] ++ attrs ]
+            inputWrapper attrs "checkbox" name val Nothing
 
         PTime maybe ->
-            div []
-                [ l
-                , i
-                    [ type_ "datetime-local"
-                    , value <|
-                        withDefault <|
-                            Maybe.map
-                                (Iso8601.fromTime >> String.slice 0 19)
-                                maybe
-                    ]
-                ]
+            Maybe.map (Iso8601.fromTime >> String.slice 0 19) maybe
+                |> inputWrapper [] "datetime-local" name val
 
         _ ->
             text ""
+
+
+inputWrapper :
+    List (Html.Attribute Msg)
+    -> String
+    -> String
+    -> Value
+    -> Maybe String
+    -> Html Msg
+inputWrapper attributes t name val mstring =
+    div []
+        [ label [ for name ] [ text <| String.humanize name ]
+        , formInput attributes t name val mstring
+        ]
+
+
+formInput :
+    List (Html.Attribute Msg)
+    -> String
+    -> String
+    -> Value
+    -> Maybe String
+    -> Html Msg
+formInput attributes t name val mstring =
+    Html.input
+        (attributes
+            ++ [ onInput <| (InputChanged name << updateValue val)
+               , id name
+               , type_ t
+               , value <| Maybe.withDefault "" mstring
+               ]
+        )
+        []
 
 
 recordLink : String -> PrimaryKey -> Maybe String -> Html Msg
