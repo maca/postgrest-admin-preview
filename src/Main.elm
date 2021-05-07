@@ -595,7 +595,15 @@ updateValue value string =
             PBool <| Maybe.map not prev
 
         PTime _ ->
-            PTime <| Result.toMaybe <| Iso8601.toTime string
+            let
+                string_ =
+                    if String.length string == 16 then
+                        string ++ ":00"
+
+                    else
+                        string
+            in
+            PTime <| Result.toMaybe <| Iso8601.toTime string_
 
         other ->
             other
@@ -604,7 +612,7 @@ updateValue value string =
 valueInput : ( String, Value ) -> Html Msg
 valueInput ( fieldName, val ) =
     let
-        default =
+        withDefault =
             Maybe.withDefault ""
 
         l =
@@ -619,14 +627,14 @@ valueInput ( fieldName, val ) =
     case val of
         PString maybe ->
             div []
-                [ l, i [ type_ "text", value <| default maybe ] ]
+                [ l, i [ type_ "text", value <| withDefault maybe ] ]
 
         PFloat maybe ->
             div []
                 [ l
                 , i
                     [ type_ "number"
-                    , value <| default <| Maybe.map String.fromFloat maybe
+                    , value <| withDefault <| Maybe.map String.fromFloat maybe
                     ]
                 ]
 
@@ -635,7 +643,7 @@ valueInput ( fieldName, val ) =
                 [ l
                 , i
                     [ type_ "number"
-                    , value <| default <| Maybe.map String.fromInt maybe
+                    , value <| withDefault <| Maybe.map String.fromInt maybe
                     ]
                 ]
 
@@ -649,16 +657,12 @@ valueInput ( fieldName, val ) =
                 [ l, i <| [ type_ "checkbox" ] ++ attrs ]
 
         PTime maybe ->
-            let
-                _ =
-                    Debug.log "maybe" maybe
-            in
             div []
                 [ l
                 , i
                     [ type_ "datetime-local"
                     , value <|
-                        default <|
+                        withDefault <|
                             Maybe.map
                                 (Iso8601.fromTime >> String.slice 0 19)
                                 maybe

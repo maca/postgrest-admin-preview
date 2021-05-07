@@ -35,9 +35,13 @@ toDateString time =
 
 toTimeString : Time.Posix -> String
 toTimeString time =
-    [ Time.toHour utc time |> String.fromInt
-    , Time.toMinute utc time |> String.fromInt
-    , Time.toSecond utc time |> String.fromInt
+    let
+        toString =
+            String.fromInt >> String.pad 2 '0'
+    in
+    [ Time.toHour utc time |> toString
+    , Time.toMinute utc time |> toString
+    , Time.toSecond utc time |> toString
     ]
         |> String.join ":"
 
