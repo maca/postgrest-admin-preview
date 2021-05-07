@@ -55,7 +55,7 @@ encode value =
         PForeignKey _ _ mpk ->
             enc PrimaryKey.encode mpk
 
-        BadValue val ->
+        BadValue _ ->
             Encode.null
 
 

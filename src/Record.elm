@@ -1,15 +1,13 @@
 module Record exposing (Record, decoder, encode, id, primaryKey, primaryKeyName)
 
-import Basics.Extra exposing (curry, flip)
+import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
 import Dict.Extra as Dict
 import Field exposing (Field)
-import Iso8601
 import Json.Decode as Decode
     exposing
         ( Decoder
         , bool
-        , decodeValue
         , float
         , int
         , maybe
@@ -17,7 +15,6 @@ import Json.Decode as Decode
         , string
         )
 import Json.Encode as Encode
-import Postgrest.Client as PG
 import PrimaryKey exposing (PrimaryKey)
 import Schema.Definition exposing (Column(..), Definition)
 import Time.Extra as Time
@@ -77,54 +74,48 @@ decoderFold identifiers definition name _ prevDec =
         insert =
             flip (Dict.insert name)
 
-        map cons dict dec =
-            Decode.field name dec |> Decode.map (insert dict << cons)
+        map cons required dict dec =
+            Decode.field name dec
+                |> Decode.map (insert dict << Field Nothing required << cons)
 
         foldFun dict =
             case Dict.get name definition of
                 Just (Column required (PFloat _)) ->
-                    maybe float |> map (Field Nothing required << PFloat) dict
+                    maybe float |> map PFloat required dict
 
                 Just (Column required (PInt _)) ->
-                    Debug.todo "crash"
+                    maybe int |> map PInt required dict
 
-                -- maybe int |> map PInt dict
                 Just (Column required (PString _)) ->
-                    Debug.todo "crash"
+                    maybe string |> map PString required dict
 
-                -- maybe string |> map PString dict
                 Just (Column required (PBool _)) ->
-                    Debug.todo "crash"
+                    maybe bool |> map PBool required dict
 
-                -- maybe bool |> map PBool dict
                 Just (Column required (PTime _)) ->
-                    Debug.todo "crash"
+                    maybe Time.decoder |> map PTime required dict
 
-                -- maybe Time.decoder |> map PTime dict
                 Just (Column required (PPrimaryKey _)) ->
-                    Debug.todo "crash"
+                    maybe PrimaryKey.decoder |> map PPrimaryKey required dict
 
-                -- maybe PrimaryKey.decoder
-                --     |> map PPrimaryKey dict
                 Just (Column required (PForeignKey ( table, col ) _ _)) ->
-                    Debug.todo "crash"
+                    let
+                        mapFun d pk =
+                            insert dict <|
+                                Field Nothing required <|
+                                    PForeignKey ( table, col ) d pk
 
-                -- let
-                --     mapFun d pk =
-                --         insert dict <| PForeignKey ( table, col ) d pk
-                --     refDec i =
-                --         Decode.at [ table, i ] (nullable string)
-                -- in
-                -- Decode.map2 mapFun
-                --     (Decode.oneOf <| List.map refDec identifiers)
-                --     (maybe <| Decode.field name PrimaryKey.decoder)
+                        refDec i =
+                            Decode.at [ table, i ] (nullable string)
+                    in
+                    Decode.map2 mapFun
+                        (Decode.oneOf <| List.map refDec identifiers)
+                        (maybe <| Decode.field name PrimaryKey.decoder)
+
                 Just (Column required (BadValue _)) ->
-                    Debug.todo "crash"
+                    map BadValue required dict Decode.value
 
-                -- map BadValue dict Decode.value
                 Nothing ->
-                    Debug.todo "crash"
-
-        -- map BadValue dict Decode.value
+                    map BadValue False dict Decode.value
     in
     Decode.andThen foldFun prevDec

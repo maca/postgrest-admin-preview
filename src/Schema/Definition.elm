@@ -8,7 +8,6 @@ module Schema.Definition exposing
 import Dict exposing (Dict)
 import Dict.Extra as Dict
 import Field exposing (Field)
-import PrimaryKey exposing (PrimaryKey)
 import Value exposing (Value)
 
 

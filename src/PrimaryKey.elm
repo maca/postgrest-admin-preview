@@ -1,6 +1,6 @@
 module PrimaryKey exposing (PrimaryKey(..), decoder, encode, toString)
 
-import Json.Decode as Decode exposing (Decoder, field, int, maybe, string)
+import Json.Decode as Decode exposing (Decoder, int, string)
 import Json.Encode as Encode
 
 

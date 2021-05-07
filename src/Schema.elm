@@ -1,6 +1,5 @@
 module Schema exposing (Schema, decoder)
 
-import Basics.Extra exposing (uncurry)
 import Dict exposing (Dict)
 import Json.Decode as Decode
     exposing
@@ -15,7 +14,7 @@ import Json.Decode as Decode
         )
 import PrimaryKey exposing (PrimaryKey(..))
 import Regex exposing (Regex)
-import Schema.Definition as Definition exposing (Column(..), Definition)
+import Schema.Definition exposing (Column(..), Definition)
 import Time.Extra as Time
 import Value exposing (Value(..))
 
@@ -80,7 +79,7 @@ valueDecoder =
                     Triple "boolean" _ _ ->
                         mapValue PBool bool
 
-                    Triple k v _ ->
+                    Triple _ _ _ ->
                         Decode.map BadValue (field "default" Decode.value)
             )
 

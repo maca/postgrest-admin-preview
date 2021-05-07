@@ -1,7 +1,7 @@
 module Main exposing (Error, main)
 
-import Basics.Extra exposing (flip)
-import Browser exposing (UrlRequest)
+import Basics.Extra exposing (flip, uncurry)
+import Browser
 import Browser.Navigation as Nav
 import Dict
 import Field exposing (Field)
@@ -10,24 +10,17 @@ import Html.Attributes
     exposing
         ( attribute
         , autocomplete
-        , checked
         , class
         , disabled
-        , for
         , href
         , id
         , novalidate
-        , step
         , target
-        , type_
-        , value
         )
-import Html.Events as Events exposing (onClick, onInput, onSubmit)
+import Html.Events as Events exposing (onClick, onSubmit)
 import Http
 import Inflect as String
-import Iso8601
 import Json.Decode as Decode
-import Json.Encode as Encode
 import Postgrest.Client as PG
 import PrimaryKey exposing (PrimaryKey)
 import Record exposing (Record)
@@ -385,10 +378,10 @@ displayMainContent model =
             displayListing name maybeRecords model
 
         Edit mrecord params ->
-            displayForm params mrecord model
+            displayForm params mrecord
 
         New mrecord params ->
-            displayForm params mrecord model
+            displayForm params mrecord
 
         NotFound ->
             notFound
@@ -435,8 +428,8 @@ displayListHeader resourcesName =
         ]
 
 
-displayForm : RecordParams a -> Maybe Record -> Model -> Html Msg
-displayForm { changed, resourcesName } mrecord model =
+displayForm : RecordParams a -> Maybe Record -> Html Msg
+displayForm { changed, resourcesName } mrecord =
     case mrecord of
         Just record ->
             section
@@ -447,66 +440,31 @@ displayForm { changed, resourcesName } mrecord model =
                         |> (++) (String.humanize resourcesName ++ " - ")
                         |> text
                     ]
-                , recordForm changed resourcesName record model
+                , recordForm changed record
                 ]
 
         Nothing ->
             notFound
 
 
-recordForm : Bool -> String -> Record -> Model -> Html Msg
-recordForm changed resourcesName record { schema } =
-    case Dict.get resourcesName schema of
-        Just definition ->
-            let
-                fields =
-                    Dict.toList record
-                        |> List.sortWith sortFields
-                        |> List.map valueInput
-            in
-            form
-                [ class "resource-form"
-                , autocomplete False
-                , onSubmit FormSubmitted
-                , novalidate True
-                ]
-                [ fieldset [] fields
-                , fieldset []
-                    [ button [ disabled (not changed) ] [ text "Save" ] ]
-                ]
-
-        Nothing ->
-            notFound
-
-
-valueInput : ( String, Field ) -> Html Msg
-valueInput ( name, { value } as field ) =
-    case value of
-        PString maybe ->
-            formInput [] "text" name field maybe
-
-        PFloat maybe ->
-            Maybe.map String.fromFloat maybe
-                |> formInput [] "number" name field
-
-        PInt maybe ->
-            Maybe.map String.fromInt maybe
-                |> formInput [] "number" name field
-
-        PBool maybe ->
-            let
-                attrs =
-                    Maybe.map (checked >> List.singleton) maybe
-                        |> Maybe.withDefault []
-            in
-            formInput attrs "checkbox" name field Nothing
-
-        PTime maybe ->
-            Maybe.map (Iso8601.fromTime >> String.slice 0 19) maybe
-                |> formInput [] "datetime-local" name field
-
-        _ ->
-            text ""
+recordForm : Bool -> Record -> Html Msg
+recordForm changed record =
+    let
+        fields =
+            Dict.toList record
+                |> List.sortWith sortFields
+                |> List.map (uncurry <| Field.input InputChanged)
+    in
+    form
+        [ class "resource-form"
+        , autocomplete False
+        , onSubmit FormSubmitted
+        , novalidate True
+        ]
+        [ fieldset [] fields
+        , fieldset []
+            [ button [ disabled (not changed) ] [ text "Save" ] ]
+        ]
 
 
 displayMessage : Model -> Html Msg
@@ -615,32 +573,6 @@ displayValue resourcesName { value } =
 
         _ ->
             text "-"
-
-
-formInput :
-    List (Html.Attribute Msg)
-    -> String
-    -> String
-    -> Field
-    -> Maybe String
-    -> Html Msg
-formInput attributes t name field mstring =
-    let
-        input_ =
-            Html.input
-                (attributes
-                    ++ [ onInput <| (InputChanged name << Field.update field)
-                       , id name
-                       , type_ t
-                       , value <| Maybe.withDefault "" mstring
-                       ]
-                )
-                []
-    in
-    div []
-        [ label [ for name ] [ text <| String.humanize name ]
-        , input_
-        ]
 
 
 recordLink : String -> PrimaryKey -> Maybe String -> Html Msg
@@ -787,8 +719,8 @@ fetchRecord { resourcesName, id } ({ schema, jwt } as model) =
 
 createRecord : CreationParams -> Model -> Record -> Cmd Msg
 createRecord { resourcesName } ({ schema, jwt } as model) record =
-    case ( Dict.get resourcesName schema, Record.primaryKeyName record ) of
-        ( Just definition, Just pkName ) ->
+    case Dict.get resourcesName schema of
+        Just definition ->
             let
                 endpoint =
                     recordEndpoint resourcesName model definition
