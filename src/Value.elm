@@ -5,12 +5,14 @@ module Value exposing
     , isForeignKey
     , isPrimaryKey
     , toPrimaryKey
+    , update
     )
 
 import Iso8601
 import Json.Decode as Decode
 import Json.Encode as Encode
 import PrimaryKey exposing (PrimaryKey(..))
+import String.Extra as String
 import Time
 
 
@@ -55,6 +57,36 @@ encode value =
 
         BadValue val ->
             Encode.null
+
+
+update : Value -> String -> Value
+update value string =
+    case value of
+        PString _ ->
+            PString <| String.nonBlank string
+
+        PFloat _ ->
+            PFloat <| String.toFloat string
+
+        PInt _ ->
+            PInt <| String.toInt string
+
+        PBool prev ->
+            PBool <| Maybe.map not prev
+
+        PTime _ ->
+            let
+                string_ =
+                    if String.length string == 16 then
+                        string ++ ":00"
+
+                    else
+                        string
+            in
+            PTime <| Result.toMaybe <| Iso8601.toTime string_
+
+        other ->
+            other
 
 
 isPrimaryKey : Value -> Bool

@@ -579,36 +579,6 @@ displayValue resourcesName val =
             text "-"
 
 
-updateValue : Value -> String -> Value
-updateValue value string =
-    case value of
-        PString _ ->
-            PString <| String.nonBlank string
-
-        PFloat _ ->
-            PFloat <| String.toFloat string
-
-        PInt _ ->
-            PInt <| String.toInt string
-
-        PBool prev ->
-            PBool <| Maybe.map not prev
-
-        PTime _ ->
-            let
-                string_ =
-                    if String.length string == 16 then
-                        string ++ ":00"
-
-                    else
-                        string
-            in
-            PTime <| Result.toMaybe <| Iso8601.toTime string_
-
-        other ->
-            other
-
-
 valueInput : ( String, Value ) -> Html Msg
 valueInput ( name, val ) =
     case val of
@@ -663,7 +633,7 @@ formInput :
 formInput attributes t name val mstring =
     Html.input
         (attributes
-            ++ [ onInput <| (InputChanged name << updateValue val)
+            ++ [ onInput <| (InputChanged name << Value.update val)
                , id name
                , type_ t
                , value <| Maybe.withDefault "" mstring
