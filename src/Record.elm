@@ -3,6 +3,7 @@ module Record exposing (Record, decoder, encode, id, primaryKey, primaryKeyName)
 import Basics.Extra exposing (curry, flip)
 import Dict exposing (Dict)
 import Dict.Extra as Dict
+import Iso8601
 import Json.Decode as Decode
     exposing
         ( Decoder
@@ -18,6 +19,7 @@ import Json.Encode as Encode
 import Postgrest.Client as PG
 import PrimaryKey exposing (PrimaryKey)
 import Schema.Definition exposing (Definition)
+import Time.Extra as Time
 import Value exposing (Column, Value(..))
 
 
@@ -91,6 +93,9 @@ decoderFold identifiers definition name _ prevDec =
                 Just (PBool _) ->
                     maybe bool |> map PBool dict
 
+                Just (PTime _) ->
+                    maybe Time.decoder |> map PTime dict
+
                 Just (PPrimaryKey _) ->
                     maybe PrimaryKey.decoder
                         |> map PPrimaryKey dict
@@ -107,7 +112,10 @@ decoderFold identifiers definition name _ prevDec =
                         (Decode.oneOf <| List.map refDec identifiers)
                         (maybe <| Decode.field name PrimaryKey.decoder)
 
-                _ ->
+                Just (BadValue _) ->
+                    map BadValue dict Decode.value
+
+                Nothing ->
                     map BadValue dict Decode.value
     in
     Decode.andThen foldFun prevDec

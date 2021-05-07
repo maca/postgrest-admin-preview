@@ -16,6 +16,7 @@ import Json.Decode as Decode
 import PrimaryKey exposing (PrimaryKey(..))
 import Regex exposing (Regex)
 import Schema.Definition as Definition exposing (Definition, Field)
+import Time.Extra as Time
 import Value exposing (Column, Value(..))
 
 
@@ -66,6 +67,9 @@ valueDecoder =
                             , mapValue PInt int
                             ]
 
+                    Triple "string" "timestamp without time zone" _ ->
+                        mapValue PTime Time.decoder
+
                     Triple "string" _ maybeDesc ->
                         Decode.oneOf
                             [ mapPrimaryKey maybeDesc
@@ -81,9 +85,9 @@ valueDecoder =
             )
 
 
-primaryKeyDecoder : Decoder (Maybe PrimaryKey)
-primaryKeyDecoder =
-    field "default" <| maybe PrimaryKey.decoder
+mapValue : (Maybe a -> Value) -> Decoder a -> Decoder Value
+mapValue cons dec =
+    Decode.map cons (maybe <| field "default" dec)
 
 
 mapPrimaryKey : Maybe String -> Decoder Value
@@ -94,6 +98,13 @@ mapPrimaryKey maybeDesc =
 
         _ ->
             Decode.fail ""
+
+
+primaryKeyRegex : Regex
+primaryKeyRegex =
+    Regex.fromString
+        "Primary Key"
+        |> Maybe.withDefault Regex.never
 
 
 mapForeignKey : Maybe String -> Decoder Value
@@ -108,18 +119,6 @@ mapForeignKey maybeDesc =
 
         _ ->
             Decode.fail ""
-
-
-mapValue : (Maybe a -> Value) -> Decoder a -> Decoder Value
-mapValue cons dec =
-    Decode.map cons (maybe <| field "default" dec)
-
-
-primaryKeyRegex : Regex
-primaryKeyRegex =
-    Regex.fromString
-        "Primary Key"
-        |> Maybe.withDefault Regex.never
 
 
 foreignKeyRegex : Regex

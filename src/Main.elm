@@ -14,6 +14,7 @@ import Html.Attributes
         , for
         , href
         , id
+        , novalidate
         , step
         , target
         , type_
@@ -22,6 +23,7 @@ import Html.Attributes
 import Html.Events as Events exposing (onClick, onInput, onSubmit)
 import Http
 import Inflect as String
+import Iso8601
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Postgrest.Client as PG
@@ -33,6 +35,7 @@ import Schema.Definition as Definition exposing (Definition, Field)
 import Set
 import String.Extra as String
 import Task
+import Time.Extra as Time
 import Url exposing (Url)
 import Url.Builder as Url
 import Url.Parser as Parser exposing ((</>), Parser)
@@ -461,6 +464,7 @@ recordForm changed resourcesName record { schema } =
         [ class "resource-form"
         , attribute "autocomplete" "off"
         , onSubmit FormSubmitted
+        , novalidate True
         ]
         [ fieldset [] fields
         , fieldset [] [ button [ disabled (not changed) ] [ text "Save" ] ]
@@ -559,6 +563,9 @@ displayValue resourcesName val =
         PBool (Just False) ->
             text "false"
 
+        PTime (Just time) ->
+            text <| Time.format time
+
         PForeignKey ( res, _ ) mlabel (Just primaryKey) ->
             recordLink res primaryKey mlabel
 
@@ -586,6 +593,9 @@ updateValue value string =
 
         PBool prev ->
             PBool <| Maybe.map not prev
+
+        PTime _ ->
+            PTime <| Result.toMaybe <| Iso8601.toTime string
 
         other ->
             other
@@ -616,7 +626,6 @@ valueInput ( fieldName, val ) =
                 [ l
                 , i
                     [ type_ "number"
-                    , step "0.1"
                     , value <| default <| Maybe.map String.fromFloat maybe
                     ]
                 ]
@@ -626,7 +635,6 @@ valueInput ( fieldName, val ) =
                 [ l
                 , i
                     [ type_ "number"
-                    , step "1"
                     , value <| default <| Maybe.map String.fromInt maybe
                     ]
                 ]
@@ -639,6 +647,23 @@ valueInput ( fieldName, val ) =
             in
             div []
                 [ l, i <| [ type_ "checkbox" ] ++ attrs ]
+
+        PTime maybe ->
+            let
+                _ =
+                    Debug.log "maybe" maybe
+            in
+            div []
+                [ l
+                , i
+                    [ type_ "datetime-local"
+                    , value <|
+                        default <|
+                            Maybe.map
+                                (Iso8601.fromTime >> String.slice 0 19)
+                                maybe
+                    ]
+                ]
 
         _ ->
             text ""

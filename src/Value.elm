@@ -8,9 +8,11 @@ module Value exposing
     , toPrimaryKey
     )
 
+import Iso8601
 import Json.Decode as Decode
 import Json.Encode as Encode
 import PrimaryKey exposing (PrimaryKey(..))
+import Time
 
 
 type alias Column =
@@ -22,6 +24,7 @@ type Value
     | PInt (Maybe Int)
     | PString (Maybe String)
     | PBool (Maybe Bool)
+    | PTime (Maybe Time.Posix)
     | PPrimaryKey (Maybe PrimaryKey)
     | PForeignKey Column (Maybe String) (Maybe PrimaryKey)
     | BadValue Decode.Value
@@ -45,6 +48,9 @@ encode value =
 
         PBool mbool ->
             enc Encode.bool mbool
+
+        PTime mposix ->
+            enc Encode.string (Maybe.map Iso8601.fromTime mposix)
 
         PPrimaryKey mpk ->
             enc PrimaryKey.encode mpk
