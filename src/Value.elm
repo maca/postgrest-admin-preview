@@ -1,6 +1,5 @@
 module Value exposing
-    ( Column
-    , Value(..)
+    ( Value(..)
     , encode
     , foreignKeyReference
     , isForeignKey
@@ -15,10 +14,6 @@ import PrimaryKey exposing (PrimaryKey(..))
 import Time
 
 
-type alias Column =
-    ( String, String )
-
-
 type Value
     = PFloat (Maybe Float)
     | PInt (Maybe Int)
@@ -26,7 +21,7 @@ type Value
     | PBool (Maybe Bool)
     | PTime (Maybe Time.Posix)
     | PPrimaryKey (Maybe PrimaryKey)
-    | PForeignKey Column (Maybe String) (Maybe PrimaryKey)
+    | PForeignKey ( String, String ) (Maybe String) (Maybe PrimaryKey)
     | BadValue Decode.Value
 
 
@@ -92,7 +87,7 @@ toPrimaryKey value =
             Nothing
 
 
-foreignKeyReference : Value -> Maybe Column
+foreignKeyReference : Value -> Maybe ( String, String )
 foreignKeyReference value =
     case value of
         PForeignKey column _ _ ->

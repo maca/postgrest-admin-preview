@@ -31,7 +31,7 @@ import PrimaryKey exposing (PrimaryKey)
 import Record exposing (Record)
 import Result
 import Schema exposing (Schema)
-import Schema.Definition as Definition exposing (Definition, Field)
+import Schema.Definition as Definition exposing (Column, Definition)
 import Set
 import String.Extra as String
 import Task
@@ -39,7 +39,7 @@ import Time.Extra as Time
 import Url exposing (Url)
 import Url.Builder as Url
 import Url.Parser as Parser exposing ((</>), Parser)
-import Value exposing (Column, Value(..))
+import Value exposing (Value(..))
 
 
 type Msg
@@ -399,7 +399,7 @@ displayListing resourcesName mrecords { schema } =
             let
                 fieldNames =
                     Dict.toList definition
-                        |> List.sortWith sortFields
+                        |> List.sortWith sortColumns
                         |> List.map Tuple.first
 
                 toHeader =
@@ -701,8 +701,8 @@ recordIdentifiers =
     [ "title", "name", "full name", "email", "first name", "last name" ]
 
 
-sortFields : ( String, Field ) -> ( String, Field ) -> Order
-sortFields a b =
+sortColumns : ( String, Column ) -> ( String, Column ) -> Order
+sortColumns a b =
     sortValues (Tuple.mapSecond .value a) (Tuple.mapSecond .value b)
 
 

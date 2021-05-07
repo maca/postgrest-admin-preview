@@ -20,7 +20,7 @@ import Postgrest.Client as PG
 import PrimaryKey exposing (PrimaryKey)
 import Schema.Definition exposing (Definition)
 import Time.Extra as Time
-import Value exposing (Column, Value(..))
+import Value exposing (Value(..))
 
 
 type alias Record =

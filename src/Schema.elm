@@ -15,9 +15,9 @@ import Json.Decode as Decode
         )
 import PrimaryKey exposing (PrimaryKey(..))
 import Regex exposing (Regex)
-import Schema.Definition as Definition exposing (Definition, Field)
+import Schema.Definition as Definition exposing (Column, Definition)
 import Time.Extra as Time
-import Value exposing (Column, Value(..))
+import Value exposing (Value(..))
 
 
 type alias Schema =
@@ -41,10 +41,10 @@ fieldsDecoder =
 propertiesDecoder : List String -> Decoder Definition
 propertiesDecoder required =
     let
-        mapField ( name, value ) =
-            ( name, Field (List.member name required) value )
+        mapColumn ( name, value ) =
+            ( name, Column (List.member name required) value )
     in
-    Decode.map (Dict.fromList << List.map mapField)
+    Decode.map (Dict.fromList << List.map mapColumn)
         (field "properties" (Decode.keyValuePairs valueDecoder))
 
 
