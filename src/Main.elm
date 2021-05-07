@@ -8,6 +8,7 @@ import Html exposing (..)
 import Html.Attributes
     exposing
         ( attribute
+        , autocomplete
         , checked
         , class
         , disabled
@@ -454,21 +455,57 @@ displayForm { changed, resourcesName } mrecord model =
 
 recordForm : Bool -> String -> Record -> Model -> Html Msg
 recordForm changed resourcesName record { schema } =
-    let
-        fields =
-            Dict.toList record
-                |> List.sortWith sortValues
-                |> List.map valueInput
-    in
-    form
-        [ class "resource-form"
-        , attribute "autocomplete" "off"
-        , onSubmit FormSubmitted
-        , novalidate True
-        ]
-        [ fieldset [] fields
-        , fieldset [] [ button [ disabled (not changed) ] [ text "Save" ] ]
-        ]
+    case Dict.get resourcesName schema of
+        Just definition ->
+            let
+                fields =
+                    Dict.toList record
+                        |> List.sortWith sortValues
+                        |> List.map valueInput
+            in
+            form
+                [ class "resource-form"
+                , autocomplete False
+                , onSubmit FormSubmitted
+                , novalidate True
+                ]
+                [ fieldset [] fields
+                , fieldset []
+                    [ button [ disabled (not changed) ] [ text "Save" ] ]
+                ]
+
+        Nothing ->
+            notFound
+
+
+valueInput : ( String, Value ) -> Html Msg
+valueInput ( name, val ) =
+    case val of
+        PString maybe ->
+            formInput [] "text" name val maybe
+
+        PFloat maybe ->
+            Maybe.map String.fromFloat maybe
+                |> formInput [] "number" name val
+
+        PInt maybe ->
+            Maybe.map String.fromInt maybe
+                |> formInput [] "number" name val
+
+        PBool maybe ->
+            let
+                attrs =
+                    Maybe.map (checked >> List.singleton) maybe
+                        |> Maybe.withDefault []
+            in
+            formInput attrs "checkbox" name val Nothing
+
+        PTime maybe ->
+            Maybe.map (Iso8601.fromTime >> String.slice 0 19) maybe
+                |> formInput [] "datetime-local" name val
+
+        _ ->
+            text ""
 
 
 displayMessage : Model -> Html Msg
@@ -579,50 +616,6 @@ displayValue resourcesName val =
             text "-"
 
 
-valueInput : ( String, Value ) -> Html Msg
-valueInput ( name, val ) =
-    case val of
-        PString maybe ->
-            inputWrapper [] "text" name val maybe
-
-        PFloat maybe ->
-            Maybe.map String.fromFloat maybe
-                |> inputWrapper [] "number" name val
-
-        PInt maybe ->
-            Maybe.map String.fromInt maybe
-                |> inputWrapper [] "number" name val
-
-        PBool maybe ->
-            let
-                attrs =
-                    Maybe.map (checked >> List.singleton) maybe
-                        |> Maybe.withDefault []
-            in
-            inputWrapper attrs "checkbox" name val Nothing
-
-        PTime maybe ->
-            Maybe.map (Iso8601.fromTime >> String.slice 0 19) maybe
-                |> inputWrapper [] "datetime-local" name val
-
-        _ ->
-            text ""
-
-
-inputWrapper :
-    List (Html.Attribute Msg)
-    -> String
-    -> String
-    -> Value
-    -> Maybe String
-    -> Html Msg
-inputWrapper attributes t name val mstring =
-    div []
-        [ label [ for name ] [ text <| String.humanize name ]
-        , formInput attributes t name val mstring
-        ]
-
-
 formInput :
     List (Html.Attribute Msg)
     -> String
@@ -631,15 +624,22 @@ formInput :
     -> Maybe String
     -> Html Msg
 formInput attributes t name val mstring =
-    Html.input
-        (attributes
-            ++ [ onInput <| (InputChanged name << Value.update val)
-               , id name
-               , type_ t
-               , value <| Maybe.withDefault "" mstring
-               ]
-        )
-        []
+    let
+        input_ =
+            Html.input
+                (attributes
+                    ++ [ onInput <| (InputChanged name << Value.update val)
+                       , id name
+                       , type_ t
+                       , value <| Maybe.withDefault "" mstring
+                       ]
+                )
+                []
+    in
+    div []
+        [ label [ for name ] [ text <| String.humanize name ]
+        , input_
+        ]
 
 
 recordLink : String -> PrimaryKey -> Maybe String -> Html Msg
