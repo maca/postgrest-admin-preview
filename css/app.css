@@ -1,0 +1,23 @@
+.resources-menu {
+    grid-area: menu;
+}
+
+.main-area {
+    grid-area: main-area;
+}
+
+.icono-cross {
+    cursor: pointer;
+}
+
+.listing-row {
+    cursor: pointer;
+}
+
+.main-container {
+    display: grid;
+    grid-template-columns: 15% auto;
+    grid-template-rows: auto;
+    grid-template-areas:
+        "menu main-area"
+}
