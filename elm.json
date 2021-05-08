@@ -17,6 +17,7 @@
             "elm/url": "1.0.0",
             "elm-community/basics-extra": "4.1.0",
             "elm-community/dict-extra": "2.4.0",
+            "elm-community/maybe-extra": "5.2.0",
             "elm-community/string-extra": "4.0.1",
             "joshforisha/elm-inflect": "1.0.0",
             "rtfeldman/elm-iso8601-date-strings": "1.1.3"

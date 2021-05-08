@@ -4,6 +4,7 @@ import Basics.Extra exposing (flip, uncurry)
 import Browser
 import Browser.Navigation as Nav
 import Dict
+import Dict.Extra as Dict
 import Field exposing (Field)
 import Html exposing (..)
 import Html.Attributes
@@ -21,6 +22,7 @@ import Html.Events as Events exposing (onClick, onSubmit)
 import Http
 import Inflect as String
 import Json.Decode as Decode
+import Maybe.Extra exposing (isNothing)
 import Postgrest.Client as PG
 import PrimaryKey exposing (PrimaryKey)
 import Record exposing (Record)
@@ -68,10 +70,7 @@ type Route
 
 
 type alias RecordParams a =
-    { a
-        | resourcesName : String
-        , changed : Bool
-    }
+    { a | resourcesName : String }
 
 
 type alias EditionParams =
@@ -236,14 +235,10 @@ update msg model =
         FormSubmitted ->
             case model.route of
                 Edit (Just record) params ->
-                    ( { model | route = Edit (Just record) params }
-                    , saveRecord params model record
-                    )
+                    ( model, saveRecord params model record )
 
                 New (Just record) params ->
-                    ( { model | route = New (Just record) params }
-                    , createRecord params model record
-                    )
+                    ( model, createRecord params model record )
 
                 _ ->
                     ( model, Cmd.none )
@@ -322,11 +317,11 @@ updateRecord :
     -> Model
 updateRecord route params name field record model =
     let
-        mrecord =
-            Just <| Dict.insert name field record
+        updated =
+            Dict.insert name field record
     in
     { model
-        | route = route mrecord { params | changed = True }
+        | route = route (Just updated) params
         , message = Nothing
     }
 
@@ -429,7 +424,7 @@ displayListHeader resourcesName =
 
 
 displayForm : RecordParams a -> Maybe Record -> Html Msg
-displayForm { changed, resourcesName } mrecord =
+displayForm { resourcesName } mrecord =
     case mrecord of
         Just record ->
             section
@@ -440,15 +435,15 @@ displayForm { changed, resourcesName } mrecord =
                         |> (++) (String.humanize resourcesName ++ " - ")
                         |> text
                     ]
-                , recordForm changed record
+                , recordForm record
                 ]
 
         Nothing ->
             notFound
 
 
-recordForm : Bool -> Record -> Html Msg
-recordForm changed record =
+recordForm : Record -> Html Msg
+recordForm record =
     let
         fields =
             Dict.toList record
@@ -463,7 +458,10 @@ recordForm changed record =
         ]
         [ fieldset [] fields
         , fieldset []
-            [ button [ disabled (not changed) ] [ text "Save" ] ]
+            [ button
+                [ disabled (not (Record.changed record)) ]
+                [ text "Save" ]
+            ]
         ]
 
 
@@ -484,8 +482,7 @@ displayMessageHelp : String -> String -> Html Msg
 displayMessageHelp messageType message =
     div [ class "message", class messageType ]
         [ div []
-            [ i [ class "icono-cross", onClick MessageDismissed ] []
-            ]
+            [ i [ class "icono-cross", onClick MessageDismissed ] [] ]
         , p [] [ text message ]
         ]
 
@@ -572,7 +569,7 @@ displayValue resourcesName { value } =
             text "?"
 
         _ ->
-            text "-"
+            text ""
 
 
 recordLink : String -> PrimaryKey -> Maybe String -> Html Msg
@@ -808,14 +805,10 @@ routeParser =
 routeParserHelp : String -> String -> Route
 routeParserHelp resourcesName id =
     if id == "new" then
-        New Nothing
-            { resourcesName = resourcesName
-            , changed = False
-            }
+        New Nothing { resourcesName = resourcesName }
 
     else
         Edit Nothing
             { resourcesName = resourcesName
-            , changed = False
             , id = id
             }

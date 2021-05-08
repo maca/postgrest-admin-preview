@@ -3,6 +3,7 @@ module Value exposing
     , encode
     , foreignKeyReference
     , isForeignKey
+    , isNothing
     , isPrimaryKey
     , toPrimaryKey
     , update
@@ -57,6 +58,34 @@ encode value =
 
         BadValue _ ->
             Encode.null
+
+
+isNothing : Value -> Bool
+isNothing value =
+    case value of
+        PFloat (Just _) ->
+            False
+
+        PInt (Just _) ->
+            False
+
+        PString (Just _) ->
+            False
+
+        PBool (Just _) ->
+            False
+
+        PTime (Just _) ->
+            False
+
+        PPrimaryKey (Just _) ->
+            False
+
+        PForeignKey _ _ (Just _) ->
+            False
+
+        _ ->
+            True
 
 
 update : String -> Value -> Value

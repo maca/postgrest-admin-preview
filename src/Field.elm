@@ -1,4 +1,4 @@
-module Field exposing (Field, input, update)
+module Field exposing (Field, input, update, validate)
 
 import Html exposing (..)
 import Html.Attributes exposing (checked, for, id, type_, value)
@@ -11,13 +11,18 @@ import Value exposing (Value(..))
 type alias Field =
     { error : Maybe String
     , required : Bool
+    , changed : Bool
     , value : Value
     }
 
 
 update : Field -> String -> Field
 update field string =
-    { field | value = Value.update string field.value }
+    validate
+        { field
+            | value = Value.update string field.value
+            , changed = True
+        }
 
 
 input : (String -> Field -> a) -> String -> Field -> Html a
@@ -82,3 +87,16 @@ formInput tagger attributes t name field mstring =
         [ label [ for name ] [ text <| labelText ]
         , input_
         ]
+
+
+validate : Field -> Field
+validate field =
+    if
+        field.required
+            && Value.isNothing field.value
+            && (not <| Value.isPrimaryKey field.value)
+    then
+        { field | error = Just "This field is required" }
+
+    else
+        { field | error = Nothing }

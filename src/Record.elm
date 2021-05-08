@@ -1,4 +1,14 @@
-module Record exposing (Record, decoder, encode, id, primaryKey, primaryKeyName)
+module Record exposing
+    ( Record
+    , changed
+    , decoder
+    , encode
+    , errors
+    , id
+    , isValid
+    , primaryKey
+    , primaryKeyName
+    )
 
 import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
@@ -15,6 +25,7 @@ import Json.Decode as Decode
         , string
         )
 import Json.Encode as Encode
+import Maybe.Extra exposing (isNothing)
 import PrimaryKey exposing (PrimaryKey)
 import Schema.Definition exposing (Column(..), Definition)
 import Time.Extra as Time
@@ -23,6 +34,23 @@ import Value exposing (Value(..))
 
 type alias Record =
     Dict String Field
+
+
+isValid : Record -> Bool
+isValid record =
+    errors record
+        |> Dict.values
+        |> List.any (not << isNothing)
+
+
+errors : Record -> Dict String (Maybe String)
+errors record =
+    Dict.map (\_ f -> Field.validate f |> .error) record
+
+
+changed : Record -> Bool
+changed record =
+    Dict.values record |> List.any .changed
 
 
 encode : Record -> Encode.Value
@@ -76,7 +104,11 @@ decoderFold identifiers definition name _ prevDec =
 
         map cons required dict dec =
             Decode.field name dec
-                |> Decode.map (insert dict << Field Nothing required << cons)
+                |> Decode.map
+                    (insert dict
+                        << Field Nothing required False
+                        << cons
+                    )
 
         foldFun dict =
             case Dict.get name definition of
@@ -102,7 +134,7 @@ decoderFold identifiers definition name _ prevDec =
                     let
                         mapFun d pk =
                             insert dict <|
-                                Field Nothing required <|
+                                Field Nothing required False <|
                                     PForeignKey ( table, col ) d pk
 
                         refDec i =
