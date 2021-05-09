@@ -8,6 +8,7 @@ module Record exposing
     , isValid
     , primaryKey
     , primaryKeyName
+    , setError
     )
 
 import Basics.Extra exposing (flip)
@@ -26,7 +27,9 @@ import Json.Decode as Decode
         )
 import Json.Encode as Encode
 import Maybe.Extra exposing (isNothing)
+import Postgrest.Client as PG
 import PrimaryKey exposing (PrimaryKey)
+import Regex exposing (Regex)
 import Schema.Definition exposing (Column(..), Definition)
 import Time.Extra as Time
 import Value exposing (Value(..))
@@ -90,6 +93,27 @@ primaryKey record =
         |> List.head
 
 
+setError : PG.PostgrestErrorJSON -> Record -> Record
+setError { code, message } record =
+    case code of
+        Just "23502" ->
+            let
+                mapFun columnName key field =
+                    if key == columnName then
+                        { field | error = Just "This field is required" }
+
+                    else
+                        field
+            in
+            message
+                |> Maybe.andThen extractColumnName
+                |> Maybe.map (mapFun >> flip Dict.map record)
+                |> Maybe.withDefault record
+
+        _ ->
+            record
+
+
 decoderFold :
     List String
     -> Definition
@@ -151,3 +175,17 @@ decoderFold identifiers definition name _ prevDec =
                     map BadValue False dict Decode.value
     in
     Decode.andThen foldFun prevDec
+
+
+extractColumnName : String -> Maybe String
+extractColumnName string =
+    Regex.find columnRegex string
+        |> List.head
+        |> Maybe.andThen (.submatches >> List.head)
+        |> Maybe.withDefault Nothing
+
+
+columnRegex : Regex
+columnRegex =
+    Regex.fromString "column \"(\\w+)\""
+        |> Maybe.withDefault Regex.never

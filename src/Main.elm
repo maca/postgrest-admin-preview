@@ -14,7 +14,6 @@ import Html.Attributes
         , class
         , disabled
         , href
-        , id
         , novalidate
         , target
         )
@@ -206,28 +205,12 @@ update msg model =
                     ( model, Cmd.none )
 
         RecordSaved result ->
-            case ( result, model.route ) of
-                ( Ok record, Edit (EditReady params _) ) ->
-                    ( confirmation "Update succeed"
-                        { model | route = Edit <| EditReady params record }
-                    , Cmd.none
-                    )
+            case result of
+                Ok record ->
+                    recordSaved record model
 
-                ( Ok record, New (NewReady { resourcesName } _) ) ->
-                    let
-                        url =
-                            Url.absolute
-                                [ resourcesName
-                                , Record.id record |> Maybe.withDefault ""
-                                ]
-                                []
-                    in
-                    ( confirmation "Creation succeed" model
-                    , Nav.pushUrl model.key <| url
-                    )
-
-                ( Err _, _ ) ->
-                    ( model, Cmd.none )
+                Err (PGError (PG.BadStatus _ _ err)) ->
+                    ( setSaveErrors err model, Cmd.none )
 
                 _ ->
                     ( model, Cmd.none )
@@ -365,6 +348,45 @@ error message model =
 confirmation : String -> Model -> Model
 confirmation message model =
     { model | message = Just <| Confirmation message }
+
+
+recordSaved : Record -> Model -> ( Model, Cmd Msg )
+recordSaved record model =
+    case model.route of
+        Edit (EditReady params _) ->
+            ( { model | route = Edit <| EditReady params record }
+                |> confirmation "Update succeed"
+            , Cmd.none
+            )
+
+        New (NewReady { resourcesName } _) ->
+            let
+                id =
+                    Record.id record |> Maybe.withDefault ""
+            in
+            ( confirmation "Creation succeed" model
+            , Nav.pushUrl model.key <| Url.absolute [ resourcesName, id ] []
+            )
+
+        _ ->
+            ( model, Cmd.none )
+
+
+setSaveErrors : PG.PostgrestErrorJSON -> Model -> Model
+setSaveErrors err model =
+    case model.route of
+        Edit (EditReady params record) ->
+            { model
+                | route = Edit <| EditReady params <| Record.setError err record
+            }
+
+        New (NewReady params record) ->
+            { model
+                | route = New <| NewReady params <| Record.setError err record
+            }
+
+        _ ->
+            model
 
 
 

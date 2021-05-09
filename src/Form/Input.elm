@@ -2,9 +2,20 @@ module Form.Input exposing (Input, input)
 
 import Field exposing (Field)
 import Html exposing (..)
-import Html.Attributes exposing (attribute, checked, for, id, type_, value)
+import Html.Attributes
+    exposing
+        ( attribute
+        , checked
+        , class
+        , classList
+        , for
+        , id
+        , type_
+        , value
+        )
 import Html.Events exposing (onInput)
 import Iso8601
+import Maybe.Extra as Maybe
 import String.Extra as String
 import Value exposing (Value(..))
 
@@ -70,8 +81,17 @@ inputHelp { onChange, attributes, name } t field mstring =
 
             else
                 String.humanize name
+
+        error =
+            field.error
+                |> Maybe.map (text >> List.singleton >> p [ class "error" ])
+                |> Maybe.withDefault (text "")
     in
-    div []
-        [ label [ for name ] [ text <| labelText ]
+    div
+        [ class "field"
+        , classList [ ( "with-error", Maybe.isJust field.error ) ]
+        ]
+        [ label [ for name ] [ text labelText ]
         , input_
+        , error
         ]
