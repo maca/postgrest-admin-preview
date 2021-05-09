@@ -4,8 +4,8 @@ module Record exposing
     , decoder
     , encode
     , errors
+    , hasErrors
     , id
-    , isValid
     , primaryKey
     , primaryKeyName
     , setError
@@ -39,8 +39,8 @@ type alias Record =
     Dict String Field
 
 
-isValid : Record -> Bool
-isValid record =
+hasErrors : Record -> Bool
+hasErrors record =
     errors record
         |> Dict.values
         |> List.any (not << isNothing)

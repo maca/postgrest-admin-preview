@@ -517,6 +517,9 @@ recordForm record =
             Dict.toList record
                 |> List.sortWith sortFields
                 |> List.map recordInput
+
+        withErrors =
+            Record.hasErrors record
     in
     form
         [ class "resource-form"
@@ -527,7 +530,7 @@ recordForm record =
         [ fieldset [] fields
         , fieldset []
             [ button
-                [ disabled (not (Record.changed record)) ]
+                [ disabled (not (Record.changed record) || withErrors) ]
                 [ text "Save" ]
             ]
         ]
