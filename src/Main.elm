@@ -70,8 +70,14 @@ type Edit
     | EditReady EditionParams Record
 
 
+type Listing
+    = ListingRequested String
+    | ListingLoading String Definition
+    | ListingReady String Definition (List Record)
+
+
 type Route
-    = Listing (Maybe (List Record)) String
+    = Listing Listing
     | New New
     | Edit Edit
     | Root
@@ -170,10 +176,13 @@ update msg model =
             case result of
                 Ok records ->
                     case model.route of
-                        Listing _ name ->
-                            ( { model | route = Listing (Just <| records) name }
-                            , Cmd.none
-                            )
+                        Listing (ListingLoading name definition) ->
+                            let
+                                route =
+                                    Listing <|
+                                        ListingReady name definition records
+                            in
+                            ( { model | route = route }, Cmd.none )
 
                         _ ->
                             ( model, Cmd.none )
@@ -290,10 +299,18 @@ update msg model =
 urlChanged : Model -> ( Model, Cmd Msg )
 urlChanged model =
     case model.route of
-        Listing Nothing resourcesName ->
-            ( { model | message = Nothing }
-            , fetchRecords resourcesName model
-            )
+        Listing (ListingRequested resourcesName) ->
+            case Dict.get resourcesName model.schema of
+                Just definition ->
+                    ( { model
+                        | message = Nothing
+                        , route = Listing <| ListingLoading resourcesName definition
+                      }
+                    , fetchRecords resourcesName model
+                    )
+
+                Nothing ->
+                    ( model, fail <| BadSchema resourcesName )
 
         Edit (EditRequested resourcesName id) ->
             case Dict.get resourcesName model.schema of
@@ -400,17 +417,23 @@ displayMainContent model =
         Root ->
             text ""
 
-        Listing maybeRecords name ->
-            displayListing name maybeRecords model
+        Listing (ListingReady resourcesName definition records) ->
+            displayListing definition resourcesName records
 
-        Edit (EditReady params record) ->
-            displayForm params record
+        Listing (ListingRequested _) ->
+            text ""
+
+        Listing (ListingLoading _ _) ->
+            text ""
 
         New (NewReady params record) ->
             displayForm params record
 
         New (NewRequested _) ->
             text ""
+
+        Edit (EditReady params record) ->
+            displayForm params record
 
         Edit (EditRequested _ _) ->
             text ""
@@ -422,31 +445,26 @@ displayMainContent model =
             notFound
 
 
-displayListing : String -> Maybe (List Record) -> Model -> Html Msg
-displayListing resourcesName mrecords { schema } =
-    case ( Dict.get resourcesName schema, mrecords ) of
-        ( Just definition, Just records ) ->
-            let
-                fieldNames =
-                    Dict.toList definition
-                        |> List.sortWith sortColumns
-                        |> List.map Tuple.first
+displayListing : Definition -> String -> List Record -> Html Msg
+displayListing definition resourcesName records =
+    let
+        fieldNames =
+            Dict.toList definition
+                |> List.sortWith sortColumns
+                |> List.map Tuple.first
 
-                toHeader =
-                    String.humanize >> text >> List.singleton >> th []
-            in
-            section
-                []
-                [ displayListHeader resourcesName
-                , table []
-                    [ thead [] [ tr [] <| List.map toHeader fieldNames ]
-                    , tbody [] <|
-                        List.map (displayRow resourcesName fieldNames) records
-                    ]
-                ]
-
-        _ ->
-            loading
+        toHeader =
+            String.humanize >> text >> List.singleton >> th []
+    in
+    section
+        []
+        [ displayListHeader resourcesName
+        , table []
+            [ thead [] [ tr [] <| List.map toHeader fieldNames ]
+            , tbody [] <|
+                List.map (displayRow resourcesName fieldNames) records
+            ]
+        ]
 
 
 displayListHeader : String -> Html Msg
@@ -636,11 +654,6 @@ notFound =
     text "Not found"
 
 
-loading : Html Msg
-loading =
-    text ""
-
-
 recordIdentifiers : List String
 recordIdentifiers =
     [ "title", "name", "full name", "email", "first name", "last name" ]
@@ -741,7 +754,7 @@ routeParser =
     Parser.oneOf
         [ Parser.map Root Parser.top
         , Parser.map routeParserHelp (Parser.string </> Parser.string)
-        , Parser.map (Listing Nothing) Parser.string
+        , Parser.map (Listing << ListingRequested) Parser.string
         ]
 
 
