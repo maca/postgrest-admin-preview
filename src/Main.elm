@@ -10,8 +10,7 @@ import Form.Input as Input exposing (input)
 import Html exposing (..)
 import Html.Attributes
     exposing
-        ( attribute
-        , autocomplete
+        ( autocomplete
         , class
         , disabled
         , href
@@ -26,10 +25,10 @@ import Json.Decode as Decode
 import Postgrest.Client as PG
 import PrimaryKey exposing (PrimaryKey)
 import Record exposing (Record)
+import Record.Client as Client
 import Result
 import Schema exposing (Schema)
-import Schema.Definition as Definition exposing (Column(..), Definition)
-import Set
+import Schema.Definition as Definition exposing (Column(..))
 import String.Extra as String
 import Task
 import Time.Extra as Time
@@ -234,11 +233,11 @@ update msg model =
 
         FormSubmitted ->
             case model.route of
-                Edit (Just record) params ->
-                    ( model, saveRecord params model record )
+                Edit (Just record) { resourcesName, id } ->
+                    ( model, saveRecord resourcesName id model record )
 
-                New (Just record) params ->
-                    ( model, createRecord params model record )
+                New (Just record) { resourcesName } ->
+                    ( model, createRecord resourcesName model record )
 
                 _ ->
                     ( model, Cmd.none )
@@ -269,8 +268,8 @@ urlChanged model =
             , fetchRecords resourcesName model
             )
 
-        Edit _ params ->
-            ( model, fetchRecord params model )
+        Edit _ { resourcesName, id } ->
+            ( model, fetchRecord resourcesName id model )
 
         New Nothing { resourcesName } ->
             case Dict.get resourcesName model.schema of
@@ -685,57 +684,29 @@ fetchRecords : String -> Model -> Cmd Msg
 fetchRecords resourcesName ({ schema, jwt } as model) =
     case Dict.get resourcesName schema of
         Just definition ->
-            let
-                params =
-                    [ PG.select <| selects schema definition ]
-            in
-            recordEndpoint resourcesName model definition
-                |> PG.getMany
-                |> PG.setParams params
+            Client.fetchMany model definition resourcesName
                 |> PG.toCmd jwt (ListingFetched << Result.mapError PGError)
 
         Nothing ->
             fail <| BadSchema resourcesName
 
 
-fetchRecord : EditionParams -> Model -> Cmd Msg
-fetchRecord { resourcesName, id } ({ schema, jwt } as model) =
+fetchRecord : String -> String -> Model -> Cmd Msg
+fetchRecord resourcesName id ({ schema, jwt } as model) =
     case Dict.get resourcesName schema of
         Just definition ->
-            let
-                pkName =
-                    Definition.primaryKeyName definition
-                        |> Maybe.withDefault ""
-
-                selectParams =
-                    PG.select <| selects schema definition
-
-                params =
-                    [ selectParams
-                    , PG.param pkName <| PG.eq <| PG.string id
-                    ]
-            in
-            recordEndpoint resourcesName model definition
-                |> PG.getOne
-                |> PG.setParams params
+            Client.fetchOne model definition resourcesName id
                 |> PG.toCmd jwt (RecordFetched << Result.mapError PGError)
 
         _ ->
             fail <| BadSchema resourcesName
 
 
-createRecord : CreationParams -> Model -> Record -> Cmd Msg
-createRecord { resourcesName } ({ schema, jwt } as model) record =
+createRecord : String -> Model -> Record -> Cmd Msg
+createRecord resourcesName ({ schema, jwt } as model) record =
     case Dict.get resourcesName schema of
         Just definition ->
-            let
-                endpoint =
-                    recordEndpoint resourcesName model definition
-            in
-            Record.encode record
-                |> PG.postOne endpoint
-                |> PG.setParams
-                    [ PG.select <| selects schema definition ]
+            Client.create model definition resourcesName record
                 |> PG.toCmd jwt
                     (RecordSaved << Result.mapError PGError)
 
@@ -743,55 +714,16 @@ createRecord { resourcesName } ({ schema, jwt } as model) record =
             fail <| BadSchema resourcesName
 
 
-saveRecord : EditionParams -> Model -> Record -> Cmd Msg
-saveRecord { resourcesName, id } ({ schema, jwt } as model) record =
-    case ( Dict.get resourcesName schema, Record.primaryKeyName record ) of
-        ( Just definition, Just pkName ) ->
-            let
-                endpoint =
-                    recordEndpoint resourcesName model definition
-
-                pk =
-                    PG.primaryKey ( pkName, PG.string )
-            in
-            Record.encode record
-                |> PG.patchByPrimaryKey endpoint pk id
-                |> PG.setParams
-                    [ PG.select <| selects schema definition ]
+saveRecord : String -> String -> Model -> Record -> Cmd Msg
+saveRecord resourcesName id ({ schema, jwt } as model) record =
+    case Dict.get resourcesName schema of
+        Just definition ->
+            Client.update model definition resourcesName id record
                 |> PG.toCmd jwt
                     (RecordSaved << Result.mapError PGError)
 
         _ ->
             fail <| BadSchema resourcesName
-
-
-selects : Schema -> Definition -> List PG.Selectable
-selects schema definition =
-    let
-        mapFun name =
-            Dict.keys
-                >> Set.fromList
-                >> Set.intersect (recordIdentifiers |> Set.fromList)
-                >> Set.toList
-                >> PG.attributes
-                >> PG.resource name
-
-        resources ( name, _ ) =
-            Dict.get name schema |> Maybe.map (mapFun name)
-
-        filteMapFun (Column _ val) =
-            Value.foreignKeyReference val
-                |> Maybe.andThen resources
-    in
-    Dict.values definition
-        |> List.filterMap filteMapFun
-        |> (++) (Dict.keys definition |> List.map PG.attribute)
-
-
-recordEndpoint : String -> Model -> Definition -> PG.Endpoint Record
-recordEndpoint resourcesName { host } definition =
-    Record.decoder recordIdentifiers definition
-        |> PG.endpoint (Url.crossOrigin host [ resourcesName ] [])
 
 
 
