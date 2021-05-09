@@ -1,5 +1,6 @@
-module Form.Input exposing (Input, input)
+module Form.Input exposing (Input, Msg, input, updateRecord)
 
+import Dict
 import Field exposing (Field)
 import Html exposing (..)
 import Html.Attributes
@@ -16,18 +17,27 @@ import Html.Attributes
 import Html.Events exposing (onInput)
 import Iso8601
 import Maybe.Extra as Maybe
+import Record exposing (Record)
 import String.Extra as String
 import Value exposing (Value(..))
 
 
-type alias Input a =
-    { onChange : String -> Field -> a
-    , name : String
-    , attributes : List (Html.Attribute a)
+type Msg
+    = Changed String Field
+
+
+type alias Input =
+    { name : String
+    , attributes : List (Html.Attribute Msg)
     }
 
 
-input : Input a -> Field -> Html a
+updateRecord : Msg -> Record -> Record
+updateRecord (Changed name field) record =
+    Dict.insert name field record
+
+
+input : Input -> Field -> Html Msg
 input params field =
     case field.value of
         PString maybe ->
@@ -61,13 +71,13 @@ input params field =
             text ""
 
 
-inputHelp : Input a -> String -> Field -> Maybe String -> Html a
-inputHelp { onChange, attributes, name } t field mstring =
+inputHelp : Input -> String -> Field -> Maybe String -> Html Msg
+inputHelp { attributes, name } t field mstring =
     let
         input_ =
             Html.input
                 (attributes
-                    ++ [ onInput <| (onChange name << Field.update field)
+                    ++ [ onInput <| (Changed name << Field.update field)
                        , id name
                        , type_ t
                        , value <| Maybe.withDefault "" mstring
@@ -91,7 +101,4 @@ inputHelp { onChange, attributes, name } t field mstring =
         [ class "field"
         , classList [ ( "with-error", Maybe.isJust field.error ) ]
         ]
-        [ label [ for name ] [ text labelText ]
-        , input_
-        , error
-        ]
+        [ label [ for name ] [ text labelText ], input_, error ]

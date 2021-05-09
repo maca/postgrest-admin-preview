@@ -43,7 +43,7 @@ type Msg
     | RecordFetched (Result Error Record)
     | RecordSaved (Result Error Record)
     | RecordLinkClicked String String
-    | InputChanged String Field
+    | InputChanged Input.Msg
     | FormSubmitted
     | MessageDismissed
     | LinkClicked Browser.UrlRequest
@@ -220,10 +220,10 @@ update msg model =
             , Nav.pushUrl model.key <| Url.absolute [ resourcesName, id ] []
             )
 
-        InputChanged name field ->
+        InputChanged inputMsg ->
             let
                 updateRecord =
-                    Dict.insert name field
+                    Input.updateRecord inputMsg
             in
             case model.route of
                 Edit (EditReady params record) ->
@@ -539,11 +539,8 @@ recordForm record =
 recordInput : ( String, Field ) -> Html Msg
 recordInput ( name, field ) =
     field
-        |> Input.input
-            { onChange = InputChanged
-            , name = name
-            , attributes = []
-            }
+        |> Input.input { name = name, attributes = [] }
+        |> Html.map InputChanged
 
 
 displayMessage : Model -> Html Msg
