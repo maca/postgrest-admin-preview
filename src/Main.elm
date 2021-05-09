@@ -195,8 +195,9 @@ update msg model =
                 Ok record ->
                     case model.route of
                         Edit (EditLoading params) ->
-                            { model | route = Edit (EditReady params record) }
-                                |> recordFetched record
+                            ( { model | route = Edit <| EditReady params record }
+                            , Cmd.none
+                            )
 
                         _ ->
                             ( model, Cmd.none )
@@ -206,9 +207,11 @@ update msg model =
 
         RecordSaved result ->
             case ( result, model.route ) of
-                ( Ok record, Edit (EditReady _ _) ) ->
-                    confirmation "Update succeed" model
-                        |> recordFetched record
+                ( Ok record, Edit (EditReady params _) ) ->
+                    ( confirmation "Update succeed"
+                        { model | route = Edit <| EditReady params record }
+                    , Cmd.none
+                    )
 
                 ( Ok record, New (NewReady { resourcesName } _) ) ->
                     let
@@ -349,16 +352,6 @@ urlChanged model =
 
                 Nothing ->
                     ( model, fail <| BadSchema resourcesName )
-
-        _ ->
-            ( model, Cmd.none )
-
-
-recordFetched : Record -> Model -> ( Model, Cmd Msg )
-recordFetched record model =
-    case model.route of
-        Edit (EditReady params _) ->
-            ( { model | route = Edit <| EditReady params record }, Cmd.none )
 
         _ ->
             ( model, Cmd.none )
