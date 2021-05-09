@@ -1,11 +1,12 @@
 module Main exposing (Error, main)
 
-import Basics.Extra exposing (flip, uncurry)
+import Basics.Extra exposing (flip)
 import Browser
 import Browser.Navigation as Nav
 import Dict
 import Dict.Extra as Dict
 import Field exposing (Field)
+import Form.Input as Input exposing (input)
 import Html exposing (..)
 import Html.Attributes
     exposing
@@ -22,7 +23,6 @@ import Html.Events as Events exposing (onClick, onSubmit)
 import Http
 import Inflect as String
 import Json.Decode as Decode
-import Maybe.Extra exposing (isNothing)
 import Postgrest.Client as PG
 import PrimaryKey exposing (PrimaryKey)
 import Record exposing (Record)
@@ -448,7 +448,7 @@ recordForm record =
         fields =
             Dict.toList record
                 |> List.sortWith sortFields
-                |> List.map (uncurry <| Field.input InputChanged)
+                |> List.map recordInput
     in
     form
         [ class "resource-form"
@@ -463,6 +463,16 @@ recordForm record =
                 [ text "Save" ]
             ]
         ]
+
+
+recordInput : ( String, Field ) -> Html Msg
+recordInput ( name, field ) =
+    field
+        |> Input.input
+            { onChange = InputChanged
+            , name = name
+            , attributes = []
+            }
 
 
 displayMessage : Model -> Html Msg
