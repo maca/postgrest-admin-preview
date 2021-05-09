@@ -26,9 +26,9 @@ import Postgrest.Client as PG
 import PrimaryKey exposing (PrimaryKey)
 import Record exposing (Record)
 import Record.Client as Client
-import Result
+import Result exposing (mapError)
 import Schema exposing (Schema)
-import Schema.Definition as Definition exposing (Column(..))
+import Schema.Definition as Definition exposing (Column(..), Definition)
 import String.Extra as String
 import Task
 import Time.Extra as Time
@@ -43,7 +43,6 @@ type Msg
     | ListingFetched (Result Error (List Record))
     | RecordFetched (Result Error Record)
     | RecordSaved (Result Error Record)
-    | RecordNew Record
     | RecordLinkClicked String String
     | InputChanged String Field
     | FormSubmitted
@@ -60,16 +59,30 @@ type Error
     | BadSchema String
 
 
+type New
+    = NewRequested String
+    | NewReady CreationParams Record
+
+
+type Edit
+    = EditRequested String String
+    | EditLoading EditionParams
+    | EditReady EditionParams Record
+
+
 type Route
     = Listing (Maybe (List Record)) String
-    | Edit (Maybe Record) EditionParams
-    | New (Maybe Record) CreationParams
+    | New New
+    | Edit Edit
     | Root
     | NotFound
 
 
 type alias RecordParams a =
-    { a | resourcesName : String }
+    { a
+        | resourcesName : String
+        , definition : Definition
+    }
 
 
 type alias EditionParams =
@@ -171,18 +184,24 @@ update msg model =
         RecordFetched result ->
             case result of
                 Ok record ->
-                    recordFetched record model
+                    case model.route of
+                        Edit (EditLoading params) ->
+                            { model | route = Edit (EditReady params record) }
+                                |> recordFetched record
+
+                        _ ->
+                            ( model, Cmd.none )
 
                 Err _ ->
                     ( model, Cmd.none )
 
         RecordSaved result ->
             case ( result, model.route ) of
-                ( Ok record, Edit _ _ ) ->
+                ( Ok record, Edit (EditReady _ _) ) ->
                     confirmation "Update succeed" model
                         |> recordFetched record
 
-                ( Ok record, New _ { resourcesName } ) ->
+                ( Ok record, New (NewReady { resourcesName } _) ) ->
                     let
                         url =
                             Url.absolute
@@ -201,30 +220,30 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        RecordNew record ->
-            case model.route of
-                New _ resourcesName ->
-                    ( { model | route = New (Just record) resourcesName }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
         RecordLinkClicked resourcesName id ->
             ( model
             , Nav.pushUrl model.key <| Url.absolute [ resourcesName, id ] []
             )
 
         InputChanged name field ->
+            let
+                updateRecord =
+                    Dict.insert name field
+            in
             case model.route of
-                Edit (Just record) params ->
-                    ( updateRecord Edit params name field record model
+                Edit (EditReady params record) ->
+                    ( { model
+                        | route = Edit (EditReady params (updateRecord record))
+                        , message = Nothing
+                      }
                     , Cmd.none
                     )
 
-                New (Just record) params ->
-                    ( updateRecord New params name field record model
+                New (NewReady params record) ->
+                    ( { model
+                        | route = New (NewReady params (updateRecord record))
+                        , message = Nothing
+                      }
                     , Cmd.none
                     )
 
@@ -233,11 +252,19 @@ update msg model =
 
         FormSubmitted ->
             case model.route of
-                Edit (Just record) { resourcesName, id } ->
-                    ( model, saveRecord resourcesName id model record )
+                Edit (EditReady { definition, resourcesName, id } record) ->
+                    ( model
+                    , Client.update model definition resourcesName id record
+                        |> PG.toCmd model.jwt
+                            (RecordSaved << mapError PGError)
+                    )
 
-                New (Just record) { resourcesName } ->
-                    ( model, createRecord resourcesName model record )
+                New (NewReady { resourcesName, definition } record) ->
+                    ( model
+                    , Client.create model definition resourcesName record
+                        |> PG.toCmd model.jwt
+                            (RecordSaved << mapError PGError)
+                    )
 
                 _ ->
                     ( model, Cmd.none )
@@ -268,15 +295,39 @@ urlChanged model =
             , fetchRecords resourcesName model
             )
 
-        Edit _ { resourcesName, id } ->
-            ( model, fetchRecord resourcesName id model )
-
-        New Nothing { resourcesName } ->
+        Edit (EditRequested resourcesName id) ->
             case Dict.get resourcesName model.schema of
                 Just definition ->
-                    ( model
-                    , Task.succeed (Definition.toRecord definition)
-                        |> Task.perform RecordNew
+                    let
+                        params =
+                            { definition = definition
+                            , resourcesName = resourcesName
+                            , id = id
+                            }
+                    in
+                    ( { model | route = Edit <| EditLoading params }
+                    , Client.fetchOne model definition resourcesName id
+                        |> PG.toCmd model.jwt
+                            (RecordFetched << mapError PGError)
+                    )
+
+                Nothing ->
+                    ( model, fail <| BadSchema resourcesName )
+
+        New (NewRequested resourcesName) ->
+            case Dict.get resourcesName model.schema of
+                Just definition ->
+                    let
+                        record =
+                            Definition.toRecord definition
+
+                        params =
+                            { resourcesName = resourcesName
+                            , definition = definition
+                            }
+                    in
+                    ( { model | route = New <| NewReady params record }
+                    , Cmd.none
                     )
 
                 Nothing ->
@@ -289,8 +340,8 @@ urlChanged model =
 recordFetched : Record -> Model -> ( Model, Cmd Msg )
 recordFetched record model =
     case model.route of
-        Edit _ params ->
-            ( { model | route = Edit (Just <| record) params }, Cmd.none )
+        Edit (EditReady params _) ->
+            ( { model | route = Edit <| EditReady params record }, Cmd.none )
 
         _ ->
             ( model, Cmd.none )
@@ -304,25 +355,6 @@ error message model =
 confirmation : String -> Model -> Model
 confirmation message model =
     { model | message = Just <| Confirmation message }
-
-
-updateRecord :
-    (Maybe Record -> RecordParams a -> Route)
-    -> RecordParams a
-    -> String
-    -> Field
-    -> Record
-    -> Model
-    -> Model
-updateRecord route params name field record model =
-    let
-        updated =
-            Dict.insert name field record
-    in
-    { model
-        | route = route (Just updated) params
-        , message = Nothing
-    }
 
 
 
@@ -371,11 +403,20 @@ displayMainContent model =
         Listing maybeRecords name ->
             displayListing name maybeRecords model
 
-        Edit mrecord params ->
-            displayForm params mrecord
+        Edit (EditReady params record) ->
+            displayForm params record
 
-        New mrecord params ->
-            displayForm params mrecord
+        New (NewReady params record) ->
+            displayForm params record
+
+        New (NewRequested _) ->
+            text ""
+
+        Edit (EditRequested _ _) ->
+            text ""
+
+        Edit (EditLoading _) ->
+            text ""
 
         NotFound ->
             notFound
@@ -422,23 +463,18 @@ displayListHeader resourcesName =
         ]
 
 
-displayForm : RecordParams a -> Maybe Record -> Html Msg
-displayForm { resourcesName } mrecord =
-    case mrecord of
-        Just record ->
-            section
-                []
-                [ h1 []
-                    [ recordLabel record
-                        |> Maybe.withDefault "New"
-                        |> (++) (String.humanize resourcesName ++ " - ")
-                        |> text
-                    ]
-                , recordForm record
-                ]
-
-        Nothing ->
-            notFound
+displayForm : RecordParams a -> Record -> Html Msg
+displayForm { resourcesName } record =
+    section
+        []
+        [ h1 []
+            [ recordLabel record
+                |> Maybe.withDefault "New"
+                |> (++) (String.humanize resourcesName ++ " - ")
+                |> text
+            ]
+        , recordForm record
+        ]
 
 
 recordForm : Record -> Html Msg
@@ -671,9 +707,9 @@ getSchema host =
 
 decodeSchema : Result Http.Error String -> Result Error Schema
 decodeSchema result =
-    Result.mapError HttpError result
+    mapError HttpError result
         |> Result.andThen
-            (Decode.decodeString Schema.decoder >> Result.mapError DecodeError)
+            (Decode.decodeString Schema.decoder >> mapError DecodeError)
 
 
 
@@ -685,44 +721,9 @@ fetchRecords resourcesName ({ schema, jwt } as model) =
     case Dict.get resourcesName schema of
         Just definition ->
             Client.fetchMany model definition resourcesName
-                |> PG.toCmd jwt (ListingFetched << Result.mapError PGError)
+                |> PG.toCmd jwt (ListingFetched << mapError PGError)
 
         Nothing ->
-            fail <| BadSchema resourcesName
-
-
-fetchRecord : String -> String -> Model -> Cmd Msg
-fetchRecord resourcesName id ({ schema, jwt } as model) =
-    case Dict.get resourcesName schema of
-        Just definition ->
-            Client.fetchOne model definition resourcesName id
-                |> PG.toCmd jwt (RecordFetched << Result.mapError PGError)
-
-        _ ->
-            fail <| BadSchema resourcesName
-
-
-createRecord : String -> Model -> Record -> Cmd Msg
-createRecord resourcesName ({ schema, jwt } as model) record =
-    case Dict.get resourcesName schema of
-        Just definition ->
-            Client.create model definition resourcesName record
-                |> PG.toCmd jwt
-                    (RecordSaved << Result.mapError PGError)
-
-        _ ->
-            fail <| BadSchema resourcesName
-
-
-saveRecord : String -> String -> Model -> Record -> Cmd Msg
-saveRecord resourcesName id ({ schema, jwt } as model) record =
-    case Dict.get resourcesName schema of
-        Just definition ->
-            Client.update model definition resourcesName id record
-                |> PG.toCmd jwt
-                    (RecordSaved << Result.mapError PGError)
-
-        _ ->
             fail <| BadSchema resourcesName
 
 
@@ -747,10 +748,7 @@ routeParser =
 routeParserHelp : String -> String -> Route
 routeParserHelp resourcesName id =
     if id == "new" then
-        New Nothing { resourcesName = resourcesName }
+        New <| NewRequested resourcesName
 
     else
-        Edit Nothing
-            { resourcesName = resourcesName
-            , id = id
-            }
+        Edit <| EditRequested resourcesName id
