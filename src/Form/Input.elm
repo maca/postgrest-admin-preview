@@ -17,7 +17,7 @@ import Html.Attributes
 import Html.Events exposing (onInput)
 import Iso8601
 import Maybe.Extra as Maybe
-import Postgrest.Record exposing (Record)
+import Postgrest.Resource exposing (Resource)
 import Postgrest.Value exposing (Value(..))
 import String.Extra as String
 
@@ -32,7 +32,7 @@ type alias Input =
     }
 
 
-updateRecord : Msg -> Record -> Record
+updateRecord : Msg -> Resource -> Resource
 updateRecord (Changed name field) record =
     Dict.insert name field record
 

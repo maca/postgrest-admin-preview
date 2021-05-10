@@ -2,7 +2,7 @@ module Postgrest.Schema.Definition exposing
     ( Column(..)
     , Definition
     , primaryKeyName
-    , toRecord
+    , toResource
     )
 
 import Dict exposing (Dict)
@@ -19,8 +19,8 @@ type alias Definition =
     Dict String Column
 
 
-toRecord : Definition -> Dict String Field
-toRecord definition =
+toResource : Definition -> Dict String Field
+toResource definition =
     Dict.map (\_ col -> columnToField col) definition
 
 

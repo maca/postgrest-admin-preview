@@ -23,8 +23,8 @@ import Inflect as String
 import Json.Decode as Decode
 import Postgrest.Client as PG
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
-import Postgrest.Record as Record exposing (Record)
-import Postgrest.Record.Client as Client
+import Postgrest.Resource as Resource exposing (Resource)
+import Postgrest.Resource.Client as Client
 import Postgrest.Schema as Schema exposing (Schema)
 import Postgrest.Schema.Definition as Definition
     exposing
@@ -43,10 +43,10 @@ import Url.Parser as Parser exposing ((</>), Parser)
 
 type Msg
     = SchemaFetched (Result Error Schema)
-    | ListingFetched (Result Error (List Record))
-    | RecordFetched (Result Error Record)
-    | RecordSaved (Result Error Record)
-    | RecordLinkClicked String String
+    | ListingFetched (Result Error (List Resource))
+    | ResourceFetched (Result Error Resource)
+    | ResourceLinkClicked String String
+    | RecordSaved (Result Error Resource)
     | InputChanged Input.Msg
     | FormSubmitted
     | MessageDismissed
@@ -64,19 +64,19 @@ type Error
 
 type New
     = NewRequested String
-    | NewReady CreationParams Record
+    | NewReady CreationParams Resource
 
 
 type Edit
     = EditRequested String String
     | EditLoading EditionParams
-    | EditReady EditionParams Record
+    | EditReady EditionParams Resource
 
 
 type Listing
     = ListingRequested String
     | ListingLoading String Definition
-    | ListingReady String Definition (List Record)
+    | ListingReady String Definition (List Resource)
 
 
 type Route
@@ -87,7 +87,7 @@ type Route
     | NotFound
 
 
-type alias RecordParams a =
+type alias ResourceParams a =
     { a
         | resourcesName : String
         , definition : Definition
@@ -95,11 +95,11 @@ type alias RecordParams a =
 
 
 type alias EditionParams =
-    RecordParams { id : String }
+    ResourceParams { id : String }
 
 
 type alias CreationParams =
-    RecordParams {}
+    ResourceParams {}
 
 
 type Message
@@ -193,7 +193,7 @@ update msg model =
                 Err _ ->
                     ( model, Cmd.none )
 
-        RecordFetched result ->
+        ResourceFetched result ->
             case result of
                 Ok record ->
                     case model.route of
@@ -208,6 +208,11 @@ update msg model =
                 Err _ ->
                     ( model, Cmd.none )
 
+        ResourceLinkClicked resourcesName id ->
+            ( model
+            , Nav.pushUrl model.key <| Url.absolute [ resourcesName, id ] []
+            )
+
         RecordSaved result ->
             case result of
                 Ok record ->
@@ -218,11 +223,6 @@ update msg model =
 
                 _ ->
                     ( model, Cmd.none )
-
-        RecordLinkClicked resourcesName id ->
-            ( model
-            , Nav.pushUrl model.key <| Url.absolute [ resourcesName, id ] []
-            )
 
         InputChanged inputMsg ->
             let
@@ -296,7 +296,7 @@ urlChanged model =
                         | message = Nothing
                         , route = Listing <| ListingLoading resourcesName definition
                       }
-                    , fetchRecords resourcesName model
+                    , fetchResources resourcesName model
                     )
 
                 Nothing ->
@@ -315,7 +315,7 @@ urlChanged model =
                     ( { model | route = Edit <| EditLoading params }
                     , Client.fetchOne model definition resourcesName id
                         |> PG.toCmd model.jwt
-                            (RecordFetched << mapError PGError)
+                            (ResourceFetched << mapError PGError)
                     )
 
                 Nothing ->
@@ -326,7 +326,7 @@ urlChanged model =
                 Just definition ->
                     let
                         record =
-                            Definition.toRecord definition
+                            Definition.toResource definition
 
                         params =
                             { resourcesName = resourcesName
@@ -354,7 +354,7 @@ confirmation message model =
     { model | message = Just <| Confirmation message }
 
 
-recordSaved : Record -> Model -> ( Model, Cmd Msg )
+recordSaved : Resource -> Model -> ( Model, Cmd Msg )
 recordSaved record model =
     case model.route of
         Edit (EditReady params _) ->
@@ -366,7 +366,7 @@ recordSaved record model =
         New (NewReady { resourcesName } _) ->
             let
                 id =
-                    Record.id record |> Maybe.withDefault ""
+                    Resource.id record |> Maybe.withDefault ""
             in
             ( confirmation "Creation succeed" model
             , Nav.pushUrl model.key <| Url.absolute [ resourcesName, id ] []
@@ -381,12 +381,12 @@ setSaveErrors err model =
     case model.route of
         Edit (EditReady params record) ->
             { model
-                | route = Edit <| EditReady params <| Record.setError err record
+                | route = Edit <| EditReady params <| Resource.setError err record
             }
 
         New (NewReady params record) ->
             { model
-                | route = New <| NewReady params <| Record.setError err record
+                | route = New <| NewReady params <| Resource.setError err record
             }
 
         _ ->
@@ -464,7 +464,7 @@ displayMainContent model =
             notFound
 
 
-displayListing : Definition -> String -> List Record -> Html Msg
+displayListing : Definition -> String -> List Resource -> Html Msg
 displayListing definition resourcesName records =
     let
         fieldNames =
@@ -500,7 +500,7 @@ displayListHeader resourcesName =
         ]
 
 
-displayForm : RecordParams a -> Record -> Html Msg
+displayForm : ResourceParams a -> Resource -> Html Msg
 displayForm { resourcesName } record =
     section
         []
@@ -514,7 +514,7 @@ displayForm { resourcesName } record =
         ]
 
 
-recordForm : Record -> Html Msg
+recordForm : Resource -> Html Msg
 recordForm record =
     let
         fields =
@@ -523,7 +523,7 @@ recordForm record =
                 |> List.map recordInput
 
         withErrors =
-            Record.hasErrors record
+            Resource.hasErrors record
     in
     form
         [ class "resource-form"
@@ -534,7 +534,7 @@ recordForm record =
         [ fieldset [] fields
         , fieldset []
             [ button
-                [ disabled (not (Record.changed record) || withErrors) ]
+                [ disabled (not (Resource.changed record) || withErrors) ]
                 [ text "Save" ]
             ]
         ]
@@ -569,7 +569,7 @@ displayMessageHelp messageType message =
         ]
 
 
-recordLabel : Record -> Maybe String
+recordLabel : Resource -> Maybe String
 recordLabel record =
     let
         mlabel =
@@ -581,10 +581,10 @@ recordLabel record =
             mlabel
 
         Nothing ->
-            Record.primaryKey record |> Maybe.map PrimaryKey.toString
+            Resource.primaryKey record |> Maybe.map PrimaryKey.toString
 
 
-recordLabelHelp : Record -> String -> Maybe String
+recordLabelHelp : Resource -> String -> Maybe String
 recordLabelHelp record fieldName =
     case Dict.get fieldName record |> Maybe.map .value of
         Just (PString label) ->
@@ -594,27 +594,27 @@ recordLabelHelp record fieldName =
             Nothing
 
 
-displayRow : String -> List String -> Record -> Html Msg
+displayRow : String -> List String -> Resource -> Html Msg
 displayRow resourcesName names record =
     let
         toTd =
             displayValue resourcesName >> List.singleton >> td []
 
         id =
-            Record.id record |> Maybe.withDefault ""
+            Resource.id record |> Maybe.withDefault ""
     in
     List.filterMap (flip Dict.get record >> Maybe.map toTd) names
         |> tr
             [ class "listing-row"
-            , clickRecord resourcesName id
+            , clickResource resourcesName id
             ]
 
 
-clickRecord : String -> String -> Html.Attribute Msg
-clickRecord resourcesName id =
+clickResource : String -> String -> Html.Attribute Msg
+clickResource resourcesName id =
     let
         msg =
-            RecordLinkClicked resourcesName id
+            ResourceLinkClicked resourcesName id
     in
     Events.custom "click" <|
         Decode.map (EventConfig True True) (Decode.succeed msg)
@@ -663,7 +663,7 @@ recordLink resourcesName primaryKey mtext =
     a
         [ href <| Url.absolute [ resourcesName, id ] []
         , target "_self"
-        , clickRecord resourcesName id
+        , clickResource resourcesName id
         ]
         [ text <| Maybe.withDefault id mtext ]
 
@@ -748,8 +748,8 @@ decodeSchema result =
 -- Http interactions
 
 
-fetchRecords : String -> Model -> Cmd Msg
-fetchRecords resourcesName ({ schema, jwt } as model) =
+fetchResources : String -> Model -> Cmd Msg
+fetchResources resourcesName ({ schema, jwt } as model) =
     case Dict.get resourcesName schema of
         Just definition ->
             Client.fetchMany model definition resourcesName
