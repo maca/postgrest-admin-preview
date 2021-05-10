@@ -1,6 +1,6 @@
 module Field exposing (Field, update, validate)
 
-import Value exposing (Value(..))
+import Postgrest.Value as Value exposing (Value(..))
 
 
 type alias Field =

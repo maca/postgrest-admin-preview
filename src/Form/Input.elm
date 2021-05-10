@@ -17,9 +17,9 @@ import Html.Attributes
 import Html.Events exposing (onInput)
 import Iso8601
 import Maybe.Extra as Maybe
-import Record exposing (Record)
+import Postgrest.Record exposing (Record)
+import Postgrest.Value exposing (Value(..))
 import String.Extra as String
-import Value exposing (Value(..))
 
 
 type Msg

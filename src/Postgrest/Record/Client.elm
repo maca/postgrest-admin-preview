@@ -1,13 +1,17 @@
-module Record.Client exposing (create, fetchMany, fetchOne, update)
+module Postgrest.Record.Client exposing (create, fetchMany, fetchOne, update)
 
 import Dict
 import Postgrest.Client as PG exposing (Endpoint, Request, Selectable)
-import Record exposing (Record)
-import Schema exposing (Schema)
-import Schema.Definition as Definition exposing (Column(..), Definition)
+import Postgrest.Record as Record exposing (Record)
+import Postgrest.Schema exposing (Schema)
+import Postgrest.Schema.Definition as Definition
+    exposing
+        ( Column(..)
+        , Definition
+        )
+import Postgrest.Value as Value
 import Set
 import Url.Builder as Url
-import Value
 
 
 type alias Client a =

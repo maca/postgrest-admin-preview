@@ -1,4 +1,4 @@
-module Schema exposing (Schema, decoder)
+module Postgrest.Schema exposing (Schema, decoder)
 
 import Dict exposing (Dict)
 import Json.Decode as Decode
@@ -12,11 +12,11 @@ import Json.Decode as Decode
         , maybe
         , string
         )
-import PrimaryKey exposing (PrimaryKey(..))
+import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey(..))
+import Postgrest.Schema.Definition exposing (Column(..), Definition)
+import Postgrest.Value exposing (Value(..))
 import Regex exposing (Regex)
-import Schema.Definition exposing (Column(..), Definition)
 import Time.Extra as Time
-import Value exposing (Value(..))
 
 
 type alias Schema =

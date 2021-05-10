@@ -22,19 +22,23 @@ import Http
 import Inflect as String
 import Json.Decode as Decode
 import Postgrest.Client as PG
-import PrimaryKey exposing (PrimaryKey)
-import Record exposing (Record)
-import Record.Client as Client
+import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
+import Postgrest.Record as Record exposing (Record)
+import Postgrest.Record.Client as Client
+import Postgrest.Schema as Schema exposing (Schema)
+import Postgrest.Schema.Definition as Definition
+    exposing
+        ( Column(..)
+        , Definition
+        )
+import Postgrest.Value exposing (Value(..))
 import Result exposing (mapError)
-import Schema exposing (Schema)
-import Schema.Definition as Definition exposing (Column(..), Definition)
 import String.Extra as String
 import Task
 import Time.Extra as Time
 import Url exposing (Url)
 import Url.Builder as Url
 import Url.Parser as Parser exposing ((</>), Parser)
-import Value exposing (Value(..))
 
 
 type Msg

@@ -1,4 +1,4 @@
-module Schema.Definition exposing
+module Postgrest.Schema.Definition exposing
     ( Column(..)
     , Definition
     , primaryKeyName
@@ -8,7 +8,7 @@ module Schema.Definition exposing
 import Dict exposing (Dict)
 import Dict.Extra as Dict
 import Field exposing (Field)
-import Value exposing (Value)
+import Postgrest.Value as Value exposing (Value)
 
 
 type Column
