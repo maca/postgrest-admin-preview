@@ -1,7 +1,7 @@
-module Form.Input exposing (Input, Msg, input, updateRecord)
+module Form.Input exposing (Input(..), Msg, display, field, updateRecord, value)
 
-import Dict
-import Field exposing (Field)
+import Basics.Extra exposing (flip)
+import Dict exposing (Dict)
 import Html exposing (..)
 import Html.Attributes
     exposing
@@ -11,94 +11,112 @@ import Html.Attributes
         , classList
         , for
         , id
-        , type_
-        , value
         )
 import Html.Events exposing (onInput)
 import Iso8601
 import Maybe.Extra as Maybe
-import Postgrest.Resource exposing (Resource)
+import Postgrest.Field as Field exposing (Field)
 import Postgrest.Value exposing (Value(..))
 import String.Extra as String
 
 
+type alias Record =
+    Dict String Input
+
+
 type Msg
-    = Changed String Field
+    = Changed String Input
 
 
-type alias Input =
-    { name : String
-    , attributes : List (Html.Attribute Msg)
-    }
+type Input
+    = Input Field
 
 
-updateRecord : Msg -> Resource -> Resource
-updateRecord (Changed name field) record =
-    Dict.insert name field record
+field : Input -> Field
+field (Input inputField) =
+    inputField
 
 
-input : Input -> Field -> Html Msg
-input params field =
-    case field.value of
+value : Input -> Value
+value input =
+    .value <| field input
+
+
+updateRecord : Msg -> Record -> Record
+updateRecord (Changed name changedInput) record =
+    Dict.insert name changedInput record
+
+
+update : String -> Input -> Input
+update string input =
+    Input <| Field.update string <| field input
+
+
+display : String -> Input -> Html Msg
+display name ((Input inputField) as input) =
+    case inputField.value of
         PString maybe ->
-            inputHelp params "text" field maybe
+            inputHelp name [] "text" input maybe
 
         PFloat maybe ->
             Maybe.map String.fromFloat maybe
-                |> inputHelp params "number" field
+                |> inputHelp name [] "number" input
 
         PInt maybe ->
             Maybe.map String.fromInt maybe
-                |> inputHelp params "number" field
+                |> inputHelp name [] "number" input
 
         PBool maybe ->
             let
-                attr =
+                attrs =
                     Maybe.map checked maybe
                         |> Maybe.withDefault (attribute "" "")
+                        |> List.singleton
             in
-            inputHelp
-                { params | attributes = attr :: params.attributes }
-                "checkbox"
-                field
-                Nothing
+            inputHelp name attrs "checkbox" input Nothing
 
         PTime maybe ->
             Maybe.map (Iso8601.fromTime >> String.slice 0 19) maybe
-                |> inputHelp params "datetime-local" field
+                |> inputHelp name [] "datetime-local" input
 
         _ ->
             text ""
 
 
-inputHelp : Input -> String -> Field -> Maybe String -> Html Msg
-inputHelp { attributes, name } t field mstring =
+inputHelp :
+    String
+    -> List (Html.Attribute Msg)
+    -> String
+    -> Input
+    -> Maybe String
+    -> Html Msg
+inputHelp name attributes type_ ((Input { required, error }) as input) mstring =
     let
         input_ =
             Html.input
                 (attributes
-                    ++ [ onInput <| (Changed name << Field.update field)
+                    ++ [ onInput <| (Changed name << flip update input)
                        , id name
-                       , type_ t
-                       , value <| Maybe.withDefault "" mstring
+                       , Html.Attributes.type_ type_
+                       , Html.Attributes.value <| Maybe.withDefault "" mstring
                        ]
                 )
                 []
 
         labelText =
-            if field.required then
+            if required then
                 String.humanize name ++ "*"
 
             else
                 String.humanize name
 
-        error =
-            field.error
+        errorText =
+            error
                 |> Maybe.map (text >> List.singleton >> p [ class "error" ])
                 |> Maybe.withDefault (text "")
     in
     div
         [ class "field"
-        , classList [ ( "with-error", Maybe.isJust field.error ) ]
+        , classList [ ( "with-error", Maybe.isJust error ) ]
         ]
-        [ label [ for name ] [ text labelText ], input_, error ]
+        [ label [ for name ] [ text labelText ], input_, errorText ]

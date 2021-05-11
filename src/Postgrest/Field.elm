@@ -1,5 +1,6 @@
-module Field exposing (Field, update, validate)
+module Postgrest.Field exposing (Field, setError, update, validate)
 
+import Postgrest.Client as PG
 import Postgrest.Value as Value exposing (Value(..))
 
 
@@ -11,8 +12,8 @@ type alias Field =
     }
 
 
-update : Field -> String -> Field
-update field string =
+update : String -> Field -> Field
+update string field =
     validate
         { field
             | value = Value.update string field.value
@@ -31,3 +32,13 @@ validate field =
 
     else
         { field | error = Nothing }
+
+
+setError : PG.PostgrestErrorJSON -> Field -> Field
+setError { code } field =
+    case code of
+        Just "23502" ->
+            { field | error = Just "This field is required" }
+
+        _ ->
+            field

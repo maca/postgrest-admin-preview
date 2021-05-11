@@ -5,8 +5,8 @@ import Browser
 import Browser.Navigation as Nav
 import Dict
 import Dict.Extra as Dict
-import Field exposing (Field)
-import Form.Input as Input exposing (input)
+import Form.Input as Input exposing (Input(..), display)
+import Form.Record as Record exposing (Record)
 import Html exposing (..)
 import Html.Attributes
     exposing
@@ -22,6 +22,7 @@ import Http
 import Inflect as String
 import Json.Decode as Decode
 import Postgrest.Client as PG
+import Postgrest.Field exposing (Field)
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client
@@ -44,9 +45,9 @@ import Url.Parser as Parser exposing ((</>), Parser)
 type Msg
     = SchemaFetched (Result Error Schema)
     | ListingFetched (Result Error (List Resource))
-    | ResourceFetched (Result Error Resource)
+    | RecordFetched (Result Error Record)
+    | RecordSaved (Result Error Record)
     | ResourceLinkClicked String String
-    | RecordSaved (Result Error Resource)
     | InputChanged Input.Msg
     | FormSubmitted
     | MessageDismissed
@@ -64,13 +65,13 @@ type Error
 
 type New
     = NewRequested String
-    | NewReady CreationParams Resource
+    | NewReady CreationParams Record
 
 
 type Edit
     = EditRequested String String
     | EditLoading EditionParams
-    | EditReady EditionParams Resource
+    | EditReady EditionParams Record
 
 
 type Listing
@@ -193,7 +194,7 @@ update msg model =
                 Err _ ->
                     ( model, Cmd.none )
 
-        ResourceFetched result ->
+        RecordFetched result ->
             case result of
                 Ok record ->
                     case model.route of
@@ -251,19 +252,11 @@ update msg model =
 
         FormSubmitted ->
             case model.route of
-                Edit (EditReady { definition, resourcesName, id } record) ->
-                    ( model
-                    , Client.update model definition resourcesName id record
-                        |> PG.toCmd model.jwt
-                            (RecordSaved << mapError PGError)
-                    )
+                Edit (EditReady params record) ->
+                    ( model, requestRecordUpdate params model record )
 
-                New (NewReady { resourcesName, definition } record) ->
-                    ( model
-                    , Client.create model definition resourcesName record
-                        |> PG.toCmd model.jwt
-                            (RecordSaved << mapError PGError)
-                    )
+                New (NewReady params record) ->
+                    ( model, requestRecordCreate params model record )
 
                 _ ->
                     ( model, Cmd.none )
@@ -315,7 +308,7 @@ urlChanged model =
                     ( { model | route = Edit <| EditLoading params }
                     , Client.fetchOne model definition resourcesName id
                         |> PG.toCmd model.jwt
-                            (ResourceFetched << mapError PGError)
+                            (RecordFetched << mapResourceFetchResult)
                     )
 
                 Nothing ->
@@ -333,7 +326,12 @@ urlChanged model =
                             , definition = definition
                             }
                     in
-                    ( { model | route = New <| NewReady params record }
+                    ( { model
+                        | route =
+                            New <|
+                                NewReady params <|
+                                    Record.fromResource record
+                      }
                     , Cmd.none
                     )
 
@@ -342,6 +340,12 @@ urlChanged model =
 
         _ ->
             ( model, Cmd.none )
+
+
+mapResourceFetchResult : Result PG.Error Resource -> Result Error Record
+mapResourceFetchResult result =
+    Result.map Record.fromResource result
+        |> mapError PGError
 
 
 error : String -> Model -> Model
@@ -354,7 +358,7 @@ confirmation message model =
     { model | message = Just <| Confirmation message }
 
 
-recordSaved : Resource -> Model -> ( Model, Cmd Msg )
+recordSaved : Record -> Model -> ( Model, Cmd Msg )
 recordSaved record model =
     case model.route of
         Edit (EditReady params _) ->
@@ -366,7 +370,7 @@ recordSaved record model =
         New (NewReady { resourcesName } _) ->
             let
                 id =
-                    Resource.id record |> Maybe.withDefault ""
+                    Record.id record |> Maybe.withDefault ""
             in
             ( confirmation "Creation succeed" model
             , Nav.pushUrl model.key <| Url.absolute [ resourcesName, id ] []
@@ -381,16 +385,32 @@ setSaveErrors err model =
     case model.route of
         Edit (EditReady params record) ->
             { model
-                | route = Edit <| EditReady params <| Resource.setError err record
+                | route = Edit <| EditReady params <| Record.setError err record
             }
 
         New (NewReady params record) ->
             { model
-                | route = New <| NewReady params <| Resource.setError err record
+                | route = New <| NewReady params <| Record.setError err record
             }
 
         _ ->
             model
+
+
+requestRecordUpdate : EditionParams -> Model -> Record -> Cmd Msg
+requestRecordUpdate { definition, resourcesName, id } model record =
+    Record.toResource record
+        |> Client.update model definition resourcesName id
+        |> PG.toCmd model.jwt
+            (RecordSaved << mapResourceFetchResult)
+
+
+requestRecordCreate : CreationParams -> Model -> Record -> Cmd Msg
+requestRecordCreate { definition, resourcesName } model record =
+    Record.toResource record
+        |> Client.create model definition resourcesName
+        |> PG.toCmd model.jwt
+            (RecordSaved << mapResourceFetchResult)
 
 
 
@@ -500,7 +520,7 @@ displayListHeader resourcesName =
         ]
 
 
-displayForm : ResourceParams a -> Resource -> Html Msg
+displayForm : ResourceParams a -> Record -> Html Msg
 displayForm { resourcesName } record =
     section
         []
@@ -514,16 +534,19 @@ displayForm { resourcesName } record =
         ]
 
 
-recordForm : Resource -> Html Msg
+recordForm : Record -> Html Msg
 recordForm record =
     let
         fields =
             Dict.toList record
-                |> List.sortWith sortFields
-                |> List.map recordInput
+                |> List.sortWith sortInputs
+                |> List.map
+                    (\( name, input ) ->
+                        Input.display name input |> Html.map InputChanged
+                    )
 
         withErrors =
-            Resource.hasErrors record
+            Record.hasErrors record
     in
     form
         [ class "resource-form"
@@ -534,17 +557,10 @@ recordForm record =
         [ fieldset [] fields
         , fieldset []
             [ button
-                [ disabled (not (Resource.changed record) || withErrors) ]
+                [ disabled (not (Record.changed record) || withErrors) ]
                 [ text "Save" ]
             ]
         ]
-
-
-recordInput : ( String, Field ) -> Html Msg
-recordInput ( name, field ) =
-    field
-        |> Input.input { name = name, attributes = [] }
-        |> Html.map InputChanged
 
 
 displayMessage : Model -> Html Msg
@@ -569,7 +585,7 @@ displayMessageHelp messageType message =
         ]
 
 
-recordLabel : Resource -> Maybe String
+recordLabel : Record -> Maybe String
 recordLabel record =
     let
         mlabel =
@@ -581,12 +597,12 @@ recordLabel record =
             mlabel
 
         Nothing ->
-            Resource.primaryKey record |> Maybe.map PrimaryKey.toString
+            Record.primaryKey record |> Maybe.map PrimaryKey.toString
 
 
-recordLabelHelp : Resource -> String -> Maybe String
+recordLabelHelp : Record -> String -> Maybe String
 recordLabelHelp record fieldName =
-    case Dict.get fieldName record |> Maybe.map .value of
+    case Dict.get fieldName record |> Maybe.map Input.value of
         Just (PString label) ->
             label
 
@@ -683,9 +699,9 @@ sortColumns ( name, Column _ val ) ( name_, Column _ val_ ) =
     sortValues ( name, val ) ( name_, val_ )
 
 
-sortFields : ( String, Field ) -> ( String, Field ) -> Order
-sortFields ( name, field ) ( name_, field_ ) =
-    sortValues ( name, field.value ) ( name_, field_.value )
+sortInputs : ( String, Input ) -> ( String, Input ) -> Order
+sortInputs ( name, input ) ( name_, input_ ) =
+    sortValues ( name, Input.value input ) ( name_, Input.value input_ )
 
 
 sortValues : ( String, Value ) -> ( String, Value ) -> Order

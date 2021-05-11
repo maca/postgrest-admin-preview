@@ -7,7 +7,7 @@ module Postgrest.Schema.Definition exposing
 
 import Dict exposing (Dict)
 import Dict.Extra as Dict
-import Field exposing (Field)
+import Postgrest.Field exposing (Field)
 import Postgrest.Value as Value exposing (Value)
 
 
