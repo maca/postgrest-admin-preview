@@ -2,6 +2,7 @@ module Form.Input exposing (Input(..), Msg, display, field, updateRecord, value)
 
 import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
+import Form.Input.Autocomplete as Autocomplete exposing (Autocomplete)
 import Html exposing (..)
 import Html.Attributes
     exposing
@@ -29,11 +30,11 @@ type Msg
 
 
 type Input
-    = Input Field
+    = Input Autocomplete Field
 
 
 field : Input -> Field
-field (Input inputField) =
+field (Input _ inputField) =
     inputField
 
 
@@ -48,75 +49,86 @@ updateRecord (Changed name changedInput) record =
 
 
 update : String -> Input -> Input
-update string input =
-    Input <| Field.update string <| field input
+update string (Input autocomplete inputField) =
+    Input autocomplete <| Field.update string inputField
 
 
 display : String -> Input -> Html Msg
-display name ((Input inputField) as input) =
+display name ((Input _ inputField) as input) =
     case inputField.value of
-        PString maybe ->
-            inputHelp name [] "text" input maybe
+        PString mstring ->
+            displayInput "text" input mstring
+                |> wrapInput input name
 
-        PFloat maybe ->
-            Maybe.map String.fromFloat maybe
-                |> inputHelp name [] "number" input
+        PFloat mfloat ->
+            Maybe.map String.fromFloat mfloat
+                |> displayInput "number" input
+                |> wrapInput input name
 
-        PInt maybe ->
-            Maybe.map String.fromInt maybe
-                |> inputHelp name [] "number" input
+        PInt mint ->
+            Maybe.map String.fromInt mint
+                |> displayInput "number" input
+                |> wrapInput input name
 
-        PBool maybe ->
-            let
-                attrs =
-                    Maybe.map checked maybe
-                        |> Maybe.withDefault (attribute "" "")
-                        |> List.singleton
-            in
-            inputHelp name attrs "checkbox" input Nothing
+        PBool mbool ->
+            displayCheckbox input mbool
+                |> wrapInput input name
 
-        PTime maybe ->
-            Maybe.map (Iso8601.fromTime >> String.slice 0 19) maybe
-                |> inputHelp name [] "datetime-local" input
+        PTime mtime ->
+            Maybe.map (Iso8601.fromTime >> String.slice 0 19) mtime
+                |> displayInput "datetime-local" input
+                |> wrapInput input name
 
         _ ->
             text ""
 
 
-inputHelp :
-    String
-    -> List (Html.Attribute Msg)
-    -> String
-    -> Input
-    -> Maybe String
-    -> Html Msg
-inputHelp name attributes type_ ((Input { required, error }) as input) mstring =
-    let
-        input_ =
-            Html.input
-                (attributes
-                    ++ [ onInput <| (Changed name << flip update input)
-                       , id name
-                       , Html.Attributes.type_ type_
-                       , Html.Attributes.value <| Maybe.withDefault "" mstring
-                       ]
-                )
-                []
+wrapInput : Input -> String -> (String -> Html Msg) -> Html Msg
+wrapInput ((Input _ { error }) as input) name buildInput =
+    div
+        [ class "field"
+        , classList [ ( "with-error", Maybe.isJust error ) ]
+        ]
+        [ displayLabel input name, buildInput name, displayError error ]
 
+
+displayLabel : Input -> String -> Html Msg
+displayLabel (Input _ { required }) name =
+    let
         labelText =
             if required then
                 String.humanize name ++ "*"
 
             else
                 String.humanize name
-
-        errorText =
-            error
-                |> Maybe.map (text >> List.singleton >> p [ class "error" ])
-                |> Maybe.withDefault (text "")
     in
-    div
-        [ class "field"
-        , classList [ ( "with-error", Maybe.isJust error ) ]
+    label [ for name ] [ text labelText ]
+
+
+displayInput : String -> Input -> Maybe String -> String -> Html Msg
+displayInput type_ input mstring name =
+    Html.input
+        [ onInput <| (Changed name << flip update input)
+        , id name
+        , Html.Attributes.type_ type_
+        , Html.Attributes.value <| Maybe.withDefault "" mstring
         ]
-        [ label [ for name ] [ text labelText ], input_, errorText ]
+        []
+
+
+displayCheckbox : Input -> Maybe Bool -> String -> Html Msg
+displayCheckbox input mchecked name =
+    Html.input
+        [ onInput <| (Changed name << flip update input)
+        , id name
+        , Html.Attributes.type_ "checkbox"
+        , Maybe.map checked mchecked |> Maybe.withDefault (attribute "" "")
+        ]
+        []
+
+
+displayError : Maybe String -> Html Msg
+displayError error =
+    error
+        |> Maybe.map (text >> List.singleton >> p [ class "error" ])
+        |> Maybe.withDefault (text "")
