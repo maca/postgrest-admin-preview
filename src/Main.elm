@@ -227,25 +227,21 @@ update msg model =
 
         InputChanged inputMsg ->
             let
-                updateRecord =
-                    Input.updateRecord inputMsg
+                inputChanged cons record =
+                    let
+                        ( record_, cmd ) =
+                            Input.update inputMsg record
+                    in
+                    ( { model | route = cons record_, message = Nothing }
+                    , Cmd.map InputChanged cmd
+                    )
             in
             case model.route of
                 Edit (EditReady params record) ->
-                    ( { model
-                        | route = Edit (EditReady params (updateRecord record))
-                        , message = Nothing
-                      }
-                    , Cmd.none
-                    )
+                    inputChanged (Edit << EditReady params) record
 
                 New (NewReady params record) ->
-                    ( { model
-                        | route = New (NewReady params (updateRecord record))
-                        , message = Nothing
-                      }
-                    , Cmd.none
-                    )
+                    inputChanged (New << NewReady params) record
 
                 _ ->
                     ( model, Cmd.none )
@@ -602,7 +598,7 @@ recordLabel record =
 
 recordLabelHelp : Record -> String -> Maybe String
 recordLabelHelp record fieldName =
-    case Dict.get fieldName record |> Maybe.map Input.value of
+    case Dict.get fieldName record |> Maybe.map Input.toValue of
         Just (PString label) ->
             label
 
@@ -701,7 +697,7 @@ sortColumns ( name, Column _ val ) ( name_, Column _ val_ ) =
 
 sortInputs : ( String, Input ) -> ( String, Input ) -> Order
 sortInputs ( name, input ) ( name_, input_ ) =
-    sortValues ( name, Input.value input ) ( name_, Input.value input_ )
+    sortValues ( name, Input.toValue input ) ( name_, Input.toValue input_ )
 
 
 sortValues : ( String, Value ) -> ( String, Value ) -> Order

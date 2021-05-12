@@ -13,8 +13,7 @@ module Form.Record exposing
 
 import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
-import Form.Input as Input exposing (Input(..))
-import Form.Input.Autocomplete as Autocomplete
+import Form.Input as Input exposing (Input)
 import Postgrest.Client as PG
 import Postgrest.Field as Field
 import Postgrest.PrimaryKey exposing (PrimaryKey)
@@ -28,17 +27,17 @@ type alias Record =
 
 toResource : Record -> Resource
 toResource record =
-    Dict.map (\_ input -> Input.field input) record
+    Dict.map (\_ input -> Input.toField input) record
 
 
 fromResource : Resource -> Record
 fromResource resource =
-    Dict.map (\_ input -> Input Autocomplete.idle input) resource
+    Dict.map (\_ input -> Input.fromField input) resource
 
 
 changed : Record -> Bool
 changed record =
-    Dict.values record |> List.any (.changed << Input.field)
+    Dict.values record |> List.any (.changed << Input.toField)
 
 
 errors : Record -> Dict String (Maybe String)
@@ -69,9 +68,9 @@ primaryKeyName record =
 setError : PG.PostgrestErrorJSON -> Record -> Record
 setError error resource =
     let
-        mapFun columnName key ((Input autocomplete field) as input) =
+        mapFun columnName key input =
             if key == columnName then
-                Input autocomplete <| Field.setError error field
+                Input.setError error input
 
             else
                 input

@@ -22,6 +22,11 @@
     border-color: red;
 }
 
+.field.required label:after {
+    color: #faa;
+    content: " (req.)"
+}
+
 .main-container {
     display: grid;
     grid-template-columns: 15% auto;

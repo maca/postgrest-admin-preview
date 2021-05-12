@@ -5,7 +5,9 @@ module Postgrest.Value exposing
     , isForeignKey
     , isNothing
     , isPrimaryKey
+    , isTrue
     , toPrimaryKey
+    , toString
     , update
     )
 
@@ -35,20 +37,20 @@ encode value =
             Maybe.map e >> Maybe.withDefault Encode.null
     in
     case value of
+        PString mstring ->
+            enc Encode.string mstring
+
         PFloat mfloat ->
             enc Encode.float mfloat
 
         PInt mint ->
             enc Encode.int mint
 
-        PString mstring ->
-            enc Encode.string mstring
-
         PBool mbool ->
             enc Encode.bool mbool
 
-        PTime mposix ->
-            enc Encode.string (Maybe.map Iso8601.fromTime mposix)
+        PTime mtime ->
+            enc Encode.string (Maybe.map Iso8601.fromTime mtime)
 
         PPrimaryKey mpk ->
             enc PrimaryKey.encode mpk
@@ -63,13 +65,13 @@ encode value =
 isNothing : Value -> Bool
 isNothing value =
     case value of
+        PString (Just _) ->
+            False
+
         PFloat (Just _) ->
             False
 
         PInt (Just _) ->
-            False
-
-        PString (Just _) ->
             False
 
         PBool (Just _) ->
@@ -143,6 +145,47 @@ toPrimaryKey value =
     case value of
         PPrimaryKey mprimaryKey ->
             mprimaryKey
+
+        _ ->
+            Nothing
+
+
+isTrue : Value -> Maybe Bool
+isTrue value =
+    case value of
+        PBool mbool ->
+            mbool
+
+        _ ->
+            Nothing
+
+
+toString : Value -> Maybe String
+toString value =
+    case value of
+        PString mstring ->
+            mstring
+
+        PFloat mfloat ->
+            Maybe.map String.fromFloat mfloat
+
+        PInt mint ->
+            Maybe.map String.fromInt mint
+
+        PBool (Just True) ->
+            Just "true"
+
+        PBool (Just False) ->
+            Just "false"
+
+        PTime mtime ->
+            Maybe.map (Iso8601.fromTime >> String.slice 0 19) mtime
+
+        PPrimaryKey mpk ->
+            Maybe.map PrimaryKey.toString mpk
+
+        PForeignKey _ _ mpk ->
+            Maybe.map PrimaryKey.toString mpk
 
         _ ->
             Nothing
