@@ -49,8 +49,12 @@ type alias AssociationParams =
 type Msg
     = Changed String Input String
     | AutocompleteInput String Field AssociationParams String
-    | ListingFetched String Field AssociationParams (Result Error (List Resource))
+    | ListingFetched String Field AssociationParams AutocompleteResult
     | Failure (Result Error Never)
+
+
+type alias AutocompleteResult =
+    Result Error (List Resource)
 
 
 type Input
@@ -70,11 +74,14 @@ update pgParams msg record =
 
         AutocompleteInput name field params value ->
             let
+                params_ =
+                    { params | userInput = Just value }
+
                 input =
-                    Association field { params | userInput = Just value }
+                    Association field params_
 
                 tagger =
-                    ListingFetched name field params
+                    ListingFetched name field params_
             in
             ( Dict.insert name input record
             , fetchResources tagger params.resourcesName pgParams
@@ -277,11 +284,7 @@ displayError error =
         |> Maybe.withDefault (text "")
 
 
-fetchResources :
-    (Result Error (List Resource) -> Msg)
-    -> String
-    -> Client a
-    -> Cmd Msg
+fetchResources : (AutocompleteResult -> Msg) -> String -> Client a -> Cmd Msg
 fetchResources tagger resourcesName ({ schema, jwt } as client) =
     case Dict.get resourcesName schema of
         Just definition ->
@@ -289,9 +292,4 @@ fetchResources tagger resourcesName ({ schema, jwt } as client) =
                 |> PG.toCmd jwt (tagger << Result.mapError PGError)
 
         Nothing ->
-            fail <| BadSchema resourcesName
-
-
-fail : Error -> Cmd Msg
-fail msg =
-    Task.fail msg |> Task.attempt Failure
+            Error.fail Failure <| BadSchema resourcesName

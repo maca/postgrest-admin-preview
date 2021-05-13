@@ -89,7 +89,10 @@ selects definition =
     let
         resources { table, labelColumnName } =
             labelColumnName
-                |> Maybe.map (\n -> PG.resource table <| PG.attributes [ n ])
+                |> Maybe.map
+                    (\n ->
+                        PG.resource table <| PG.attributes [ n, "id" ]
+                    )
 
         filteMapFun (Column _ val) =
             Value.foreignKeyParams val |> Maybe.andThen resources

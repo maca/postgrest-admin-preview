@@ -193,7 +193,10 @@ update msg model =
                 Ok record ->
                     case model.route of
                         Edit (EditLoading params) ->
-                            ( { model | route = Edit <| EditReady params record }
+                            ( { model
+                                | route =
+                                    Edit <| EditReady params record
+                              }
                             , Cmd.none
                             )
 
@@ -277,13 +280,14 @@ urlChanged model =
                 Just definition ->
                     ( { model
                         | message = Nothing
-                        , route = Listing <| ListingLoading resourcesName definition
+                        , route =
+                            Listing <| ListingLoading resourcesName definition
                       }
                     , fetchResources resourcesName model
                     )
 
                 Nothing ->
-                    ( model, fail <| BadSchema resourcesName )
+                    ( model, Error.fail Failure <| BadSchema resourcesName )
 
         Edit (EditRequested resourcesName id) ->
             case Dict.get resourcesName model.schema of
@@ -302,7 +306,7 @@ urlChanged model =
                     )
 
                 Nothing ->
-                    ( model, fail <| BadSchema resourcesName )
+                    ( model, Error.fail Failure <| BadSchema resourcesName )
 
         New (NewRequested resourcesName) ->
             case Dict.get resourcesName model.schema of
@@ -326,7 +330,7 @@ urlChanged model =
                     )
 
                 Nothing ->
-                    ( model, fail <| BadSchema resourcesName )
+                    ( model, Error.fail Failure <| BadSchema resourcesName )
 
         _ ->
             ( model, Cmd.none )
@@ -725,11 +729,6 @@ subscriptions _ =
     Sub.none
 
 
-fail : Error -> Cmd Msg
-fail msg =
-    Task.fail msg |> Task.attempt Failure
-
-
 getSchema : String -> Cmd Msg
 getSchema host =
     Http.get
@@ -765,7 +764,7 @@ fetchResources resourcesName ({ schema, jwt } as model) =
                 |> PG.toCmd jwt (ListingFetched << mapError PGError)
 
         Nothing ->
-            fail <| BadSchema resourcesName
+            Error.fail Failure <| BadSchema resourcesName
 
 
 
