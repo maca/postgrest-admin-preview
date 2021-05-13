@@ -15,7 +15,6 @@ import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
 import Form.Input as Input exposing (Input)
 import Postgrest.Client as PG
-import Postgrest.Field as Field
 import Postgrest.PrimaryKey exposing (PrimaryKey)
 import Postgrest.Resource as Resource exposing (Resource)
 import Regex exposing (Regex)

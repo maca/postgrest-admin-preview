@@ -30,22 +30,37 @@ type Triple a b c
 
 decoder : Decoder Schema
 decoder =
-    field "definitions" (Decode.dict fieldsDecoder)
-
-
-fieldsDecoder : Decoder Definition
-fieldsDecoder =
-    field "required" (Decode.list string) |> andThen propertiesDecoder
-
-
-propertiesDecoder : List String -> Decoder Definition
-propertiesDecoder required =
     let
-        mapColumn ( name, value ) =
-            ( name, Column (List.member name required) value )
+        makeDefinition partials _ ( requiredCols, values ) =
+            let
+                makeColumn name value =
+                    let
+                        isRequired =
+                            List.member name requiredCols
+                    in
+                    case value of
+                        PForeignKey fk params ->
+                            let
+                                col =
+                                    Dict.get params.table partials
+                                        |> Maybe.andThen
+                                            (Tuple.first >> findLabelColum)
+                            in
+                            PForeignKey fk { params | labelColumnName = col }
+                                |> Column isRequired
+
+                        _ ->
+                            Column isRequired value
+            in
+            Dict.map makeColumn values
+
+        fieldsDecoder =
+            Decode.map2 Tuple.pair
+                (field "required" <| Decode.list string)
+                (field "properties" <| Decode.dict valueDecoder)
     in
-    Decode.map (Dict.fromList << List.map mapColumn)
-        (field "properties" (Decode.keyValuePairs valueDecoder))
+    Decode.map (\partials -> Dict.map (makeDefinition partials) partials)
+        (field "definitions" <| Decode.dict fieldsDecoder)
 
 
 valueDecoder : Decoder Value
@@ -132,3 +147,18 @@ foreignKeyRegex : Regex
 foreignKeyRegex =
     Regex.fromString "fk table='(\\w+)' column='(\\w+)'"
         |> Maybe.withDefault Regex.never
+
+
+
+-- To refactor
+
+
+findLabelColum : List String -> Maybe String
+findLabelColum requiredCols =
+    List.filter (\n -> List.member n requiredCols) identifiers
+        |> List.head
+
+
+identifiers : List String
+identifiers =
+    [ "title", "name", "full name", "email", "first name", "last name" ]

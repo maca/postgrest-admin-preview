@@ -10,7 +10,6 @@ module Form.Input exposing
     , view
     )
 
-import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
 import Error exposing (Error(..))
 import Html exposing (..)
@@ -25,13 +24,11 @@ import Html.Attributes
         , list
         )
 import Html.Events exposing (onInput)
-import Iso8601
 import Maybe.Extra as Maybe
 import Postgrest.Client as PG exposing (PostgrestErrorJSON)
 import Postgrest.Field as Field exposing (Field)
 import Postgrest.Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
-import Postgrest.Schema as Schema exposing (Schema)
 import Postgrest.Value as Value exposing (Value(..))
 import Result
 import String.Extra as String
@@ -95,7 +92,7 @@ update pgParams msg record =
                 Err _ ->
                     ( record, Cmd.none )
 
-        Failure result ->
+        Failure _ ->
             ( record, Cmd.none )
 
 
@@ -224,7 +221,7 @@ wrapInput input name buildInput =
 
 
 displayAutocompleteInput : AssociationParams -> Field -> String -> Html Msg
-displayAutocompleteInput ({ resources, userInput } as params) field name =
+displayAutocompleteInput ({ userInput } as params) field name =
     let
         listName =
             "list-" ++ name

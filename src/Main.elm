@@ -744,22 +744,13 @@ decodeSchema result =
         Ok json ->
             case Decode.decodeString Schema.decoder json of
                 Ok schema ->
-                    Ok <| fixForeignKeys schema
+                    Ok schema
 
                 Err err ->
                     Err <| DecodeError err
 
         Err err ->
             Err <| HttpError err
-
-
-fixForeignKeys : Schema -> Schema
-fixForeignKeys schema =
-    let
-        descriptionMap _ description =
-            description
-    in
-    Dict.map descriptionMap schema
 
 
 

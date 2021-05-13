@@ -21,7 +21,6 @@ import Json.Decode as Decode
         , float
         , int
         , maybe
-        , nullable
         , string
         )
 import Json.Encode as Encode
@@ -30,7 +29,7 @@ import Postgrest.Client as PG
 import Postgrest.Field as Field exposing (Field)
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
-import Postgrest.Value as Value exposing (Value(..))
+import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
 import Regex exposing (Regex)
 import Time.Extra as Time
 
@@ -74,10 +73,10 @@ primaryKeyName resource =
         |> Maybe.map Tuple.first
 
 
-decoder : List String -> Definition -> Decoder Resource
-decoder identifiers definition =
+decoder : Definition -> Decoder Resource
+decoder definition =
     definition
-        |> Dict.foldl (decoderFold identifiers definition)
+        |> Dict.foldl (decoderFold definition)
             (Decode.succeed Dict.empty)
 
 
@@ -109,14 +108,8 @@ setError error resource =
         |> Maybe.withDefault resource
 
 
-decoderFold :
-    List String
-    -> Definition
-    -> String
-    -> a
-    -> Decoder Resource
-    -> Decoder Resource
-decoderFold identifiers definition name _ prevDec =
+decoderFold : Definition -> String -> a -> Decoder Resource -> Decoder Resource
+decoderFold definition name _ prevDec =
     let
         insert =
             flip (Dict.insert name)
@@ -151,17 +144,16 @@ decoderFold identifiers definition name _ prevDec =
 
                 Just (Column required (PForeignKey _ params)) ->
                     let
-                        foreignKeyCons label primaryKey_ =
-                            insert dict <|
-                                Field Nothing required False <|
-                                    PForeignKey primaryKey_
-                                        { params | label = label }
-
-                        referenceDecoder i =
-                            Decode.at [ params.table, i ] (nullable string)
+                        insertFk l pk =
+                            insert dict
+                                { error = Nothing
+                                , required = required
+                                , changed = False
+                                , value = PForeignKey pk { params | label = l }
+                                }
                     in
-                    Decode.map2 foreignKeyCons
-                        (Decode.oneOf <| List.map referenceDecoder identifiers)
+                    Decode.map2 insertFk
+                        (maybe <| referenceDecoder params)
                         (maybe <| Decode.field name PrimaryKey.decoder)
 
                 Just (Column required (BadValue _)) ->
@@ -171,6 +163,16 @@ decoderFold identifiers definition name _ prevDec =
                     map BadValue False dict Decode.value
     in
     Decode.andThen foldFun prevDec
+
+
+referenceDecoder : ForeignKeyParams -> Decoder String
+referenceDecoder params =
+    case params.labelColumnName of
+        Just n ->
+            Decode.at [ params.table, n ] string
+
+        Nothing ->
+            Decode.fail ""
 
 
 extractColumnName : String -> Maybe String

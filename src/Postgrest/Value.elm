@@ -2,7 +2,7 @@ module Postgrest.Value exposing
     ( ForeignKeyParams
     , Value(..)
     , encode
-    , foreignKeyReference
+    , foreignKeyParams
     , isForeignKey
     , isNothing
     , isPrimaryKey
@@ -202,8 +202,8 @@ toString value =
             Nothing
 
 
-foreignKeyReference : Value -> Maybe ForeignKeyParams
-foreignKeyReference value =
+foreignKeyParams : Value -> Maybe ForeignKeyParams
+foreignKeyParams value =
     case value of
         PForeignKey _ params ->
             Just params
