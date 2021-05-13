@@ -10,6 +10,7 @@ module Form.Input exposing
     , view
     )
 
+import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
 import Error exposing (Error(..))
 import Html exposing (..)
@@ -29,7 +30,7 @@ import Postgrest.Client as PG exposing (PostgrestErrorJSON)
 import Postgrest.Field as Field exposing (Field)
 import Postgrest.Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
-import Postgrest.Value as Value exposing (Value(..))
+import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
 import Result
 import String.Extra as String
 import Task
@@ -40,8 +41,7 @@ type alias Record =
 
 
 type alias AssociationParams =
-    { resourcesName : String
-    , resources : List Resource
+    { resources : List Resource
     , userInput : Maybe String
     }
 
@@ -84,7 +84,9 @@ update pgParams msg record =
                     ListingFetched name field params_
             in
             ( Dict.insert name input record
-            , fetchResources tagger params.resourcesName pgParams
+            , Value.foreignKeyParams field.value
+                |> Maybe.map (fetchResources pgParams tagger value)
+                |> Maybe.withDefault Cmd.none
             )
 
         ListingFetched name field params result ->
@@ -149,11 +151,7 @@ fromField field =
             DateTime field
 
         PForeignKey _ { table, label } ->
-            Association field
-                { resourcesName = table
-                , userInput = label
-                , resources = []
-                }
+            Association field { userInput = label, resources = [] }
 
         PPrimaryKey _ ->
             Blank field
@@ -284,12 +282,43 @@ displayError error =
         |> Maybe.withDefault (text "")
 
 
-fetchResources : (AutocompleteResult -> Msg) -> String -> Client a -> Cmd Msg
-fetchResources tagger resourcesName ({ schema, jwt } as client) =
-    case Dict.get resourcesName schema of
+fetchResources :
+    Client a
+    -> (AutocompleteResult -> Msg)
+    -> String
+    -> ForeignKeyParams
+    -> Cmd Msg
+fetchResources ({ schema, jwt } as client) tagger userInput params =
+    case Dict.get params.table schema of
         Just definition ->
-            Client.fetchMany client definition resourcesName
-                |> PG.toCmd jwt (tagger << Result.mapError PGError)
+            let
+                selects =
+                    params.labelColumnName
+                        |> Maybe.map (flip (::) [ "id" ])
+                        |> Maybe.withDefault [ "id" ]
+                        |> PG.attributes
+
+                idQuery =
+                    String.toInt userInput
+                        |> Maybe.map (PG.param "id" << PG.eq << PG.int)
+
+                labelQuery =
+                    params.labelColumnName
+                        |> Maybe.map
+                            (\n ->
+                                PG.param n <| PG.ilike ("*" ++ userInput ++ "*")
+                            )
+
+                queries =
+                    List.filterMap identity [ idQuery, labelQuery ]
+            in
+            if List.isEmpty queries then
+                Error.fail Failure <| AutocompleteError params userInput
+
+            else
+                Client.fetchMany client definition params.table
+                    |> PG.setParams [ PG.select selects, PG.or queries ]
+                    |> PG.toCmd jwt (tagger << Result.mapError PGError)
 
         Nothing ->
-            Error.fail Failure <| BadSchema resourcesName
+            Error.fail Failure <| BadSchema params.table

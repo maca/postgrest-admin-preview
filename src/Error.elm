@@ -3,6 +3,7 @@ module Error exposing (Error(..), fail)
 import Http
 import Json.Decode as Decode
 import Postgrest.Client as PG
+import Postgrest.Value exposing (ForeignKeyParams)
 import Task
 
 
@@ -10,6 +11,7 @@ type Error
     = HttpError Http.Error
     | DecodeError Decode.Error
     | PGError PG.Error
+    | AutocompleteError ForeignKeyParams String
     | BadSchema String
 
 
