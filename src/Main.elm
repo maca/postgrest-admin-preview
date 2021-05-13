@@ -1,11 +1,12 @@
-module Main exposing (Error, main)
+module Main exposing (main)
 
 import Basics.Extra exposing (flip)
 import Browser
 import Browser.Navigation as Nav
 import Dict
 import Dict.Extra as Dict
-import Form.Input as Input exposing (Input(..), display)
+import Error exposing (Error(..))
+import Form.Input as Input exposing (Input)
 import Form.Record as Record exposing (Record)
 import Html exposing (..)
 import Html.Attributes
@@ -54,13 +55,6 @@ type Msg
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
     | Failure (Result Error Never)
-
-
-type Error
-    = HttpError Http.Error
-    | DecodeError Decode.Error
-    | PGError PG.Error
-    | BadSchema String
 
 
 type New
@@ -230,7 +224,7 @@ update msg model =
                 inputChanged cons record =
                     let
                         ( record_, cmd ) =
-                            Input.update inputMsg record
+                            Input.update model inputMsg record
                     in
                     ( { model | route = cons record_, message = Nothing }
                     , Cmd.map InputChanged cmd
@@ -538,7 +532,7 @@ recordForm record =
                 |> List.sortWith sortInputs
                 |> List.map
                     (\( name, input ) ->
-                        Input.display name input |> Html.map InputChanged
+                        Input.view name input |> Html.map InputChanged
                     )
 
         withErrors =
@@ -685,11 +679,6 @@ notFound =
     text "Not found"
 
 
-recordIdentifiers : List String
-recordIdentifiers =
-    [ "title", "name", "full name", "email", "first name", "last name" ]
-
-
 sortColumns : ( String, Column ) -> ( String, Column ) -> Order
 sortColumns ( name, Column _ val ) ( name_, Column _ val_ ) =
     sortValues ( name, val ) ( name_, val_ )
@@ -751,9 +740,26 @@ getSchema host =
 
 decodeSchema : Result Http.Error String -> Result Error Schema
 decodeSchema result =
-    mapError HttpError result
-        |> Result.andThen
-            (Decode.decodeString Schema.decoder >> mapError DecodeError)
+    case result of
+        Ok json ->
+            case Decode.decodeString Schema.decoder json of
+                Ok schema ->
+                    Ok <| fixForeignKeys schema
+
+                Err err ->
+                    Err <| DecodeError err
+
+        Err err ->
+            Err <| HttpError err
+
+
+fixForeignKeys : Schema -> Schema
+fixForeignKeys schema =
+    let
+        descriptionMap _ description =
+            description
+    in
+    Dict.map descriptionMap schema
 
 
 
@@ -796,3 +802,12 @@ routeParserHelp resourcesName id =
 
     else
         Edit <| EditRequested resourcesName id
+
+
+
+-- To refactor
+
+
+recordIdentifiers : List String
+recordIdentifiers =
+    [ "title", "name", "full name", "email", "first name", "last name" ]

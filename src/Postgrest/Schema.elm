@@ -118,6 +118,7 @@ mapForeignKey maybeDesc =
                 params =
                     { table = table
                     , primaryKeyName = primaryKeyName
+                    , labelColumnName = Nothing
                     , label = Nothing
                     }
             in

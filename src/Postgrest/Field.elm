@@ -12,12 +12,6 @@ type alias Field =
     }
 
 
-
--- fromValue : Value -> Field
--- fromValue value =
---     { error = Nothing, required = False, changed = False, value = value }
-
-
 update : String -> Field -> Field
 update string field =
     validate

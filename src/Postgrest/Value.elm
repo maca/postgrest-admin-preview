@@ -15,6 +15,7 @@ module Postgrest.Value exposing
 import Iso8601
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Maybe.Extra as Maybe
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey(..))
 import String.Extra as String
 import Time
@@ -23,6 +24,7 @@ import Time
 type alias ForeignKeyParams =
     { table : String
     , primaryKeyName : String
+    , labelColumnName : Maybe String
     , label : Maybe String
     }
 
@@ -192,8 +194,9 @@ toString value =
         PPrimaryKey mprimaryKey ->
             Maybe.map PrimaryKey.toString mprimaryKey
 
-        PForeignKey mprimaryKey _ ->
+        PForeignKey mprimaryKey { label } ->
             Maybe.map PrimaryKey.toString mprimaryKey
+                |> Maybe.or label
 
         _ ->
             Nothing

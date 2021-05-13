@@ -1,6 +1,13 @@
-module Postgrest.Resource.Client exposing (create, fetchMany, fetchOne, update)
+module Postgrest.Resource.Client exposing
+    ( Client
+    , create
+    , fetchMany
+    , fetchOne
+    , update
+    )
 
 import Dict
+import Error exposing (Error(..))
 import Postgrest.Client as PG exposing (Endpoint, Request, Selectable)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Schema exposing (Schema)
@@ -16,8 +23,9 @@ import Url.Builder as Url
 
 type alias Client a =
     { a
-        | host : String
-        , schema : Schema
+        | schema : Schema
+        , host : String
+        , jwt : PG.JWT
     }
 
 

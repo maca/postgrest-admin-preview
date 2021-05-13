@@ -1,17 +1,18 @@
 module Form.Input exposing
     ( Input(..)
     , Msg
-    , display
     , fromField
     , isRequired
     , setError
     , toField
     , toValue
     , update
+    , view
     )
 
 import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
+import Error exposing (Error(..))
 import Html exposing (..)
 import Html.Attributes
     exposing
@@ -21,22 +22,38 @@ import Html.Attributes
         , classList
         , for
         , id
+        , list
         )
 import Html.Events exposing (onInput)
 import Iso8601
 import Maybe.Extra as Maybe
-import Postgrest.Client exposing (PostgrestErrorJSON)
+import Postgrest.Client as PG exposing (PostgrestErrorJSON)
 import Postgrest.Field as Field exposing (Field)
+import Postgrest.Resource exposing (Resource)
+import Postgrest.Resource.Client as Client exposing (Client)
+import Postgrest.Schema as Schema exposing (Schema)
 import Postgrest.Value as Value exposing (Value(..))
+import Result
 import String.Extra as String
+import Task
 
 
 type alias Record =
     Dict String Input
 
 
+type alias AssociationParams =
+    { resourcesName : String
+    , resources : List Resource
+    , userInput : Maybe String
+    }
+
+
 type Msg
-    = Changed String Input
+    = Changed String Input String
+    | AutocompleteInput String Field AssociationParams String
+    | ListingFetched String Field AssociationParams (Result Error (List Resource))
+    | Failure (Result Error Never)
 
 
 type Input
@@ -44,7 +61,47 @@ type Input
     | Number Field
     | Checkbox Field
     | DateTime Field
+    | Association Field AssociationParams
     | Blank Field
+
+
+update : Client a -> Msg -> Record -> ( Record, Cmd Msg )
+update pgParams msg record =
+    case msg of
+        Changed name input value ->
+            ( Dict.insert name (updateInput value input) record, Cmd.none )
+
+        AutocompleteInput name field params value ->
+            let
+                input =
+                    Association field { params | userInput = Just value }
+
+                tagger =
+                    ListingFetched name field params
+            in
+            ( Dict.insert name input record
+            , fetchResources tagger params.resourcesName pgParams
+            )
+
+        ListingFetched name field params result ->
+            case result of
+                Ok resources ->
+                    let
+                        input =
+                            Association field { params | resources = resources }
+                    in
+                    ( Dict.insert name input record, Cmd.none )
+
+                Err _ ->
+                    ( record, Cmd.none )
+
+        Failure result ->
+            ( record, Cmd.none )
+
+
+updateInput : String -> Input -> Input
+updateInput string input =
+    toField input |> Field.update string |> fromField
 
 
 toField : Input -> Field
@@ -60,6 +117,9 @@ toField input =
             field
 
         DateTime field ->
+            field
+
+        Association field _ ->
             field
 
         Blank field ->
@@ -84,8 +144,12 @@ fromField field =
         PTime _ ->
             DateTime field
 
-        PForeignKey _ _ ->
-            Blank field
+        PForeignKey _ { table, label } ->
+            Association field
+                { resourcesName = table
+                , userInput = label
+                , resources = []
+                }
 
         PPrimaryKey _ ->
             Blank field
@@ -114,20 +178,8 @@ toError input =
     .error <| toField input
 
 
-update : Msg -> Record -> ( Record, Cmd Msg )
-update msg record =
-    case msg of
-        Changed name input ->
-            ( Dict.insert name input record, Cmd.none )
-
-
-updateInput : String -> Input -> Input
-updateInput string input =
-    toField input |> Field.update string |> fromField
-
-
-display : String -> Input -> Html Msg
-display name input =
+view : String -> Input -> Html Msg
+view name input =
     case input of
         Text { value } ->
             Value.toString value
@@ -149,6 +201,9 @@ display name input =
                 |> displayInput "datetime-local" input
                 |> wrapInput input name
 
+        Association field params ->
+            displayAutocompleteInput params field |> wrapInput input name
+
         _ ->
             text ""
 
@@ -168,10 +223,33 @@ wrapInput input name buildInput =
         ]
 
 
+displayAutocompleteInput : AssociationParams -> Field -> String -> Html Msg
+displayAutocompleteInput ({ resources, userInput } as params) field name =
+    let
+        listName =
+            "list-" ++ name
+    in
+    div []
+        [ Html.input
+            [ onInput <| AutocompleteInput name field params
+            , id name
+            , list listName
+            , if field.required then
+                attribute "aria-required" "true"
+
+              else
+                class ""
+            , Html.Attributes.type_ "text"
+            , Html.Attributes.value <| Maybe.withDefault "" userInput
+            ]
+            []
+        ]
+
+
 displayInput : String -> Input -> Maybe String -> String -> Html Msg
 displayInput type_ input mstring name =
     Html.input
-        [ onInput <| (Changed name << flip updateInput input)
+        [ onInput <| Changed name input
         , id name
         , if isRequired input then
             attribute "aria-required" "true"
@@ -187,7 +265,7 @@ displayInput type_ input mstring name =
 displayCheckbox : Input -> Maybe Bool -> String -> Html Msg
 displayCheckbox input mchecked name =
     Html.input
-        [ onInput <| (Changed name << flip updateInput input)
+        [ onInput <| Changed name input
         , id name
         , Html.Attributes.type_ "checkbox"
         , Maybe.map checked mchecked |> Maybe.withDefault (class "")
@@ -200,3 +278,23 @@ displayError error =
     error
         |> Maybe.map (text >> List.singleton >> p [ class "error" ])
         |> Maybe.withDefault (text "")
+
+
+fetchResources :
+    (Result Error (List Resource) -> Msg)
+    -> String
+    -> Client a
+    -> Cmd Msg
+fetchResources tagger resourcesName ({ schema, jwt } as client) =
+    case Dict.get resourcesName schema of
+        Just definition ->
+            Client.fetchMany client definition resourcesName
+                |> PG.toCmd jwt (tagger << Result.mapError PGError)
+
+        Nothing ->
+            fail <| BadSchema resourcesName
+
+
+fail : Error -> Cmd Msg
+fail msg =
+    Task.fail msg |> Task.attempt Failure
