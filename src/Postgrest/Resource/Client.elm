@@ -54,7 +54,13 @@ create { host, schema } definition resourcesName resource =
             [ PG.select <| selects schema definition ]
 
 
-update : Client a -> Definition -> String -> String -> Resource -> Request Resource
+update :
+    Client a
+    -> Definition
+    -> String
+    -> String
+    -> Resource
+    -> Request Resource
 update { host, schema } definition resourcesName id resource =
     let
         pkName =
@@ -83,8 +89,8 @@ selects schema definition =
                 >> PG.attributes
                 >> PG.resource name
 
-        resources ( name, _ ) =
-            Dict.get name schema |> Maybe.map (mapFun name)
+        resources { table } =
+            Dict.get table schema |> Maybe.map (mapFun table)
 
         filteMapFun (Column _ val) =
             Value.foreignKeyReference val

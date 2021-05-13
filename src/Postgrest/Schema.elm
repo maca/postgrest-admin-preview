@@ -1,5 +1,6 @@
 module Postgrest.Schema exposing (Schema, decoder)
 
+import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
 import Json.Decode as Decode
     exposing
@@ -112,8 +113,15 @@ mapForeignKey maybeDesc =
             List.concatMap .submatches << Regex.find foreignKeyRegex
     in
     case Maybe.map matchFn maybeDesc of
-        Just [ Just table, Just col ] ->
-            mapValue (PForeignKey ( table, col ) Nothing) PrimaryKey.decoder
+        Just [ Just table, Just primaryKeyName ] ->
+            let
+                params =
+                    { table = table
+                    , primaryKeyName = primaryKeyName
+                    , label = Nothing
+                    }
+            in
+            mapValue (flip PForeignKey params) PrimaryKey.decoder
 
         _ ->
             Decode.fail ""

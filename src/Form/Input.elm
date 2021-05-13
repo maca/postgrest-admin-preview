@@ -84,7 +84,7 @@ fromField field =
         PTime _ ->
             DateTime field
 
-        PForeignKey _ _ _ ->
+        PForeignKey _ _ ->
             Blank field
 
         PPrimaryKey _ ->

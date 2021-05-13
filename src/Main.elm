@@ -653,8 +653,8 @@ displayValue resourcesName { value } =
         PTime (Just time) ->
             text <| Time.format time
 
-        PForeignKey ( res, _ ) mlabel (Just primaryKey) ->
-            recordLink res primaryKey mlabel
+        PForeignKey (Just primaryKey) { table, label } ->
+            recordLink table primaryKey label
 
         PPrimaryKey (Just primaryKey) ->
             recordLink resourcesName primaryKey Nothing
@@ -709,10 +709,10 @@ sortValues ( name, a ) ( _, b ) =
         ( _, PPrimaryKey _ ) ->
             GT
 
-        ( PForeignKey _ _ _, _ ) ->
+        ( PForeignKey _ _, _ ) ->
             LT
 
-        ( _, PForeignKey _ _ _ ) ->
+        ( _, PForeignKey _ _ ) ->
             GT
 
         ( PString _, _ ) ->

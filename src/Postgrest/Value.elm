@@ -1,5 +1,6 @@
 module Postgrest.Value exposing
-    ( Value(..)
+    ( ForeignKeyParams
+    , Value(..)
     , encode
     , foreignKeyReference
     , isForeignKey
@@ -19,6 +20,13 @@ import String.Extra as String
 import Time
 
 
+type alias ForeignKeyParams =
+    { table : String
+    , primaryKeyName : String
+    , label : Maybe String
+    }
+
+
 type Value
     = PFloat (Maybe Float)
     | PInt (Maybe Int)
@@ -26,7 +34,7 @@ type Value
     | PBool (Maybe Bool)
     | PTime (Maybe Time.Posix)
     | PPrimaryKey (Maybe PrimaryKey)
-    | PForeignKey ( String, String ) (Maybe String) (Maybe PrimaryKey)
+    | PForeignKey (Maybe PrimaryKey) ForeignKeyParams
     | BadValue Decode.Value
 
 
@@ -52,11 +60,11 @@ encode value =
         PTime mtime ->
             enc Encode.string (Maybe.map Iso8601.fromTime mtime)
 
-        PPrimaryKey mpk ->
-            enc PrimaryKey.encode mpk
+        PPrimaryKey mprimaryKey ->
+            enc PrimaryKey.encode mprimaryKey
 
-        PForeignKey _ _ mpk ->
-            enc PrimaryKey.encode mpk
+        PForeignKey mprimaryKey _ ->
+            enc PrimaryKey.encode mprimaryKey
 
         BadValue _ ->
             Encode.null
@@ -83,7 +91,7 @@ isNothing value =
         PPrimaryKey (Just _) ->
             False
 
-        PForeignKey _ _ (Just _) ->
+        PForeignKey (Just _) _ ->
             False
 
         _ ->
@@ -133,7 +141,7 @@ isPrimaryKey value =
 isForeignKey : Value -> Bool
 isForeignKey value =
     case value of
-        PForeignKey _ _ _ ->
+        PForeignKey _ _ ->
             True
 
         _ ->
@@ -181,21 +189,21 @@ toString value =
         PTime mtime ->
             Maybe.map (Iso8601.fromTime >> String.slice 0 19) mtime
 
-        PPrimaryKey mpk ->
-            Maybe.map PrimaryKey.toString mpk
+        PPrimaryKey mprimaryKey ->
+            Maybe.map PrimaryKey.toString mprimaryKey
 
-        PForeignKey _ _ mpk ->
-            Maybe.map PrimaryKey.toString mpk
+        PForeignKey mprimaryKey _ ->
+            Maybe.map PrimaryKey.toString mprimaryKey
 
         _ ->
             Nothing
 
 
-foreignKeyReference : Value -> Maybe ( String, String )
+foreignKeyReference : Value -> Maybe ForeignKeyParams
 foreignKeyReference value =
     case value of
-        PForeignKey column _ _ ->
-            Just column
+        PForeignKey _ params ->
+            Just params
 
         _ ->
             Nothing

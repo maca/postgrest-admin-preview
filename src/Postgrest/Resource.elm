@@ -149,18 +149,19 @@ decoderFold identifiers definition name _ prevDec =
                 Just (Column required (PPrimaryKey _)) ->
                     maybe PrimaryKey.decoder |> map PPrimaryKey required dict
 
-                Just (Column required (PForeignKey ( table, col ) _ _)) ->
+                Just (Column required (PForeignKey _ params)) ->
                     let
-                        mapFun d pk =
+                        foreignKeyCons label primaryKey_ =
                             insert dict <|
                                 Field Nothing required False <|
-                                    PForeignKey ( table, col ) d pk
+                                    PForeignKey primaryKey_
+                                        { params | label = label }
 
-                        refDec i =
-                            Decode.at [ table, i ] (nullable string)
+                        referenceDecoder i =
+                            Decode.at [ params.table, i ] (nullable string)
                     in
-                    Decode.map2 mapFun
-                        (Decode.oneOf <| List.map refDec identifiers)
+                    Decode.map2 foreignKeyCons
+                        (Decode.oneOf <| List.map referenceDecoder identifiers)
                         (maybe <| Decode.field name PrimaryKey.decoder)
 
                 Just (Column required (BadValue _)) ->
