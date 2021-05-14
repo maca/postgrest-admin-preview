@@ -116,31 +116,29 @@ decoderFold definition name _ prevDec =
 
         map cons required dict dec =
             Decode.field name dec
+                |> maybe
                 |> Decode.map
-                    (insert dict
-                        << Field Nothing required False
-                        << cons
-                    )
+                    (insert dict << Field Nothing required False << cons)
 
         foldFun dict =
             case Dict.get name definition of
                 Just (Column required (PFloat _)) ->
-                    maybe float |> map PFloat required dict
+                    float |> map PFloat required dict
 
                 Just (Column required (PInt _)) ->
-                    maybe int |> map PInt required dict
+                    int |> map PInt required dict
 
                 Just (Column required (PString _)) ->
-                    maybe string |> map PString required dict
+                    string |> map PString required dict
 
                 Just (Column required (PBool _)) ->
-                    maybe bool |> map PBool required dict
+                    bool |> map PBool required dict
 
                 Just (Column required (PTime _)) ->
-                    maybe Time.decoder |> map PTime required dict
+                    Time.decoder |> map PTime required dict
 
                 Just (Column required (PPrimaryKey _)) ->
-                    maybe PrimaryKey.decoder |> map PPrimaryKey required dict
+                    PrimaryKey.decoder |> map PPrimaryKey required dict
 
                 Just (Column required (PForeignKey _ params)) ->
                     let
@@ -157,10 +155,10 @@ decoderFold definition name _ prevDec =
                         (maybe <| Decode.field name PrimaryKey.decoder)
 
                 Just (Column required (BadValue _)) ->
-                    map BadValue required dict Decode.value
+                    Decode.fail ""
 
                 Nothing ->
-                    map BadValue False dict Decode.value
+                    Decode.fail ""
     in
     Decode.andThen foldFun prevDec
 

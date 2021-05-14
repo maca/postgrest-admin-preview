@@ -22,7 +22,6 @@ import Html.Attributes
         , classList
         , for
         , id
-        , list
         )
 import Html.Events exposing (onInput)
 import Maybe.Extra as Maybe
@@ -33,6 +32,7 @@ import Postgrest.Resource.Client as Client exposing (Client)
 import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
 import Result
 import String.Extra as String
+import String.Mark as Mark
 import Task
 
 
@@ -41,7 +41,7 @@ type alias Record =
 
 
 type alias AssociationParams =
-    { resources : List Resource
+    { results : List Resource
     , userInput : Maybe String
     }
 
@@ -75,7 +75,15 @@ update pgParams msg record =
         AutocompleteInput name field params value ->
             let
                 params_ =
-                    { params | userInput = Just value }
+                    { params
+                        | userInput = Just value
+                        , results =
+                            if value == "" then
+                                []
+
+                            else
+                                params.results
+                    }
 
                 input =
                     Association field params_
@@ -94,7 +102,7 @@ update pgParams msg record =
                 Ok resources ->
                     let
                         input =
-                            Association field { params | resources = resources }
+                            Association field { params | results = resources }
                     in
                     ( Dict.insert name input record, Cmd.none )
 
@@ -151,7 +159,7 @@ fromField field =
             DateTime field
 
         PForeignKey _ { table, label } ->
-            Association field { userInput = label, resources = [] }
+            Association field { userInput = label, results = [] }
 
         PPrimaryKey _ ->
             Blank field
@@ -226,26 +234,54 @@ wrapInput input name buildInput =
 
 
 displayAutocompleteInput : AssociationParams -> Field -> String -> Html Msg
-displayAutocompleteInput ({ userInput } as params) field name =
+displayAutocompleteInput params field name =
     let
-        listName =
-            "list-" ++ name
+        _ =
+            Debug.log "result" params
+
+        inputStr =
+            Maybe.withDefault "" params.userInput
+
+        listing =
+            List.map (autocompleteOption field inputStr) params.results
     in
     div []
         [ Html.input
             [ onInput <| AutocompleteInput name field params
             , id name
-            , list listName
             , if field.required then
                 attribute "aria-required" "true"
 
               else
                 class ""
             , Html.Attributes.type_ "text"
-            , Html.Attributes.value <| Maybe.withDefault "" userInput
+            , Html.Attributes.value inputStr
             ]
             []
+        , ul [ class "autocomplete" ] listing
         ]
+
+
+autocompleteOption field userInput result =
+    let
+        markOpts =
+            Mark.defaultOptions
+
+        mark =
+            Mark.markWith { markOpts | minTermLength = 1 } userInput
+
+        get key =
+            Dict.get key result
+    in
+    case Value.foreignKeyParams field.value of
+        Just { primaryKeyName, labelColumnName } ->
+            [ get primaryKeyName, Maybe.andThen get labelColumnName ]
+                |> List.filterMap (Maybe.andThen (.value >> Value.toString))
+                |> List.map (span [] << mark)
+                |> li []
+
+        Nothing ->
+            text ""
 
 
 displayInput : String -> Input -> Maybe String -> String -> Html Msg
@@ -302,12 +338,13 @@ fetchResources ({ schema, jwt } as client) tagger userInput params =
                     String.toInt userInput
                         |> Maybe.map (PG.param "id" << PG.eq << PG.int)
 
+                ilike column input =
+                    PG.param column <| PG.ilike ("*" ++ input ++ "*")
+
                 labelQuery =
-                    params.labelColumnName
-                        |> Maybe.map
-                            (\n ->
-                                PG.param n <| PG.ilike ("*" ++ userInput ++ "*")
-                            )
+                    Maybe.map2 ilike
+                        params.labelColumnName
+                        (String.nonBlank userInput)
 
                 queries =
                     List.filterMap identity [ idQuery, labelQuery ]
@@ -317,7 +354,8 @@ fetchResources ({ schema, jwt } as client) tagger userInput params =
 
             else
                 Client.fetchMany client definition params.table
-                    |> PG.setParams [ PG.select selects, PG.or queries ]
+                    |> PG.setParams
+                        [ PG.select selects, PG.or queries, PG.limit 8 ]
                     |> PG.toCmd jwt (tagger << Result.mapError PGError)
 
         Nothing ->
