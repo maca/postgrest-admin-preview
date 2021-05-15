@@ -68,6 +68,7 @@ type Input
     | Number Field
     | Checkbox Field
     | DateTime Field
+    | Date Field
     | Association Field Autocomplete
     | Blank Field
 
@@ -176,6 +177,9 @@ updateInput value input =
         DateTime field ->
             DateTime <| Field.update value field
 
+        Date field ->
+            Date <| Field.update value field
+
         Association field autocomplete ->
             Association (Field.update value field) autocomplete
 
@@ -196,6 +200,9 @@ toField input =
             field
 
         DateTime field ->
+            field
+
+        Date field ->
             field
 
         Association field _ ->
@@ -222,6 +229,9 @@ fromField field =
 
         PTime _ ->
             DateTime field
+
+        PDate _ ->
+            Date field
 
         PForeignKey _ params ->
             Association field
@@ -279,6 +289,11 @@ view name input =
         DateTime { value } ->
             Value.toString value
                 |> displayInput "datetime-local" input
+                |> wrapInput input name
+
+        Date { value } ->
+            Value.toString value
+                |> displayInput "date" input
                 |> wrapInput input name
 
         Association field params ->

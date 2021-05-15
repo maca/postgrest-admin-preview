@@ -85,6 +85,9 @@ valueDecoder =
                     Triple "string" "timestamp without time zone" _ ->
                         mapValue PTime Time.decoder
 
+                    Triple "string" "date" _ ->
+                        mapValue PDate Time.decoder
+
                     Triple "string" _ maybeDesc ->
                         Decode.oneOf
                             [ mapPrimaryKey maybeDesc

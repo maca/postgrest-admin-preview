@@ -35,6 +35,7 @@ type Value
     | PString (Maybe String)
     | PBool (Maybe Bool)
     | PTime (Maybe Time.Posix)
+    | PDate (Maybe Time.Posix)
     | PPrimaryKey (Maybe PrimaryKey)
     | PForeignKey (Maybe PrimaryKey) ForeignKeyParams
     | BadValue Decode.Value
@@ -60,6 +61,9 @@ encode value =
             enc Encode.bool mbool
 
         PTime mtime ->
+            enc Encode.string (Maybe.map Iso8601.fromTime mtime)
+
+        PDate mtime ->
             enc Encode.string (Maybe.map Iso8601.fromTime mtime)
 
         PPrimaryKey mprimaryKey ->
@@ -88,6 +92,9 @@ isNothing value =
             False
 
         PTime (Just _) ->
+            False
+
+        PDate (Just _) ->
             False
 
         PPrimaryKey (Just _) ->
@@ -125,6 +132,9 @@ updateWithString string value =
                         string
             in
             PTime <| Result.toMaybe <| Iso8601.toTime string_
+
+        PDate _ ->
+            PDate <| Result.toMaybe <| Iso8601.toTime string
 
         other ->
             other
@@ -190,6 +200,9 @@ toString value =
 
         PTime mtime ->
             Maybe.map (Iso8601.fromTime >> String.slice 0 19) mtime
+
+        PDate mtime ->
+            Maybe.map (Iso8601.fromTime >> String.slice 0 10) mtime
 
         PPrimaryKey mprimaryKey ->
             Maybe.map PrimaryKey.toString mprimaryKey

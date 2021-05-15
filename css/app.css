@@ -6,11 +6,7 @@
     grid-area: main-area;
 }
 
-.icono-cross {
-    cursor: pointer;
-}
-
-.listing-row {
+.icono-cross, .listing-row {
     cursor: pointer;
 }
 

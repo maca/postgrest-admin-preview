@@ -143,6 +143,9 @@ decoderFold definition name _ prevDec =
                 Just (Column required (PTime _)) ->
                     Time.decoder |> map PTime required dict
 
+                Just (Column required (PDate _)) ->
+                    Time.decoder |> map PDate required dict
+
                 Just (Column required (PPrimaryKey _)) ->
                     PrimaryKey.decoder |> map PPrimaryKey required dict
 
