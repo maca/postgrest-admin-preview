@@ -390,9 +390,7 @@ associationLink { value } =
                     PrimaryKey.toString primaryKey
             in
             a
-                [ href <| Url.absolute [ table, id ] []
-                , target "_blank"
-                ]
+                [ href <| Url.absolute [ table, id ] [], target "_blank" ]
                 [ text id ]
 
         _ ->
@@ -435,11 +433,16 @@ displayInput type_ input mstring name =
 displaySelect : List String -> Input -> Maybe String -> String -> Html Msg
 displaySelect options input mstring name =
     let
+        optionValues =
+            if isRequired input then
+                options
+
+            else
+                "" :: options
+
         selectOption opt =
             Html.option
-                [ Html.Attributes.value opt
-                , selected <| mstring == Just opt
-                ]
+                [ Html.Attributes.value opt, selected <| mstring == Just opt ]
                 [ text <| String.humanize opt ]
     in
     Html.select
@@ -448,7 +451,7 @@ displaySelect options input mstring name =
         , required <| isRequired input
         , Html.Attributes.value <| Maybe.withDefault "" mstring
         ]
-        (List.map selectOption options)
+        (List.map selectOption optionValues)
 
 
 displayCheckbox : Input -> Maybe Bool -> String -> Html Msg

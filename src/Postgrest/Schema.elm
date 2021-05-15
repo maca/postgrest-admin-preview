@@ -73,10 +73,6 @@ valueDecoder =
         (maybe <| field "enum" (list string))
         |> andThen
             (\data ->
-                let
-                    _ =
-                        Debug.log "cuad" data
-                in
                 case data of
                     Cuadruple "number" _ _ _ ->
                         mapValue PFloat float
