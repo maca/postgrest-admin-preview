@@ -24,6 +24,8 @@ import Html.Attributes
         , href
         , id
         , list
+        , required
+        , selected
         , target
         )
 import Html.Events exposing (onInput)
@@ -65,6 +67,7 @@ type alias AutocompleteResult =
 
 type Input
     = Text Field
+    | Select Field (List String)
     | Number Field
     | Checkbox Field
     | DateTime Field
@@ -168,6 +171,9 @@ updateInput value input =
         Text field ->
             Text <| Field.update value field
 
+        Select field opts ->
+            Select (Field.update value field) opts
+
         Number field ->
             Number <| Field.update value field
 
@@ -191,6 +197,9 @@ toField : Input -> Field
 toField input =
     case input of
         Text field ->
+            field
+
+        Select field opts ->
             field
 
         Number field ->
@@ -217,6 +226,9 @@ fromField field =
     case field.value of
         PString _ ->
             Text field
+
+        PEnum _ opts ->
+            Select field opts
 
         PFloat _ ->
             Number field
@@ -276,6 +288,11 @@ view name input =
                 |> displayInput "text" input
                 |> wrapInput input name
 
+        Select { value } opts ->
+            Value.toString value
+                |> displaySelect opts input
+                |> wrapInput input name
+
         Number { value } ->
             Value.toString value
                 |> displayInput "number" input
@@ -299,7 +316,7 @@ view name input =
         Association field params ->
             displayAutocompleteInput params field |> wrapInput input name
 
-        _ ->
+        Blank _ ->
             text ""
 
 
@@ -356,11 +373,7 @@ displayAutocompleteInput ({ foreignKeyParams } as autocomplete) field name =
             [ onInput inputCallback
             , id name
             , list foreignKeyParams.table
-            , if field.required then
-                attribute "aria-required" "true"
-
-              else
-                class ""
+            , required field.required
             , Html.Attributes.type_ "text"
             , Html.Attributes.value autocomplete.userInput
             ]
@@ -412,15 +425,30 @@ displayInput type_ input mstring name =
     Html.input
         [ onInput <| Changed name input
         , id name
-        , if isRequired input then
-            attribute "aria-required" "true"
-
-          else
-            class ""
+        , required <| isRequired input
         , Html.Attributes.type_ type_
         , Html.Attributes.value <| Maybe.withDefault "" mstring
         ]
         []
+
+
+displaySelect : List String -> Input -> Maybe String -> String -> Html Msg
+displaySelect options input mstring name =
+    let
+        selectOption opt =
+            Html.option
+                [ Html.Attributes.value opt
+                , selected <| mstring == Just opt
+                ]
+                [ text <| String.humanize opt ]
+    in
+    Html.select
+        [ onInput <| Changed name input
+        , id name
+        , required <| isRequired input
+        , Html.Attributes.value <| Maybe.withDefault "" mstring
+        ]
+        (List.map selectOption options)
 
 
 displayCheckbox : Input -> Maybe Bool -> String -> Html Msg

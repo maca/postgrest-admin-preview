@@ -10,6 +10,7 @@ import Json.Decode as Decode
         , field
         , float
         , int
+        , list
         , maybe
         , string
         )
@@ -24,8 +25,8 @@ type alias Schema =
     Dict String Definition
 
 
-type Triple a b c
-    = Triple a b c
+type Cuadruple a b c d
+    = Cuadruple a b c d
 
 
 decoder : Decoder Schema
@@ -65,41 +66,50 @@ decoder =
 
 valueDecoder : Decoder Value
 valueDecoder =
-    Decode.map3 Triple
+    Decode.map4 Cuadruple
         (field "type" string)
         (field "format" string)
         (maybe <| field "description" string)
+        (maybe <| field "enum" (list string))
         |> andThen
             (\data ->
+                let
+                    _ =
+                        Debug.log "cuad" data
+                in
                 case data of
-                    Triple "number" _ _ ->
+                    Cuadruple "number" _ _ _ ->
                         mapValue PFloat float
 
-                    Triple "integer" _ maybeDesc ->
+                    Cuadruple "integer" _ maybeDesc _ ->
                         Decode.oneOf
                             [ mapPrimaryKey maybeDesc
                             , mapForeignKey maybeDesc
                             , mapValue PInt int
                             ]
 
-                    Triple "string" "timestamp without time zone" _ ->
+                    Cuadruple "string" "timestamp without time zone" _ _ ->
                         mapValue PTime Time.decoder
 
-                    Triple "string" "date" _ ->
+                    Cuadruple "string" "date" _ _ ->
                         mapValue PDate Time.decoder
 
-                    Triple "string" _ maybeDesc ->
+                    Cuadruple "string" _ _ (Just enum) ->
+                        mapValue (flip PEnum enum) string
+
+                    -- mapValue PString string
+                    Cuadruple "string" _ maybeDesc _ ->
                         Decode.oneOf
                             [ mapPrimaryKey maybeDesc
                             , mapForeignKey maybeDesc
                             , mapValue PString string
                             ]
 
-                    Triple "boolean" _ _ ->
+                    Cuadruple "boolean" _ _ _ ->
                         mapValue PBool bool
 
-                    Triple _ _ _ ->
-                        Decode.map BadValue (field "default" Decode.value)
+                    Cuadruple _ _ _ _ ->
+                        Decode.map BadValue Decode.value
             )
 
 
