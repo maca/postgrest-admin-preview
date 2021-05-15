@@ -68,6 +68,7 @@
 
 input, textarea, .grow-wrap > textarea, .grow-wrap::after {
     font-family: 'Roboto', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+    font: 400 13.3333px Arial;
 }
 
 /* textarea autogrow
