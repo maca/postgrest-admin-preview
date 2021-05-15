@@ -4,6 +4,7 @@ module Postgrest.Resource exposing
     , decoder
     , encode
     , errors
+    , fieldToString
     , hasErrors
     , id
     , primaryKey
@@ -24,7 +25,7 @@ import Json.Decode as Decode
         , string
         )
 import Json.Encode as Encode
-import Maybe.Extra exposing (isNothing)
+import Maybe.Extra as Maybe exposing (isNothing)
 import Postgrest.Client as PG
 import Postgrest.Field as Field exposing (Field)
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
@@ -83,6 +84,11 @@ decoder definition =
 id : Resource -> Maybe String
 id resource =
     primaryKey resource |> Maybe.map PrimaryKey.toString
+
+
+fieldToString : String -> Resource -> Maybe String
+fieldToString key resource =
+    Dict.get key resource |> Maybe.andThen (.value >> Value.toString)
 
 
 primaryKey : Resource -> Maybe PrimaryKey
@@ -154,7 +160,7 @@ decoderFold definition name _ prevDec =
                         (maybe <| referenceDecoder params)
                         (maybe <| Decode.field name PrimaryKey.decoder)
 
-                Just (Column required (BadValue _)) ->
+                Just (Column _ (BadValue _)) ->
                     Decode.fail ""
 
                 Nothing ->

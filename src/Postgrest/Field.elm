@@ -12,13 +12,10 @@ type alias Field =
     }
 
 
-update : String -> Field -> Field
-update string field =
+update : Value -> Field -> Field
+update value field =
     validate
-        { field
-            | value = Value.update string field.value
-            , changed = True
-        }
+        { field | value = value, changed = True }
 
 
 validate : Field -> Field

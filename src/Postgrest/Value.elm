@@ -9,7 +9,7 @@ module Postgrest.Value exposing
     , isTrue
     , toPrimaryKey
     , toString
-    , update
+    , updateWithString
     )
 
 import Iso8601
@@ -100,8 +100,8 @@ isNothing value =
             True
 
 
-update : String -> Value -> Value
-update string value =
+updateWithString : String -> Value -> Value
+updateWithString string value =
     case value of
         PString _ ->
             PString <| String.nonBlank string
