@@ -1,15 +1,46 @@
+/* layout */
 .resources-menu {
     grid-area: menu;
+    background: gray;
+    min-height: 100vh;
+    padding: 4rem 0;
 }
 
 .main-area {
     grid-area: main-area;
+    padding: 4rem;
 }
 
-.icono-cross, .listing-row {
-    cursor: pointer;
+.main-container {
+    display: grid;
+    grid-template-columns: 10% auto;
+    grid-template-rows: auto;
+    grid-template-areas: "menu main-area";
 }
 
+
+.resources-menu ul {
+    list-style-type: none;
+}
+
+.resources-menu li {
+    margin-bottom: 0;
+}
+
+.resources-menu a {
+    color: white;
+    padding: 2rem 2rem;
+    display: block;
+}
+
+.resources-menu a:hover {
+    color: gray;
+    background: #333;
+    display: block;
+}
+
+
+/* forms */
 .field .error {
     color: red;
 }
@@ -34,14 +65,10 @@
     text-overflow: ellipsis;
 }
 
-.main-container {
-    display: grid;
-    grid-template-columns: 15% auto;
-    grid-template-rows: auto;
-    grid-template-areas:
-        "menu main-area"
-}
 
+input, textarea, .grow-wrap > textarea, .grow-wrap::after {
+    font-family: 'Roboto', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+}
 
 /* textarea autogrow
 https://css-tricks.com/the-cleanest-trick-for-autogrowing-textareas/
@@ -64,6 +91,10 @@ https://css-tricks.com/the-cleanest-trick-for-autogrowing-textareas/
 }
 
 .grow-wrap > textarea, .grow-wrap::after {
-  font: inherit;
   grid-area: 1 / 1 / 2 / 2;
+}
+
+/* misc */
+.icono-cross, .listing-row {
+    cursor: pointer;
 }
