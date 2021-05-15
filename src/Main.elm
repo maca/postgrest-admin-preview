@@ -8,7 +8,23 @@ import Dict.Extra as Dict
 import Error exposing (Error(..))
 import Form.Input as Input exposing (Input)
 import Form.Record as Record exposing (Record)
-import Html exposing (..)
+import Html
+    exposing
+        ( Html
+        , a
+        , aside
+        , button
+        , div
+        , fieldset
+        , form
+        , h1
+        , i
+        , li
+        , p
+        , section
+        , text
+        , ul
+        )
 import Html.Attributes
     exposing
         ( autocomplete
@@ -16,17 +32,16 @@ import Html.Attributes
         , disabled
         , href
         , novalidate
-        , target
         )
-import Html.Events as Events exposing (onClick, onSubmit)
+import Html.Events exposing (onClick, onSubmit)
 import Http
 import Inflect as String
 import Json.Decode as Decode
+import Listing exposing (Listing(..))
 import Postgrest.Client as PG
-import Postgrest.Field exposing (Field)
-import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
-import Postgrest.Resource as Resource exposing (Resource)
-import Postgrest.Resource.Client as Client
+import Postgrest.PrimaryKey as PrimaryKey
+import Postgrest.Resource exposing (Resource)
+import Postgrest.Resource.Client as Client exposing (Client)
 import Postgrest.Schema as Schema exposing (Schema)
 import Postgrest.Schema.Definition as Definition
     exposing
@@ -36,7 +51,6 @@ import Postgrest.Schema.Definition as Definition
 import Postgrest.Value exposing (Value(..))
 import Result exposing (mapError)
 import String.Extra as String
-import Time.Extra as Time
 import Url exposing (Url)
 import Url.Builder as Url
 import Url.Parser as Parser exposing ((</>), Parser)
@@ -44,10 +58,9 @@ import Url.Parser as Parser exposing ((</>), Parser)
 
 type Msg
     = SchemaFetched (Result Error Schema)
-    | ListingFetched (Result Error (List Resource))
+    | ListingChanged Listing Listing.Msg
     | RecordFetched (Result Error Record)
     | RecordSaved (Result Error Record)
-    | ResourceLinkClicked String String
     | InputChanged Input.Msg
     | FormSubmitted
     | MessageDismissed
@@ -65,12 +78,6 @@ type Edit
     = EditRequested String String
     | EditLoading EditionParams
     | EditReady EditionParams Record
-
-
-type Listing
-    = ListingRequested String
-    | ListingLoading String Definition
-    | ListingReady String Definition (List Resource)
 
 
 type Route
@@ -102,20 +109,11 @@ type Message
 
 
 type alias Model =
-    { route : Route
-    , key : Nav.Key
-    , schema : Schema
-    , host : String
-    , jwt : PG.JWT
-    , message : Maybe Message
-    }
-
-
-type alias EventConfig =
-    { stopPropagation : Bool
-    , preventDefault : Bool
-    , message : Msg
-    }
+    Client
+        { route : Route
+        , key : Nav.Key
+        , message : Maybe Message
+        }
 
 
 main : Program () Model Msg
@@ -169,23 +167,14 @@ update msg model =
                 Err _ ->
                     ( model, Cmd.none )
 
-        ListingFetched result ->
-            case result of
-                Ok records ->
-                    case model.route of
-                        Listing (ListingLoading name definition) ->
-                            let
-                                route =
-                                    Listing <|
-                                        ListingReady name definition records
-                            in
-                            ( { model | route = route }, Cmd.none )
-
-                        _ ->
-                            ( model, Cmd.none )
-
-                Err _ ->
-                    ( model, Cmd.none )
+        ListingChanged plisting lMsg ->
+            let
+                ( listing, cmd ) =
+                    Listing.update model plisting lMsg
+            in
+            ( { model | route = Listing listing }
+            , Cmd.map (ListingChanged listing) cmd
+            )
 
         RecordFetched result ->
             case result of
@@ -204,11 +193,6 @@ update msg model =
 
                 Err _ ->
                     ( model, Cmd.none )
-
-        ResourceLinkClicked resourcesName id ->
-            ( model
-            , Nav.pushUrl model.key <| Url.absolute [ resourcesName, id ] []
-            )
 
         RecordSaved result ->
             case result of
@@ -274,19 +258,23 @@ update msg model =
 urlChanged : Model -> ( Model, Cmd Msg )
 urlChanged model =
     case model.route of
-        Listing (ListingRequested resourcesName) ->
-            case Dict.get resourcesName model.schema of
+        Listing listing ->
+            let
+                rname =
+                    Listing.resourcesName listing
+            in
+            case Dict.get rname model.schema of
                 Just definition ->
-                    ( { model
-                        | message = Nothing
-                        , route =
-                            Listing <| ListingLoading resourcesName definition
-                      }
-                    , fetchResources resourcesName model
+                    let
+                        ( listing_, cmd ) =
+                            Listing.load model rname definition
+                    in
+                    ( { model | route = Listing listing_, message = Nothing }
+                    , Cmd.map (ListingChanged listing_) cmd
                     )
 
                 Nothing ->
-                    ( model, Error.fail Failure <| BadSchema resourcesName )
+                    ( model, Error.fail Failure <| BadSchema rname )
 
         Edit (EditRequested resourcesName id) ->
             case Dict.get resourcesName model.schema of
@@ -449,14 +437,8 @@ displayMainContent model =
         Root ->
             text ""
 
-        Listing (ListingReady resourcesName definition records) ->
-            displayListing definition resourcesName records
-
-        Listing (ListingRequested _) ->
-            text ""
-
-        Listing (ListingLoading _ _) ->
-            text ""
+        Listing listing ->
+            Html.map (ListingChanged listing) <| Listing.view listing
 
         New (NewReady params record) ->
             displayForm params record
@@ -475,42 +457,6 @@ displayMainContent model =
 
         NotFound ->
             notFound
-
-
-displayListing : Definition -> String -> List Resource -> Html Msg
-displayListing definition resourcesName records =
-    let
-        fieldNames =
-            Dict.toList definition
-                |> List.sortWith sortColumns
-                |> List.map Tuple.first
-
-        toHeader =
-            String.humanize >> text >> List.singleton >> th []
-    in
-    section
-        []
-        [ displayListHeader resourcesName
-        , table []
-            [ thead [] [ tr [] <| List.map toHeader fieldNames ]
-            , tbody [] <|
-                List.map (displayRow resourcesName fieldNames) records
-            ]
-        ]
-
-
-displayListHeader : String -> Html Msg
-displayListHeader resourcesName =
-    header []
-        [ h1 [] [ text <| String.humanize resourcesName ]
-        , div []
-            [ a
-                [ class "button"
-                , href <| Url.absolute [ resourcesName, "new" ] []
-                ]
-                [ text <| "New " ++ String.singularize resourcesName ]
-            ]
-        ]
 
 
 displayForm : ResourceParams a -> Record -> Html Msg
@@ -603,91 +549,9 @@ recordLabelHelp record fieldName =
             Nothing
 
 
-displayRow : String -> List String -> Resource -> Html Msg
-displayRow resourcesName names record =
-    let
-        toTd =
-            displayValue resourcesName >> List.singleton >> td []
-
-        id =
-            Resource.id record |> Maybe.withDefault ""
-    in
-    List.filterMap (flip Dict.get record >> Maybe.map toTd) names
-        |> tr
-            [ class "listing-row"
-            , clickResource resourcesName id
-            ]
-
-
-clickResource : String -> String -> Html.Attribute Msg
-clickResource resourcesName id =
-    let
-        msg =
-            ResourceLinkClicked resourcesName id
-    in
-    Events.custom "click" <|
-        Decode.map (EventConfig True True) (Decode.succeed msg)
-
-
-displayValue : String -> Field -> Html Msg
-displayValue resourcesName { value } =
-    case value of
-        PFloat (Just float) ->
-            text <| String.fromFloat float
-
-        PInt (Just int) ->
-            text <| String.fromInt int
-
-        PString (Just string) ->
-            text string
-
-        PBool (Just True) ->
-            text "true"
-
-        PBool (Just False) ->
-            text "false"
-
-        PTime (Just time) ->
-            text <| Time.format time
-
-        PDate (Just time) ->
-            text <| Time.toDateString time
-
-        PForeignKey (Just primaryKey) { table, label } ->
-            recordLink table primaryKey label
-
-        PPrimaryKey (Just primaryKey) ->
-            recordLink resourcesName primaryKey Nothing
-
-        BadValue _ ->
-            text "?"
-
-        _ ->
-            text ""
-
-
-recordLink : String -> PrimaryKey -> Maybe String -> Html Msg
-recordLink resourcesName primaryKey mtext =
-    let
-        id =
-            PrimaryKey.toString primaryKey
-    in
-    a
-        [ href <| Url.absolute [ resourcesName, id ] []
-        , target "_self"
-        , clickResource resourcesName id
-        ]
-        [ text <| Maybe.withDefault id mtext ]
-
-
 notFound : Html Msg
 notFound =
     text "Not found"
-
-
-sortColumns : ( String, Column ) -> ( String, Column ) -> Order
-sortColumns ( name, Column _ val ) ( name_, Column _ val_ ) =
-    sortValues ( name, val ) ( name_, val_ )
 
 
 sortInputs : ( String, Input ) -> ( String, Input ) -> Order
@@ -752,21 +616,6 @@ decodeSchema result =
 
         Err err ->
             Err <| HttpError err
-
-
-
--- Http interactions
-
-
-fetchResources : String -> Model -> Cmd Msg
-fetchResources resourcesName ({ schema, jwt } as model) =
-    case Dict.get resourcesName schema of
-        Just definition ->
-            Client.fetchMany model definition resourcesName
-                |> PG.toCmd jwt (ListingFetched << mapError PGError)
-
-        Nothing ->
-            Error.fail Failure <| BadSchema resourcesName
 
 
 

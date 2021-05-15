@@ -25,7 +25,6 @@ import Html.Attributes
         , id
         , list
         , required
-        , rows
         , selected
         , target
         )
@@ -207,7 +206,7 @@ toField input =
         TextArea field ->
             field
 
-        Select field opts ->
+        Select field _ ->
             field
 
         Number field ->
@@ -572,34 +571,3 @@ findResource ({ foreignKeyParams } as autocomplete) userInput =
     List.filter findByOptionText autocomplete.results
         ++ List.filter findByLabel autocomplete.results
         |> List.head
-
-
-updateAssociation : String -> Field -> Autocomplete -> ( Field, Input )
-updateAssociation name field ({ foreignKeyParams, userInput } as ac) =
-    let
-        mresource =
-            findResource ac userInput
-
-        mprimaryKey =
-            Maybe.andThen Resource.primaryKey mresource
-
-        label =
-            Maybe.andThen (resourceLabel foreignKeyParams) mresource
-
-        foreignKeyParams_ =
-            { foreignKeyParams | label = label }
-
-        value =
-            PForeignKey mprimaryKey foreignKeyParams_
-
-        field_ =
-            Field.update value field
-
-        autocomplete_ =
-            { ac
-                | userInput = Maybe.withDefault userInput label
-                , foreignKeyParams = foreignKeyParams_
-                , blocked = False
-            }
-    in
-    ( field_, Association field_ autocomplete_ )
