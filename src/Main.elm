@@ -36,7 +36,6 @@ import Postgrest.Schema.Definition as Definition
 import Postgrest.Value exposing (Value(..))
 import Result exposing (mapError)
 import String.Extra as String
-import Task
 import Time.Extra as Time
 import Url exposing (Url)
 import Url.Builder as Url

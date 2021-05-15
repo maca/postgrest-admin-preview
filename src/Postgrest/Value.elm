@@ -130,7 +130,7 @@ updateWithString string value =
         PText _ ->
             PText <| String.nonBlank string
 
-        PEnum prev opts ->
+        PEnum _ opts ->
             PEnum (String.nonBlank string) opts
 
         PFloat _ ->
