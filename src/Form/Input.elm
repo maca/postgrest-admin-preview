@@ -86,8 +86,14 @@ update client msg record =
 
         AutocompleteInput name field autocomplete "" ->
             let
+                value =
+                    PForeignKey Nothing autocomplete.foreignKeyParams
+
+                field_ =
+                    Field.update value field
+
                 association =
-                    Association field
+                    Association field_
                         { autocomplete | userInput = "", blocked = False }
             in
             ( Dict.insert name association record, Cmd.none )
@@ -328,8 +334,9 @@ displayAutocompleteInput ({ foreignKeyParams } as autocomplete) field name =
             else
                 tagger string
     in
-    div []
+    div [ class "autocomplete-input" ]
         [ datalist
+        , div [ class "association-link" ] [ associationLink field ]
         , Html.input
             [ onInput inputCallback
             , id name
@@ -343,14 +350,13 @@ displayAutocompleteInput ({ foreignKeyParams } as autocomplete) field name =
             , Html.Attributes.value autocomplete.userInput
             ]
             []
-        , associationLink field
         ]
 
 
 associationLink : Field -> Html Msg
 associationLink { value } =
     case value of
-        PForeignKey (Just primaryKey) { table, label } ->
+        PForeignKey (Just primaryKey) { table } ->
             let
                 id =
                     PrimaryKey.toString primaryKey
@@ -359,13 +365,10 @@ associationLink { value } =
                 [ href <| Url.absolute [ table, id ] []
                 , target "_blank"
                 ]
-                [ Maybe.map ((++) (id ++ " - ")) label
-                    |> Maybe.withDefault id
-                    |> text
-                ]
+                [ text id ]
 
         _ ->
-            text ""
+            text "-"
 
 
 autocompleteOption : ForeignKeyParams -> Resource -> Html Msg

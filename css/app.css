@@ -27,6 +27,17 @@
     content: " (req.)"
 }
 
+.autocomplete-input {
+    display: flex;
+}
+
+.field .association-link {
+    min-width: 4rem;
+    max-width: 10rem;
+    padding: .6rem 1.0rem .7rem;
+    text-overflow: ellipsis;
+}
+
 .main-container {
     display: grid;
     grid-template-columns: 15% auto;
