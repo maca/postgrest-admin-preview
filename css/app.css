@@ -27,11 +27,6 @@
     display: flex;
 }
 
-
-textarea {
-    height: inherit !important;
-}
-
 .field .association-link {
     min-width: 4rem;
     max-width: 10rem;
@@ -45,4 +40,30 @@ textarea {
     grid-template-rows: auto;
     grid-template-areas:
         "menu main-area"
+}
+
+
+/* textarea autogrow
+https://css-tricks.com/the-cleanest-trick-for-autogrowing-textareas/
+*/
+.grow-wrap {
+  display: grid;
+}
+
+.grow-wrap::after {
+  content: attr(data-replicated-value) " ";
+  white-space: pre-wrap;
+  visibility: hidden;
+  padding: 2rem;
+}
+
+.grow-wrap > textarea {
+  resize: none;
+  overflow: hidden;
+  height: inherit !important;
+}
+
+.grow-wrap > textarea, .grow-wrap::after {
+  font: inherit;
+  grid-area: 1 / 1 / 2 / 2;
 }

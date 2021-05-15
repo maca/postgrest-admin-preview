@@ -38,7 +38,6 @@ import Postgrest.PrimaryKey as PrimaryKey
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
 import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
-import Regex
 import Result
 import String.Extra as String
 import Url.Builder as Url
@@ -450,23 +449,21 @@ displayInput type_ input mstring name =
 displayTextArea : Input -> Maybe String -> String -> Html Msg
 displayTextArea input mstring name =
     let
-        newLine =
-            Maybe.withDefault Regex.never <|
-                Regex.fromString "([\n\u{000D}])"
-
-        lines =
-            mstring
-                |> Maybe.map (Regex.find newLine >> List.length)
-                |> Maybe.withDefault 0
+        content =
+            Maybe.withDefault "" mstring
     in
-    Html.textarea
-        [ onInput <| Changed name input
-        , id name
-        , required <| isRequired input
-        , rows (lines + 3)
-        , Html.Attributes.value <| Maybe.withDefault "" mstring
+    div
+        [ class "grow-wrap"
+        , attribute "data-replicated-value" content
         ]
-        []
+        [ Html.textarea
+            [ onInput <| Changed name input
+            , id name
+            , required <| isRequired input
+            , Html.Attributes.value content
+            ]
+            []
+        ]
 
 
 displaySelect : List String -> Input -> Maybe String -> String -> Html Msg
