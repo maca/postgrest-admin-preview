@@ -25,6 +25,7 @@ import Html.Attributes
         , id
         , list
         , required
+        , rows
         , selected
         , target
         )
@@ -37,6 +38,7 @@ import Postgrest.PrimaryKey as PrimaryKey
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
 import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
+import Regex
 import Result
 import String.Extra as String
 import Url.Builder as Url
@@ -67,6 +69,7 @@ type alias AutocompleteResult =
 
 type Input
     = Text Field
+    | TextArea Field
     | Select Field (List String)
     | Number Field
     | Checkbox Field
@@ -171,6 +174,9 @@ updateInput value input =
         Text field ->
             Text <| Field.update value field
 
+        TextArea field ->
+            TextArea <| Field.update value field
+
         Select field opts ->
             Select (Field.update value field) opts
 
@@ -189,7 +195,7 @@ updateInput value input =
         Association field autocomplete ->
             Association (Field.update value field) autocomplete
 
-        _ ->
+        Blank _ ->
             input
 
 
@@ -197,6 +203,9 @@ toField : Input -> Field
 toField input =
     case input of
         Text field ->
+            field
+
+        TextArea field ->
             field
 
         Select field opts ->
@@ -226,6 +235,9 @@ fromField field =
     case field.value of
         PString _ ->
             Text field
+
+        PText _ ->
+            TextArea field
 
         PEnum _ opts ->
             Select field opts
@@ -286,6 +298,11 @@ view name input =
         Text { value } ->
             Value.toString value
                 |> displayInput "text" input
+                |> wrapInput input name
+
+        TextArea { value } ->
+            Value.toString value
+                |> displayTextArea input
                 |> wrapInput input name
 
         Select { value } opts ->
@@ -425,6 +442,28 @@ displayInput type_ input mstring name =
         , id name
         , required <| isRequired input
         , Html.Attributes.type_ type_
+        , Html.Attributes.value <| Maybe.withDefault "" mstring
+        ]
+        []
+
+
+displayTextArea : Input -> Maybe String -> String -> Html Msg
+displayTextArea input mstring name =
+    let
+        newLine =
+            Maybe.withDefault Regex.never <|
+                Regex.fromString "([\n\u{000D}])"
+
+        lines =
+            mstring
+                |> Maybe.map (Regex.find newLine >> List.length)
+                |> Maybe.withDefault 0
+    in
+    Html.textarea
+        [ onInput <| Changed name input
+        , id name
+        , required <| isRequired input
+        , rows (lines + 3)
         , Html.Attributes.value <| Maybe.withDefault "" mstring
         ]
         []

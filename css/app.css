@@ -27,6 +27,11 @@
     display: flex;
 }
 
+
+textarea {
+    height: inherit !important;
+}
+
 .field .association-link {
     min-width: 4rem;
     max-width: 10rem;

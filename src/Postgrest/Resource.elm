@@ -137,6 +137,9 @@ decoderFold definition name _ prevDec =
                 Just (Column required (PString _)) ->
                     string |> map PString required dict
 
+                Just (Column required (PText _)) ->
+                    string |> map PText required dict
+
                 Just (Column required (PEnum _ opts)) ->
                     string |> map (flip PEnum opts) required dict
 

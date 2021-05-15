@@ -33,6 +33,7 @@ type Value
     = PFloat (Maybe Float)
     | PInt (Maybe Int)
     | PString (Maybe String)
+    | PText (Maybe String)
     | PEnum (Maybe String) (List String)
     | PBool (Maybe Bool)
     | PTime (Maybe Time.Posix)
@@ -50,6 +51,9 @@ encode value =
     in
     case value of
         PString mstring ->
+            enc Encode.string mstring
+
+        PText mstring ->
             enc Encode.string mstring
 
         PEnum mstring _ ->
@@ -86,6 +90,9 @@ isNothing value =
         PString (Just _) ->
             False
 
+        PText (Just _) ->
+            False
+
         PEnum (Just _) _ ->
             False
 
@@ -119,6 +126,9 @@ updateWithString string value =
     case value of
         PString _ ->
             PString <| String.nonBlank string
+
+        PText _ ->
+            PText <| String.nonBlank string
 
         PEnum prev opts ->
             PEnum (String.nonBlank string) opts
@@ -194,6 +204,9 @@ toString : Value -> Maybe String
 toString value =
     case value of
         PString mstring ->
+            mstring
+
+        PText mstring ->
             mstring
 
         PEnum mstring _ ->

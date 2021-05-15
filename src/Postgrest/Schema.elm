@@ -90,6 +90,9 @@ valueDecoder =
                     Cuadruple "string" "date" _ _ ->
                         mapValue PDate Time.decoder
 
+                    Cuadruple "string" "text" _ _ ->
+                        mapValue PText string
+
                     Cuadruple "string" _ _ (Just enum) ->
                         mapValue (flip PEnum enum) string
 
