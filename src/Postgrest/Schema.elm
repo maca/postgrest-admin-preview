@@ -96,7 +96,6 @@ valueDecoder =
                     Cuadruple "string" _ _ (Just enum) ->
                         mapValue (flip PEnum enum) string
 
-                    -- mapValue PString string
                     Cuadruple "string" _ maybeDesc _ ->
                         Decode.oneOf
                             [ mapPrimaryKey maybeDesc

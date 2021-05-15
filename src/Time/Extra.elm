@@ -1,4 +1,4 @@
-module Time.Extra exposing (decoder, format)
+module Time.Extra exposing (decoder, format, toDateString)
 
 import Iso8601
 import Json.Decode as Decode exposing (Decoder)

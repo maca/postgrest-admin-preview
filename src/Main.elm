@@ -650,6 +650,9 @@ displayValue resourcesName { value } =
         PTime (Just time) ->
             text <| Time.format time
 
+        PDate (Just time) ->
+            text <| Time.toDateString time
+
         PForeignKey (Just primaryKey) { table, label } ->
             recordLink table primaryKey label
 
