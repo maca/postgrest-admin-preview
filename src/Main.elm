@@ -37,7 +37,6 @@ import Inflect as String
 import Listing exposing (Listing)
 import Postgrest.Client as PG
 import Postgrest.PrimaryKey as PrimaryKey
-import Postgrest.Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
 import Postgrest.Schema as Schema exposing (Schema)
 import Postgrest.Schema.Definition as Definition
@@ -46,7 +45,6 @@ import Postgrest.Schema.Definition as Definition
         , Definition
         )
 import Postgrest.Value exposing (Value(..))
-import Result
 import String.Extra as String
 import Task
 import Url exposing (Url)
@@ -59,7 +57,8 @@ type Msg
     = SchemaFetched Schema
     | ListingChanged Listing Listing.Msg
     | RecordFetched Record
-    | RecordSaved Record
+    | RecordCreated Record
+    | RecordUpdated Record
     | InputChanged Input.Msg
     | FormSubmitted
     | MessageDismissed
@@ -182,8 +181,31 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        RecordSaved record ->
-            recordSaved record model
+        RecordCreated record ->
+            case model.route of
+                New (NewReady { resourcesName } _) ->
+                    let
+                        id =
+                            Record.id record |> Maybe.withDefault ""
+                    in
+                    ( confirmation "Creation succeed" model
+                    , Nav.pushUrl model.key <|
+                        Url.absolute [ resourcesName, id ] []
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        RecordUpdated record ->
+            case model.route of
+                Edit (EditReady params _) ->
+                    ( { model | route = Edit <| EditReady params record }
+                        |> confirmation "Update succeed"
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
 
         InputChanged inputMsg ->
             let
@@ -301,12 +323,6 @@ urlChanged model =
             ( model, Cmd.none )
 
 
-mapResourceFetchResult : Result PG.Error Resource -> Result Error Record
-mapResourceFetchResult result =
-    Result.map Record.fromResource result
-        |> Result.mapError PGError
-
-
 fetchOne : Model -> Definition -> String -> String -> Cmd Msg
 fetchOne model definition resourcesName id =
     Client.fetchOne model definition resourcesName id
@@ -326,43 +342,20 @@ confirmation message model =
     { model | message = Just <| Confirmation message }
 
 
-recordSaved : Record -> Model -> ( Model, Cmd Msg )
-recordSaved record model =
-    case model.route of
-        Edit (EditReady params _) ->
-            ( { model | route = Edit <| EditReady params record }
-                |> confirmation "Update succeed"
-            , Cmd.none
-            )
 
-        New (NewReady { resourcesName } _) ->
-            let
-                id =
-                    Record.id record |> Maybe.withDefault ""
-            in
-            ( confirmation "Creation succeed" model
-            , Nav.pushUrl model.key <| Url.absolute [ resourcesName, id ] []
-            )
-
-        _ ->
-            ( model, Cmd.none )
-
-
-setSaveErrors : PG.PostgrestErrorJSON -> Model -> Model
-setSaveErrors err model =
-    case model.route of
-        Edit (EditReady params record) ->
-            { model
-                | route = Edit <| EditReady params <| Record.setError err record
-            }
-
-        New (NewReady params record) ->
-            { model
-                | route = New <| NewReady params <| Record.setError err record
-            }
-
-        _ ->
-            model
+-- setSaveErrors : PG.PostgrestErrorJSON -> Model -> Model
+-- setSaveErrors err model =
+--     case model.route of
+--         Edit (EditReady params record) ->
+--             { model
+--                 | route = Edit <| EditReady params <| Record.setError err record
+--             }
+--         New (NewReady params record) ->
+--             { model
+--                 | route = New <| NewReady params <| Record.setError err record
+--             }
+--         _ ->
+--             model
 
 
 updateRecord : EditionParams -> Model -> Record -> Cmd Msg
@@ -372,7 +365,7 @@ updateRecord { definition, resourcesName, id } model record =
         |> PG.toTask model.jwt
         |> Task.mapError PGError
         |> Task.map Record.fromResource
-        |> attemptWithError Failed RecordSaved
+        |> attemptWithError Failed RecordUpdated
 
 
 createRecord : CreationParams -> Model -> Record -> Cmd Msg
@@ -382,7 +375,7 @@ createRecord { definition, resourcesName } model record =
         |> PG.toTask model.jwt
         |> Task.mapError PGError
         |> Task.map Record.fromResource
-        |> attemptWithError Failed RecordSaved
+        |> attemptWithError Failed RecordCreated
 
 
 

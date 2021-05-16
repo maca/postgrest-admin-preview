@@ -24,17 +24,16 @@ type Error
 
 attemptWithError : (Error -> msg) -> (a -> msg) -> Task Error a -> Cmd msg
 attemptWithError failure success task =
-    Task.attempt (attemptHelp failure success) task
+    let
+        tagger result =
+            case result of
+                Ok a ->
+                    success a
 
-
-attemptHelp : (Error -> msg) -> (a -> msg) -> Result Error a -> msg
-attemptHelp failure success result =
-    case result of
-        Ok a ->
-            success a
-
-        Err err ->
-            failure err
+                Err err ->
+                    failure err
+    in
+    Task.attempt tagger task
 
 
 fail : (Error -> msg) -> Error -> Cmd msg

@@ -40,7 +40,6 @@ import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value exposing (Value(..))
-import Result exposing (Result)
 import String.Extra as String
 import Task
 import Time.Extra as Time
