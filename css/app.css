@@ -8,7 +8,7 @@
 
 .main-area {
     grid-area: main-area;
-    padding: 4rem;
+    height: 100%;
 }
 
 .main-container {
@@ -19,6 +19,7 @@
 }
 
 
+/* menu */
 .resources-menu ul {
     list-style-type: none;
 }
@@ -28,6 +29,7 @@
 }
 
 .resources-menu a {
+    transition: all 0.2s ease;
     color: white;
     padding: 2rem 2rem;
     display: block;
@@ -39,8 +41,46 @@
     display: block;
 }
 
+/* listing */
+.resources-listing {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    box-sizing: border-box;
+    padding: 4rem 0 0 4rem;
+}
+
+.resources-listing header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-right: 4rem;
+}
+
+.resources-listing > div {
+    overflow-y: auto;
+    flex: 0 1 100%;
+    padding-bottom: 4rem;
+}
+
+.resources-listing table {
+    position: relative;
+    table-layout: fixed;
+}
+
+.resources-listing th {
+    background: white;
+    position: sticky;
+    top: 0;
+}
+
 
 /* forms */
+section.resource-form {
+    padding: 4rem;
+}
+
 .field .error {
     color: red;
 }
@@ -70,6 +110,7 @@ input, textarea, .grow-wrap > textarea, .grow-wrap::after {
     font-family: 'Roboto', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
     font: 400 13.3333px Arial;
 }
+
 
 /* textarea autogrow
 https://css-tricks.com/the-cleanest-trick-for-autogrowing-textareas/

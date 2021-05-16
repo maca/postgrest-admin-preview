@@ -181,12 +181,11 @@ update msg model =
                 Ok record ->
                     case model.route of
                         Edit (EditLoading params) ->
-                            ( { model
-                                | route =
+                            let
+                                route =
                                     Edit <| EditReady params record
-                              }
-                            , Cmd.none
-                            )
+                            in
+                            ( { model | route = route }, Cmd.none )
 
                         _ ->
                             ( model, Cmd.none )
@@ -462,7 +461,7 @@ displayMainContent model =
 displayForm : ResourceParams a -> Record -> Html Msg
 displayForm { resourcesName } record =
     section
-        []
+        [ class "resource-form" ]
         [ h1 []
             [ recordLabel record
                 |> Maybe.withDefault "New"
@@ -488,8 +487,7 @@ recordForm record =
             Record.hasErrors record
     in
     form
-        [ class "resource-form"
-        , autocomplete False
+        [ autocomplete False
         , onSubmit FormSubmitted
         , novalidate True
         ]

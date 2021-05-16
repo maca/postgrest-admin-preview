@@ -59,7 +59,7 @@ type alias EventConfig =
 load : Client a -> String -> Definition -> ( Listing, Cmd Msg )
 load client rname definition =
     ( ListingLoading rname definition
-    , fetchResources rname client
+    , fetchResources client rname
     )
 
 
@@ -94,35 +94,32 @@ view : Listing -> Html Msg
 view listing =
     case listing of
         ListingReady rname definition records ->
-            displayListing definition rname records
+            let
+                fieldNames =
+                    Dict.toList definition
+                        |> List.sortWith sortColumns
+                        |> List.map Tuple.first
+
+                toHeader =
+                    String.humanize >> text >> List.singleton >> th []
+            in
+            section
+                [ class "resources-listing" ]
+                [ displayListHeader rname
+                , div []
+                    [ table []
+                        [ thead [] [ tr [] <| List.map toHeader fieldNames ]
+                        , tbody [] <|
+                            List.map (displayRow rname fieldNames) records
+                        ]
+                    ]
+                ]
 
         ListingRequested _ ->
             text ""
 
         ListingLoading _ _ ->
             text ""
-
-
-displayListing : Definition -> String -> List Resource -> Html Msg
-displayListing definition rname records =
-    let
-        fieldNames =
-            Dict.toList definition
-                |> List.sortWith sortColumns
-                |> List.map Tuple.first
-
-        toHeader =
-            String.humanize >> text >> List.singleton >> th []
-    in
-    section
-        []
-        [ displayListHeader rname
-        , table []
-            [ thead [] [ tr [] <| List.map toHeader fieldNames ]
-            , tbody [] <|
-                List.map (displayRow rname fieldNames) records
-            ]
-        ]
 
 
 displayListHeader : String -> Html Msg
@@ -265,8 +262,8 @@ resourcesName listing =
 -- Http interactions
 
 
-fetchResources : String -> Client a -> Cmd Msg
-fetchResources rname ({ schema, jwt } as model) =
+fetchResources : Client a -> String -> Cmd Msg
+fetchResources ({ schema, jwt } as model) rname =
     case Dict.get rname schema of
         Just definition ->
             Client.fetchMany model definition rname
