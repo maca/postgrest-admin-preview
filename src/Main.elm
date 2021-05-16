@@ -5,7 +5,6 @@ import Browser
 import Browser.Navigation as Nav
 import Dict
 import Dict.Extra as Dict
-import Error exposing (Error(..))
 import Form.Input as Input exposing (Input)
 import Form.Record as Record exposing (Record)
 import Html
@@ -34,10 +33,8 @@ import Html.Attributes
         , novalidate
         )
 import Html.Events exposing (onClick, onSubmit)
-import Http
 import Inflect as String
-import Json.Decode as Decode
-import Listing exposing (Listing(..))
+import Listing exposing (Listing)
 import Postgrest.Client as PG
 import Postgrest.PrimaryKey as PrimaryKey
 import Postgrest.Resource exposing (Resource)
@@ -49,24 +46,26 @@ import Postgrest.Schema.Definition as Definition
         , Definition
         )
 import Postgrest.Value exposing (Value(..))
-import Result exposing (mapError)
+import Result
 import String.Extra as String
+import Task
 import Url exposing (Url)
 import Url.Builder as Url
 import Url.Parser as Parser exposing ((</>), Parser)
+import Utils.Task exposing (Error(..), attemptWithError, fail)
 
 
 type Msg
-    = SchemaFetched (Result Error Schema)
+    = SchemaFetched Schema
     | ListingChanged Listing Listing.Msg
-    | RecordFetched (Result Error Record)
-    | RecordSaved (Result Error Record)
+    | RecordFetched Record
+    | RecordSaved Record
     | InputChanged Input.Msg
     | FormSubmitted
     | MessageDismissed
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
-    | Failure (Result Error Never)
+    | Failed Error
 
 
 type New
@@ -149,7 +148,9 @@ init () url key =
             , message = Nothing
             }
     in
-    ( model, getSchema host )
+    ( model
+    , Schema.getSchema host |> attemptWithError Failed SchemaFetched
+    )
 
 
 
@@ -159,13 +160,8 @@ init () url key =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        SchemaFetched result ->
-            case result of
-                Ok schema ->
-                    urlChanged { model | schema = schema }
-
-                Err _ ->
-                    ( model, Cmd.none )
+        SchemaFetched schema ->
+            urlChanged { model | schema = schema }
 
         ListingChanged plisting lMsg ->
             let
@@ -176,33 +172,18 @@ update msg model =
             , Cmd.map (ListingChanged listing) cmd
             )
 
-        RecordFetched result ->
-            case result of
-                Ok record ->
-                    case model.route of
-                        Edit (EditLoading params) ->
-                            let
-                                route =
-                                    Edit <| EditReady params record
-                            in
-                            ( { model | route = route }, Cmd.none )
-
-                        _ ->
-                            ( model, Cmd.none )
-
-                Err _ ->
-                    ( model, Cmd.none )
-
-        RecordSaved result ->
-            case result of
-                Ok record ->
-                    recordSaved record model
-
-                Err (PGError (PG.BadStatus _ _ err)) ->
-                    ( setSaveErrors err model, Cmd.none )
+        RecordFetched record ->
+            case model.route of
+                Edit (EditLoading params) ->
+                    ( { model | route = Edit <| EditReady params record }
+                    , Cmd.none
+                    )
 
                 _ ->
                     ( model, Cmd.none )
+
+        RecordSaved record ->
+            recordSaved record model
 
         InputChanged inputMsg ->
             let
@@ -228,10 +209,10 @@ update msg model =
         FormSubmitted ->
             case model.route of
                 Edit (EditReady params record) ->
-                    ( model, requestRecordUpdate params model record )
+                    ( model, updateRecord params model record )
 
                 New (NewReady params record) ->
-                    ( model, requestRecordCreate params model record )
+                    ( model, createRecord params model record )
 
                 _ ->
                     ( model, Cmd.none )
@@ -250,30 +231,30 @@ update msg model =
         UrlChanged url ->
             urlChanged { model | route = getRoute url }
 
-        Failure _ ->
+        Failed _ ->
             ( model, Cmd.none )
 
 
 urlChanged : Model -> ( Model, Cmd Msg )
 urlChanged model =
     case model.route of
-        Listing listing ->
+        Listing plisting ->
             let
-                rname =
-                    Listing.resourcesName listing
+                params =
+                    Listing.toParams plisting
             in
-            case Dict.get rname model.schema of
+            case Dict.get params.resources model.schema of
                 Just definition ->
                     let
-                        ( listing_, cmd ) =
-                            Listing.load model rname definition
+                        ( listing, cmd ) =
+                            Listing.load model params definition
                     in
-                    ( { model | route = Listing listing_, message = Nothing }
-                    , Cmd.map (ListingChanged listing_) cmd
+                    ( { model | route = Listing listing, message = Nothing }
+                    , Cmd.map (ListingChanged listing) cmd
                     )
 
                 Nothing ->
-                    ( model, Error.fail Failure <| BadSchema rname )
+                    ( model, fail Failed <| BadSchema params.resources )
 
         Edit (EditRequested resourcesName id) ->
             case Dict.get resourcesName model.schema of
@@ -286,13 +267,11 @@ urlChanged model =
                             }
                     in
                     ( { model | route = Edit <| EditLoading params }
-                    , Client.fetchOne model definition resourcesName id
-                        |> PG.toCmd model.jwt
-                            (RecordFetched << mapResourceFetchResult)
+                    , fetchOne model definition resourcesName id
                     )
 
                 Nothing ->
-                    ( model, Error.fail Failure <| BadSchema resourcesName )
+                    ( model, fail Failed <| BadSchema resourcesName )
 
         New (NewRequested resourcesName) ->
             case Dict.get resourcesName model.schema of
@@ -316,7 +295,7 @@ urlChanged model =
                     )
 
                 Nothing ->
-                    ( model, Error.fail Failure <| BadSchema resourcesName )
+                    ( model, fail Failed <| BadSchema resourcesName )
 
         _ ->
             ( model, Cmd.none )
@@ -325,7 +304,16 @@ urlChanged model =
 mapResourceFetchResult : Result PG.Error Resource -> Result Error Record
 mapResourceFetchResult result =
     Result.map Record.fromResource result
-        |> mapError PGError
+        |> Result.mapError PGError
+
+
+fetchOne : Model -> Definition -> String -> String -> Cmd Msg
+fetchOne model definition resourcesName id =
+    Client.fetchOne model definition resourcesName id
+        |> PG.toTask model.jwt
+        |> Task.mapError PGError
+        |> Task.map Record.fromResource
+        |> attemptWithError Failed RecordFetched
 
 
 error : String -> Model -> Model
@@ -377,20 +365,24 @@ setSaveErrors err model =
             model
 
 
-requestRecordUpdate : EditionParams -> Model -> Record -> Cmd Msg
-requestRecordUpdate { definition, resourcesName, id } model record =
+updateRecord : EditionParams -> Model -> Record -> Cmd Msg
+updateRecord { definition, resourcesName, id } model record =
     Record.toResource record
         |> Client.update model definition resourcesName id
-        |> PG.toCmd model.jwt
-            (RecordSaved << mapResourceFetchResult)
+        |> PG.toTask model.jwt
+        |> Task.mapError PGError
+        |> Task.map Record.fromResource
+        |> attemptWithError Failed RecordSaved
 
 
-requestRecordCreate : CreationParams -> Model -> Record -> Cmd Msg
-requestRecordCreate { definition, resourcesName } model record =
+createRecord : CreationParams -> Model -> Record -> Cmd Msg
+createRecord { definition, resourcesName } model record =
     Record.toResource record
         |> Client.create model definition resourcesName
-        |> PG.toCmd model.jwt
-            (RecordSaved << mapResourceFetchResult)
+        |> PG.toTask model.jwt
+        |> Task.mapError PGError
+        |> Task.map Record.fromResource
+        |> attemptWithError Failed RecordSaved
 
 
 
@@ -585,35 +577,12 @@ sortValues ( name, a ) ( _, b ) =
 
 
 
--- Subscriptions and Commands
+-- Subscriptions
 
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.none
-
-
-getSchema : String -> Cmd Msg
-getSchema host =
-    Http.get
-        { url = host
-        , expect = Http.expectString (SchemaFetched << decodeSchema)
-        }
-
-
-decodeSchema : Result Http.Error String -> Result Error Schema
-decodeSchema result =
-    case result of
-        Ok json ->
-            case Decode.decodeString Schema.decoder json of
-                Ok schema ->
-                    Ok schema
-
-                Err err ->
-                    Err <| DecodeError err
-
-        Err err ->
-            Err <| HttpError err
 
 
 
@@ -630,7 +599,7 @@ routeParser =
     Parser.oneOf
         [ Parser.map Root Parser.top
         , Parser.map routeParserHelp (Parser.string </> Parser.string)
-        , Parser.map (Listing << ListingRequested) Parser.string
+        , Parser.map (Listing << Listing.init) Parser.string
         ]
 
 

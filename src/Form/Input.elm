@@ -12,7 +12,6 @@ module Form.Input exposing
 
 import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
-import Error exposing (Error(..))
 import Html exposing (..)
 import Html.Attributes
     exposing
@@ -40,6 +39,7 @@ import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
 import Result
 import String.Extra as String
 import Url.Builder as Url
+import Utils.Task exposing (Error(..), fail)
 
 
 type alias Record =
@@ -58,7 +58,7 @@ type Msg
     = Changed String Input String
     | AutocompleteInput String Field Autocomplete String
     | ListingFetched String Field Autocomplete AutocompleteResult
-    | Failure (Result Error Never)
+    | Failure Error
 
 
 type alias AutocompleteResult =
@@ -534,7 +534,7 @@ fetchResources client name field ({ foreignKeyParams } as autocomplete) =
                     List.filterMap identity [ idQuery, labelQuery ]
             in
             if List.isEmpty queries then
-                Error.fail Failure <|
+                fail Failure <|
                     AutocompleteError foreignKeyParams autocomplete.userInput
 
             else
@@ -547,7 +547,7 @@ fetchResources client name field ({ foreignKeyParams } as autocomplete) =
                         )
 
         Nothing ->
-            Error.fail Failure <| BadSchema foreignKeyParams.table
+            fail Failure <| BadSchema foreignKeyParams.table
 
 
 findResource : Autocomplete -> String -> Maybe Resource

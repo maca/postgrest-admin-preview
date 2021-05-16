@@ -1,9 +1,18 @@
-module Listing exposing (Listing(..), Msg, load, resourcesName, update, view)
+module Listing exposing
+    ( Listing
+    , Msg
+    , Params
+    , init
+    , load
+    , toParams
+    , update
+    , view
+    )
 
 import Basics.Extra exposing (flip)
+import Browser.Dom as Dom exposing (Viewport)
 import Browser.Navigation as Nav
 import Dict
-import Error exposing (Error(..))
 import Html
     exposing
         ( Html
@@ -20,7 +29,7 @@ import Html
         , thead
         , tr
         )
-import Html.Attributes exposing (class, href, target)
+import Html.Attributes exposing (class, href, id, target)
 import Html.Events as Events
 import Inflect as String
 import Json.Decode as Decode
@@ -31,22 +40,30 @@ import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value exposing (Value(..))
-import Result
+import Result exposing (Result)
 import String.Extra as String
+import Task
 import Time.Extra as Time
 import Url.Builder as Url
+import Utils.Task exposing (Error(..), attemptWithError, fail)
+
+
+type Listing
+    = Requested Params
+    | Loading Params Definition
+    | Ready Params Definition (List Resource)
 
 
 type Msg
     = ResourceLinkClicked String String
-    | Fetched (Result Error (List Resource))
-    | Failure (Result Error Never)
+    | Fetched (List Resource)
+    | Scrolled
+    | Info Viewport
+    | Failed Error
 
 
-type Listing
-    = ListingRequested String
-    | ListingLoading String Definition
-    | ListingReady String Definition (List Resource)
+type alias Params =
+    { resources : String }
 
 
 type alias EventConfig =
@@ -56,44 +73,53 @@ type alias EventConfig =
     }
 
 
-load : Client a -> String -> Definition -> ( Listing, Cmd Msg )
-load client rname definition =
-    ( ListingLoading rname definition
-    , fetchResources client rname
+init : String -> Listing
+init resources =
+    Requested { resources = resources }
+
+
+load : Client a -> Params -> Definition -> ( Listing, Cmd Msg )
+load client params definition =
+    ( Loading params definition
+    , fetchResources client params.resources
     )
 
 
 update : { a | key : Nav.Key } -> Listing -> Msg -> ( Listing, Cmd Msg )
 update { key } listing msg =
     case msg of
-        ResourceLinkClicked rname id ->
-            ( listing
-            , Nav.pushUrl key <| Url.absolute [ rname, id ] []
-            )
+        ResourceLinkClicked resources id ->
+            ( listing, Nav.pushUrl key <| Url.absolute [ resources, id ] [] )
 
-        Fetched result ->
-            case result of
-                Ok records ->
-                    case listing of
-                        ListingLoading name definition ->
-                            ( ListingReady name definition records
-                            , Cmd.none
-                            )
+        Fetched records ->
+            case listing of
+                Loading name definition ->
+                    ( Ready name definition records, Cmd.none )
 
-                        _ ->
-                            ( listing, Cmd.none )
-
-                Err _ ->
+                _ ->
                     ( listing, Cmd.none )
 
-        Failure _ ->
+        Scrolled ->
+            ( listing
+            , Dom.getViewportOf (listingId listing)
+                |> Task.mapError DomError
+                |> attemptWithError Failed Info
+            )
+
+        Info _ ->
+            -- { scene = { width = 1666, height = 5115 }
+            -- , viewport = { x = 0, y = 0, width = 1666, height = 443 }
+            -- }
+            ( listing, Cmd.none )
+
+        Failed _ ->
             ( listing, Cmd.none )
 
 
 view : Listing -> Html Msg
 view listing =
     case listing of
-        ListingReady rname definition records ->
+        Ready { resources } definition records ->
             let
                 fieldNames =
                     Dict.toList definition
@@ -105,42 +131,45 @@ view listing =
             in
             section
                 [ class "resources-listing" ]
-                [ displayListHeader rname
-                , div []
+                [ displayListHeader resources
+                , div
+                    [ Events.on "scroll" (Decode.succeed Scrolled)
+                    , id <| listingId listing
+                    ]
                     [ table []
                         [ thead [] [ tr [] <| List.map toHeader fieldNames ]
                         , tbody [] <|
-                            List.map (displayRow rname fieldNames) records
+                            List.map (displayRow resources fieldNames) records
                         ]
                     ]
                 ]
 
-        ListingRequested _ ->
+        Requested _ ->
             text ""
 
-        ListingLoading _ _ ->
+        Loading _ _ ->
             text ""
 
 
 displayListHeader : String -> Html Msg
-displayListHeader rname =
+displayListHeader resources =
     header []
-        [ h1 [] [ text <| String.humanize rname ]
+        [ h1 [] [ text <| String.humanize resources ]
         , div []
             [ a
                 [ class "button"
-                , href <| Url.absolute [ rname, "new" ] []
+                , href <| Url.absolute [ resources, "new" ] []
                 ]
-                [ text <| "New " ++ String.singularize rname ]
+                [ text <| "New " ++ String.singularize resources ]
             ]
         ]
 
 
 displayRow : String -> List String -> Resource -> Html Msg
-displayRow rname names record =
+displayRow resources names record =
     let
         toTd =
-            displayValue rname >> List.singleton >> td []
+            displayValue resources >> List.singleton >> td []
 
         id =
             Resource.id record |> Maybe.withDefault ""
@@ -148,12 +177,12 @@ displayRow rname names record =
     List.filterMap (flip Dict.get record >> Maybe.map toTd) names
         |> tr
             [ class "listing-row"
-            , clickResource rname id
+            , clickResource resources id
             ]
 
 
 displayValue : String -> Field -> Html Msg
-displayValue rname { value } =
+displayValue resources { value } =
     case value of
         PFloat (Just float) ->
             text <| String.fromFloat float
@@ -163,6 +192,9 @@ displayValue rname { value } =
 
         PString (Just string) ->
             text string
+
+        PEnum (Just string) _ ->
+            text <| String.humanize string
 
         PBool (Just True) ->
             text "true"
@@ -180,7 +212,7 @@ displayValue rname { value } =
             recordLink table primaryKey label
 
         PPrimaryKey (Just primaryKey) ->
-            recordLink rname primaryKey Nothing
+            recordLink resources primaryKey Nothing
 
         BadValue _ ->
             text "?"
@@ -190,24 +222,24 @@ displayValue rname { value } =
 
 
 recordLink : String -> PrimaryKey -> Maybe String -> Html Msg
-recordLink rname primaryKey mtext =
+recordLink resources primaryKey mtext =
     let
         id =
             PrimaryKey.toString primaryKey
     in
     a
-        [ href <| Url.absolute [ rname, id ] []
+        [ href <| Url.absolute [ resources, id ] []
         , target "_self"
-        , clickResource rname id
+        , clickResource resources id
         ]
         [ text <| Maybe.withDefault id mtext ]
 
 
 clickResource : String -> String -> Html.Attribute Msg
-clickResource rname id =
+clickResource resources id =
     let
         msg =
-            ResourceLinkClicked rname id
+            ResourceLinkClicked resources id
     in
     Events.custom "click" <|
         Decode.map (EventConfig True True) (Decode.succeed msg)
@@ -245,17 +277,27 @@ sortValues ( name, a ) ( _, b ) =
             EQ
 
 
-resourcesName : Listing -> String
-resourcesName listing =
+toParams : Listing -> Params
+toParams listing =
     case listing of
-        ListingRequested name ->
-            name
+        Requested params ->
+            params
 
-        ListingLoading name _ ->
-            name
+        Loading params _ ->
+            params
 
-        ListingReady name _ _ ->
-            name
+        Ready params _ _ ->
+            params
+
+
+listingId : Listing -> String
+listingId listing =
+    toParams listing |> .resources
+
+
+perPage : Int
+perPage =
+    20
 
 
 
@@ -263,18 +305,16 @@ resourcesName listing =
 
 
 fetchResources : Client a -> String -> Cmd Msg
-fetchResources ({ schema, jwt } as model) rname =
-    case Dict.get rname schema of
+fetchResources ({ schema, jwt } as model) resources =
+    case Dict.get resources schema of
         Just definition ->
-            Client.fetchMany model definition rname
-                |> PG.toCmd jwt (Fetched << Result.mapError PGError)
+            Client.fetchMany model definition resources
+                |> PG.toTask jwt
+                |> Task.mapError PGError
+                |> attemptWithError Failed Fetched
 
         Nothing ->
-            Error.fail Failure <| BadSchema rname
-
-
-
--- To refactor
+            fail Failed <| BadSchema resources
 
 
 recordIdentifiers : List String

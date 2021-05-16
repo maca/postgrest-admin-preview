@@ -7,7 +7,6 @@ module Postgrest.Resource.Client exposing
     )
 
 import Dict
-import Error exposing (Error(..))
 import Postgrest.Client as PG exposing (Endpoint, Request, Selectable)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Schema exposing (Schema)
@@ -18,6 +17,7 @@ import Postgrest.Schema.Definition as Definition
         )
 import Postgrest.Value as Value
 import Url.Builder as Url
+import Utils.Task exposing (Error(..))
 
 
 type alias Client a =

@@ -1,7 +1,8 @@
-module Postgrest.Schema exposing (Schema, decoder)
+module Postgrest.Schema exposing (Schema, decoder, getSchema)
 
 import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
+import Http
 import Json.Decode as Decode
     exposing
         ( Decoder
@@ -18,7 +19,9 @@ import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey(..))
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value exposing (Value(..))
 import Regex exposing (Regex)
+import Task exposing (Task)
 import Time.Extra as Time
+import Utils.Task exposing (Error(..), fail, handleJsonResponse)
 
 
 type alias Schema =
@@ -27,6 +30,18 @@ type alias Schema =
 
 type Cuadruple a b c d
     = Cuadruple a b c d
+
+
+getSchema : String -> Task Error Schema
+getSchema host =
+    Http.task
+        { method = "GET"
+        , headers = []
+        , url = host
+        , body = Http.emptyBody
+        , resolver = Http.stringResolver <| handleJsonResponse <| decoder
+        , timeout = Nothing
+        }
 
 
 decoder : Decoder Schema
