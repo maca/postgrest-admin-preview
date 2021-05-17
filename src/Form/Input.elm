@@ -42,7 +42,7 @@ import Url.Builder as Url
 import Utils.Task exposing (Error(..), fail)
 
 
-type alias Record =
+type alias Fields =
     Dict String Input
 
 
@@ -77,7 +77,7 @@ type Input
     | Blank Field
 
 
-update : Client a -> Msg -> Record -> ( Record, Cmd Msg )
+update : Client a -> Msg -> Fields -> ( Fields, Cmd Msg )
 update client msg record =
     case msg of
         Changed name input userInput ->
