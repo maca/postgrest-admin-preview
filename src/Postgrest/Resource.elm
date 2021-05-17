@@ -120,11 +120,11 @@ decoderFold definition name _ prevDec =
         insert =
             flip (Dict.insert name)
 
-        map cons required dict dec =
+        map makeColumn required dict dec =
             Decode.field name dec
                 |> maybe
                 |> Decode.map
-                    (insert dict << Field Nothing required False << cons)
+                    (insert dict << Field Nothing required False << makeColumn)
 
         foldFun dict =
             case Dict.get name definition of

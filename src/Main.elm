@@ -93,23 +93,13 @@ update msg model =
         SchemaFetched schema ->
             urlChanged { model | schema = schema }
 
-        ListingChanged plisting lMsg ->
-            let
-                ( listing, cmd ) =
-                    Listing.update model lMsg plisting
-            in
-            ( { model | route = Listing listing }
-            , Cmd.map (ListingChanged listing) cmd
-            )
+        ListingChanged listing lMsg ->
+            Listing.update model lMsg listing
+                |> mapNested Listing ListingChanged model
 
-        FormChanged pform fMsg ->
-            let
-                ( form, cmd ) =
-                    Form.update model fMsg pform
-            in
-            ( { model | route = Form form }
-            , Cmd.map (FormChanged form) cmd
-            )
+        FormChanged form fMsg ->
+            Form.update model fMsg form
+                |> mapNested Form FormChanged model
 
         LinkClicked urlRequest ->
             case urlRequest of
@@ -137,23 +127,27 @@ urlChanged model =
                 Nothing ->
                     ( model, fail Failed <| BadSchema resourcesName )
 
-        Listing plisting ->
-            let
-                ( listing, cmd ) =
-                    Listing.load model plisting
-            in
-            ( { model | route = Listing listing }
-            , Cmd.map (ListingChanged listing) cmd
-            )
+        Listing listing ->
+            Listing.load model listing
+                |> mapNested Listing ListingChanged model
 
         FormLoad params form id ->
-            ( model
-            , Form.fetch model params id
-                |> Cmd.map (FormChanged form)
-            )
+            ( model, Form.fetch model params id |> Cmd.map (FormChanged form) )
 
         _ ->
             ( model, Cmd.none )
+
+
+mapNested :
+    (a -> Route)
+    -> (a -> innerMsg -> Msg)
+    -> Model
+    -> ( a, Cmd innerMsg )
+    -> ( Model, Cmd Msg )
+mapNested makeRoute makeMsg model ( a, cmd ) =
+    ( { model | route = makeRoute a }
+    , Cmd.map (makeMsg a) cmd
+    )
 
 
 

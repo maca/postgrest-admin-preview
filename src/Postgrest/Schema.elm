@@ -127,8 +127,8 @@ valueDecoder =
 
 
 mapValue : (Maybe a -> Value) -> Decoder a -> Decoder Value
-mapValue cons dec =
-    Decode.map cons (maybe <| field "default" dec)
+mapValue makeValue dec =
+    Decode.map makeValue (maybe <| field "default" dec)
 
 
 mapPrimaryKey : Maybe String -> Decoder Value
