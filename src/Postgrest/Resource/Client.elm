@@ -3,6 +3,7 @@ module Postgrest.Resource.Client exposing
     , create
     , fetchMany
     , fetchOne
+    , selects
     , update
     )
 
@@ -90,9 +91,7 @@ selects definition =
         resources { table, labelColumnName } =
             labelColumnName
                 |> Maybe.map
-                    (\n ->
-                        PG.resource table <| PG.attributes [ n, "id" ]
-                    )
+                    (\n -> PG.resource table <| PG.attributes [ n, "id" ])
 
         filteMapFun (Column _ val) =
             Value.foreignKeyParams val |> Maybe.andThen resources

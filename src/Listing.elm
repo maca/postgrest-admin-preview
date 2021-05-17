@@ -9,6 +9,7 @@ module Listing exposing
     , view
     )
 
+import Array
 import Basics.Extra exposing (flip)
 import Browser.Dom as Dom exposing (Viewport)
 import Browser.Navigation as Nav
@@ -31,6 +32,8 @@ import Html
         )
 import Html.Attributes exposing (class, href, id, target)
 import Html.Events as Events
+import Html.Keyed as Keyed
+import Html.Lazy exposing (lazy4)
 import Inflect as String
 import Json.Decode as Decode
 import Postgrest.Client as PG
@@ -50,7 +53,7 @@ import Utils.Task exposing (Error(..), attemptWithError, fail)
 type Listing
     = Requested Params
     | Loading Params Definition
-    | Ready Params Definition (List Resource)
+    | Ready Params Definition (List (List Resource))
 
 
 type Msg
@@ -62,7 +65,9 @@ type Msg
 
 
 type alias Params =
-    { resources : String }
+    { resources : String
+    , page : Int
+    }
 
 
 type alias EventConfig =
@@ -74,7 +79,7 @@ type alias EventConfig =
 
 init : String -> Listing
 init resources =
-    Requested { resources = resources }
+    Requested { resources = resources, page = 0 }
 
 
 load : Client a -> Params -> Definition -> ( Listing, Cmd Msg )
@@ -92,11 +97,14 @@ update { key } listing msg =
 
         Fetched records ->
             case listing of
-                Loading name definition ->
-                    ( Ready name definition records, Cmd.none )
+                Loading params definition ->
+                    ( Ready params definition [ records ], Cmd.none )
 
-                _ ->
-                    ( listing, Cmd.none )
+                Ready params definition pages ->
+                    ( Ready params definition (records :: pages), Cmd.none )
+
+                Requested params ->
+                    ( Requested params, Cmd.none )
 
         Scrolled ->
             ( listing
@@ -105,11 +113,12 @@ update { key } listing msg =
                 |> attemptWithError Failed Info
             )
 
-        Info _ ->
-            -- { scene = { width = 1666, height = 5115 }
-            -- , viewport = { x = 0, y = 0, width = 1666, height = 443 }
-            -- }
-            ( listing, Cmd.none )
+        Info ({ scene, viewport } as info) ->
+            if scene.height - viewport.y > 2000 then
+                ( listing, Cmd.none )
+
+            else
+                ( listing, Cmd.none )
 
         Failed _ ->
             ( listing, Cmd.none )
@@ -118,15 +127,18 @@ update { key } listing msg =
 view : Listing -> Html Msg
 view listing =
     case listing of
-        Ready { resources } definition records ->
+        Ready { resources } definition pages ->
             let
-                fieldNames =
+                fields =
                     Dict.toList definition
                         |> List.sortWith sortColumns
                         |> List.map Tuple.first
 
                 toHeader =
                     String.humanize >> text >> List.singleton >> th []
+
+                header =
+                    ( "header", thead [] [ tr [] <| List.map toHeader fields ] )
             in
             section
                 [ class "resources-listing" ]
@@ -135,11 +147,9 @@ view listing =
                     [ Events.on "scroll" (Decode.succeed Scrolled)
                     , id <| listingId listing
                     ]
-                    [ table []
-                        [ thead [] [ tr [] <| List.map toHeader fieldNames ]
-                        , tbody [] <|
-                            List.map (displayRow resources fieldNames) records
-                        ]
+                    [ Keyed.node "table"
+                        []
+                        (header :: pagesFold resources fields [] 0 pages)
                     ]
                 ]
 
@@ -148,6 +158,32 @@ view listing =
 
         Loading _ _ ->
             text ""
+
+
+pagesFold :
+    String
+    -> List String
+    -> List ( String, Html Msg )
+    -> Int
+    -> List (List Resource)
+    -> List ( String, Html Msg )
+pagesFold rname fields acc pageNum pages =
+    case pages of
+        [] ->
+            acc
+
+        page :: rest ->
+            let
+                elem =
+                    ( pageId pageNum, lazy4 viewPage rname fields pageNum page )
+            in
+            pagesFold rname fields (elem :: acc) (pageNum + 1) rest
+
+
+viewPage : String -> List String -> Int -> List Resource -> Html Msg
+viewPage rname fields pageNum records =
+    tbody [ id <| pageId pageNum ] <|
+        List.map (displayRow rname fields) records
 
 
 displayListHeader : String -> Html Msg
@@ -294,9 +330,14 @@ listingId listing =
     toParams listing |> .resources
 
 
+pageId : Int -> String
+pageId pageNum =
+    "page-" ++ String.fromInt pageNum
+
+
 perPage : Int
 perPage =
-    20
+    50
 
 
 
@@ -307,7 +348,14 @@ fetchResources : Client a -> String -> Cmd Msg
 fetchResources ({ schema, jwt } as model) resources =
     case Dict.get resources schema of
         Just definition ->
+            let
+                params =
+                    [ PG.select <| Client.selects definition
+                    , PG.limit perPage
+                    ]
+            in
             Client.fetchMany model definition resources
+                |> PG.setParams params
                 |> PG.toTask jwt
                 |> Task.mapError PGError
                 |> attemptWithError Failed Fetched
