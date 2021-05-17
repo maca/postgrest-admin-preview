@@ -139,7 +139,7 @@ init () url key =
             Dict.fromList []
 
         model =
-            { route = getRoute url
+            { route = Root
             , key = key
             , schema = schema
             , host = host
@@ -147,7 +147,7 @@ init () url key =
             , message = Nothing
             }
     in
-    ( model
+    ( { model | route = getRoute model url }
     , Schema.getSchema host |> attemptWithError Failed SchemaFetched
     )
 
@@ -251,7 +251,7 @@ update msg model =
                     ( model, Nav.load href )
 
         UrlChanged url ->
-            urlChanged { model | route = getRoute url }
+            urlChanged { model | route = getRoute model url }
 
         Failed _ ->
             ( model, Cmd.none )
@@ -269,7 +269,7 @@ urlChanged model =
                 Just definition ->
                     let
                         ( listing, cmd ) =
-                            Listing.load model params definition
+                            Listing.load model params definition []
                     in
                     ( { model | route = Listing listing, message = Nothing }
                     , Cmd.map (ListingChanged listing) cmd
@@ -582,22 +582,22 @@ subscriptions _ =
 -- Routes
 
 
-getRoute : Url -> Route
-getRoute url =
-    Parser.parse routeParser url |> Maybe.withDefault NotFound
+getRoute : Model -> Url -> Route
+getRoute model url =
+    Parser.parse (routeParser model) url |> Maybe.withDefault NotFound
 
 
-routeParser : Parser (Route -> a) a
-routeParser =
+routeParser : Model -> Parser (Route -> a) a
+routeParser model =
     Parser.oneOf
         [ Parser.map Root Parser.top
-        , Parser.map routeParserHelp (Parser.string </> Parser.string)
+        , Parser.map makeFormRoute (Parser.string </> Parser.string)
         , Parser.map (Listing << Listing.init) Parser.string
         ]
 
 
-routeParserHelp : String -> String -> Route
-routeParserHelp resourcesName id =
+makeFormRoute : String -> String -> Route
+makeFormRoute resourcesName id =
     if id == "new" then
         New <| NewRequested resourcesName
 

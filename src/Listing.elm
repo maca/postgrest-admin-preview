@@ -52,7 +52,7 @@ import Utils.Task exposing (Error(..), attemptWithError, fail)
 
 type Listing
     = Requested Params
-    | Loading Params Definition
+    | Loading Params Definition (List (List Resource))
     | Ready Params Definition (List (List Resource))
 
 
@@ -82,10 +82,15 @@ init resources =
     Requested { resources = resources, page = 0 }
 
 
-load : Client a -> Params -> Definition -> ( Listing, Cmd Msg )
-load client params definition =
-    ( Loading params definition
-    , fetchResources client params.resources
+load :
+    Client a
+    -> Params
+    -> Definition
+    -> List (List Resource)
+    -> ( Listing, Cmd Msg )
+load client params definition pages =
+    ( Loading params definition pages
+    , fetchResources client definition params
     )
 
 
@@ -97,8 +102,8 @@ update { key } listing msg =
 
         Fetched records ->
             case listing of
-                Loading params definition ->
-                    ( Ready params definition [ records ], Cmd.none )
+                Loading params definition pages ->
+                    ( Ready params definition (records :: pages), Cmd.none )
 
                 Ready params definition pages ->
                     ( Ready params definition (records :: pages), Cmd.none )
@@ -142,32 +147,32 @@ view listing =
             in
             section
                 [ class "resources-listing" ]
-                [ displayListHeader resources
+                [ viewListHeader resources
                 , div
                     [ Events.on "scroll" (Decode.succeed Scrolled)
                     , id <| listingId listing
                     ]
                     [ Keyed.node "table"
                         []
-                        (header :: pagesFold resources fields [] 0 pages)
+                        (header :: viewPagesFold resources fields [] 0 pages)
                     ]
                 ]
 
         Requested _ ->
             text ""
 
-        Loading _ _ ->
+        Loading _ _ _ ->
             text ""
 
 
-pagesFold :
+viewPagesFold :
     String
     -> List String
     -> List ( String, Html Msg )
     -> Int
     -> List (List Resource)
     -> List ( String, Html Msg )
-pagesFold rname fields acc pageNum pages =
+viewPagesFold rname fields acc pageNum pages =
     case pages of
         [] ->
             acc
@@ -177,17 +182,17 @@ pagesFold rname fields acc pageNum pages =
                 elem =
                     ( pageId pageNum, lazy4 viewPage rname fields pageNum page )
             in
-            pagesFold rname fields (elem :: acc) (pageNum + 1) rest
+            viewPagesFold rname fields (elem :: acc) (pageNum + 1) rest
 
 
 viewPage : String -> List String -> Int -> List Resource -> Html Msg
 viewPage rname fields pageNum records =
     tbody [ id <| pageId pageNum ] <|
-        List.map (displayRow rname fields) records
+        List.map (viewRow rname fields) records
 
 
-displayListHeader : String -> Html Msg
-displayListHeader resources =
+viewListHeader : String -> Html Msg
+viewListHeader resources =
     header []
         [ h1 [] [ text <| String.humanize resources ]
         , div []
@@ -200,11 +205,11 @@ displayListHeader resources =
         ]
 
 
-displayRow : String -> List String -> Resource -> Html Msg
-displayRow resources names record =
+viewRow : String -> List String -> Resource -> Html Msg
+viewRow resources names record =
     let
         toTd =
-            displayValue resources >> List.singleton >> td []
+            viewValue resources >> List.singleton >> td []
 
         id =
             Resource.id record |> Maybe.withDefault ""
@@ -216,8 +221,8 @@ displayRow resources names record =
             ]
 
 
-displayValue : String -> Field -> Html Msg
-displayValue resources { value } =
+viewValue : String -> Field -> Html Msg
+viewValue resources { value } =
     case value of
         PFloat (Just float) ->
             text <| String.fromFloat float
@@ -318,11 +323,37 @@ toParams listing =
         Requested params ->
             params
 
-        Loading params _ ->
+        Loading params _ _ ->
             params
 
         Ready params _ _ ->
             params
+
+
+toPages : Listing -> List (List Resource)
+toPages listing =
+    case listing of
+        Requested params ->
+            []
+
+        Loading _ _ pages ->
+            pages
+
+        Ready _ _ pages ->
+            pages
+
+
+isLoading : Listing -> Bool
+isLoading listing =
+    case listing of
+        Requested params ->
+            False
+
+        Loading params _ _ ->
+            True
+
+        Ready params _ _ ->
+            False
 
 
 listingId : Listing -> String
@@ -344,24 +375,19 @@ perPage =
 -- Http interactions
 
 
-fetchResources : Client a -> String -> Cmd Msg
-fetchResources ({ schema, jwt } as model) resources =
-    case Dict.get resources schema of
-        Just definition ->
-            let
-                params =
-                    [ PG.select <| Client.selects definition
-                    , PG.limit perPage
-                    ]
-            in
-            Client.fetchMany model definition resources
-                |> PG.setParams params
-                |> PG.toTask jwt
-                |> Task.mapError PGError
-                |> attemptWithError Failed Fetched
-
-        Nothing ->
-            fail Failed <| BadSchema resources
+fetchResources : Client a -> Definition -> Params -> Cmd Msg
+fetchResources ({ schema, jwt } as model) definition { resources } =
+    let
+        params =
+            [ PG.select <| Client.selects definition
+            , PG.limit perPage
+            ]
+    in
+    Client.fetchMany model definition resources
+        |> PG.setParams params
+        |> PG.toTask jwt
+        |> Task.mapError PGError
+        |> attemptWithError Failed Fetched
 
 
 recordIdentifiers : List String
