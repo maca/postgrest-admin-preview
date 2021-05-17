@@ -8,6 +8,7 @@ module Form exposing
     , hasErrors
     , primaryKey
     , primaryKeyName
+    , saveRecord
     , setError
     , toId
     , toResource
@@ -120,8 +121,13 @@ columnRegex =
 -- Http
 
 
-updateRecord : Params { id : String } -> Client a -> Form -> Task Error Form
-updateRecord { definition, resourcesName, id } client record =
+saveRecord : Client a -> Params a -> Form -> Task Error Form
+saveRecord client params form =
+    Debug.todo "crash"
+
+
+updateRecord : Client a -> Params { id : String } -> Form -> Task Error Form
+updateRecord client { definition, resourcesName, id } record =
     toResource record
         |> Client.update client definition resourcesName id
         |> PG.toTask client.jwt
@@ -129,8 +135,8 @@ updateRecord { definition, resourcesName, id } client record =
         |> Task.map fromResource
 
 
-createRecord : Params {} -> Client a -> Form -> Task Error Form
-createRecord { definition, resourcesName } client record =
+createRecord : Client a -> Params {} -> Form -> Task Error Form
+createRecord client { definition, resourcesName } record =
     toResource record
         |> Client.create client definition resourcesName
         |> PG.toTask client.jwt

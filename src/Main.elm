@@ -225,13 +225,13 @@ update msg model =
             case model.route of
                 Edit (EditReady params record) ->
                     ( model
-                    , Form.updateRecord params model record
+                    , Form.updateRecord model params record
                         |> attemptWithError Failed RecordUpdated
                     )
 
                 New (NewReady params record) ->
                     ( model
-                    , Form.createRecord params model record
+                    , Form.createRecord model params record
                         |> attemptWithError Failed RecordCreated
                     )
 
