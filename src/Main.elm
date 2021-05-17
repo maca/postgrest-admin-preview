@@ -5,8 +5,8 @@ import Browser
 import Browser.Navigation as Nav
 import Dict
 import Dict.Extra as Dict
+import Form exposing (Form)
 import Form.Input as Input exposing (Input)
-import Form.Record as Record exposing (Record)
 import Html
     exposing
         ( Html
@@ -56,9 +56,9 @@ import Utils.Task exposing (Error(..), attemptWithError, fail)
 type Msg
     = SchemaFetched Schema
     | ListingChanged Listing Listing.Msg
-    | RecordFetched Record
-    | RecordCreated Record
-    | RecordUpdated Record
+    | RecordFetched Form
+    | RecordCreated Form
+    | RecordUpdated Form
     | InputChanged Input.Msg
     | FormSubmitted
     | MessageDismissed
@@ -69,13 +69,13 @@ type Msg
 
 type New
     = NewRequested String
-    | NewReady CreationParams Record
+    | NewReady CreationParams Form
 
 
 type Edit
     = EditRequested String String
     | EditLoading EditionParams
-    | EditReady EditionParams Record
+    | EditReady EditionParams Form
 
 
 type Route
@@ -186,7 +186,7 @@ update msg model =
                 New (NewReady { resourcesName } _) ->
                     let
                         id =
-                            Record.id record |> Maybe.withDefault ""
+                            Form.id record |> Maybe.withDefault ""
                     in
                     ( confirmation "Creation succeed" model
                     , Nav.pushUrl model.key <|
@@ -311,7 +311,7 @@ urlChanged model =
                         | route =
                             New <|
                                 NewReady params <|
-                                    Record.fromResource record
+                                    Form.fromResource record
                       }
                     , Cmd.none
                     )
@@ -328,7 +328,7 @@ fetchOne model definition resourcesName id =
     Client.fetchOne model definition resourcesName id
         |> PG.toTask model.jwt
         |> Task.mapError PGError
-        |> Task.map Record.fromResource
+        |> Task.map Form.fromResource
         |> attemptWithError Failed RecordFetched
 
 
@@ -358,23 +358,23 @@ confirmation message model =
 --             model
 
 
-updateRecord : EditionParams -> Model -> Record -> Cmd Msg
+updateRecord : EditionParams -> Model -> Form -> Cmd Msg
 updateRecord { definition, resourcesName, id } model record =
-    Record.toResource record
+    Form.toResource record
         |> Client.update model definition resourcesName id
         |> PG.toTask model.jwt
         |> Task.mapError PGError
-        |> Task.map Record.fromResource
+        |> Task.map Form.fromResource
         |> attemptWithError Failed RecordUpdated
 
 
-createRecord : CreationParams -> Model -> Record -> Cmd Msg
+createRecord : CreationParams -> Model -> Form -> Cmd Msg
 createRecord { definition, resourcesName } model record =
-    Record.toResource record
+    Form.toResource record
         |> Client.create model definition resourcesName
         |> PG.toTask model.jwt
         |> Task.mapError PGError
-        |> Task.map Record.fromResource
+        |> Task.map Form.fromResource
         |> attemptWithError Failed RecordCreated
 
 
@@ -443,7 +443,7 @@ displayMainContent model =
             notFound
 
 
-displayForm : ResourceParams a -> Record -> Html Msg
+displayForm : ResourceParams a -> Form -> Html Msg
 displayForm { resourcesName } record =
     section
         [ class "resource-form" ]
@@ -457,7 +457,7 @@ displayForm { resourcesName } record =
         ]
 
 
-recordForm : Record -> Html Msg
+recordForm : Form -> Html Msg
 recordForm record =
     let
         fields =
@@ -469,7 +469,7 @@ recordForm record =
                     )
 
         withErrors =
-            Record.hasErrors record
+            Form.hasErrors record
     in
     form
         [ autocomplete False
@@ -479,7 +479,7 @@ recordForm record =
         [ fieldset [] fields
         , fieldset []
             [ button
-                [ disabled (not (Record.changed record) || withErrors) ]
+                [ disabled (not (Form.changed record) || withErrors) ]
                 [ text "Save" ]
             ]
         ]
@@ -507,7 +507,7 @@ displayMessageHelp messageType message =
         ]
 
 
-recordLabel : Record -> Maybe String
+recordLabel : Form -> Maybe String
 recordLabel record =
     let
         mlabel =
@@ -519,10 +519,10 @@ recordLabel record =
             mlabel
 
         Nothing ->
-            Record.primaryKey record |> Maybe.map PrimaryKey.toString
+            Form.primaryKey record |> Maybe.map PrimaryKey.toString
 
 
-recordLabelHelp : Record -> String -> Maybe String
+recordLabelHelp : Form -> String -> Maybe String
 recordLabelHelp record fieldName =
     case Dict.get fieldName record |> Maybe.map Input.toValue of
         Just (PString label) ->

@@ -1,5 +1,5 @@
-module Form.Record exposing
-    ( Record
+module Form exposing
+    ( Form
     , changed
     , errors
     , fromResource
@@ -20,51 +20,51 @@ import Postgrest.Resource as Resource exposing (Resource)
 import Regex exposing (Regex)
 
 
-type alias Record =
+type alias Form =
     Dict String Input
 
 
-toResource : Record -> Resource
+toResource : Form -> Resource
 toResource record =
     Dict.map (\_ input -> Input.toField input) record
 
 
-fromResource : Resource -> Record
+fromResource : Resource -> Form
 fromResource resource =
     Dict.map (\_ input -> Input.fromField input) resource
 
 
-changed : Record -> Bool
+changed : Form -> Bool
 changed record =
     Dict.values record |> List.any (.changed << Input.toField)
 
 
-errors : Record -> Dict String (Maybe String)
+errors : Form -> Dict String (Maybe String)
 errors record =
     toResource record |> Resource.errors
 
 
-hasErrors : Record -> Bool
+hasErrors : Form -> Bool
 hasErrors record =
     toResource record |> Resource.hasErrors
 
 
-id : Record -> Maybe String
+id : Form -> Maybe String
 id record =
     toResource record |> Resource.id
 
 
-primaryKey : Record -> Maybe PrimaryKey
+primaryKey : Form -> Maybe PrimaryKey
 primaryKey record =
     toResource record |> Resource.primaryKey
 
 
-primaryKeyName : Record -> Maybe String
+primaryKeyName : Form -> Maybe String
 primaryKeyName record =
     toResource record |> Resource.primaryKeyName
 
 
-setError : PG.PostgrestErrorJSON -> Record -> Record
+setError : PG.PostgrestErrorJSON -> Form -> Form
 setError error resource =
     let
         mapFun columnName key input =
