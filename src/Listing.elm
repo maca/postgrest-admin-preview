@@ -51,8 +51,7 @@ import Utils.Task exposing (Error(..), attemptWithError, fail)
 
 
 type Listing
-    = Requested Params
-    | Loading Params Definition (List (List Resource))
+    = Loading Params Definition (List (List Resource))
     | Ready Params Definition (List (List Resource))
 
 
@@ -77,9 +76,9 @@ type alias EventConfig =
     }
 
 
-init : String -> Listing
-init resources =
-    Requested { resources = resources, page = 0 }
+init : String -> Definition -> Listing
+init resources definition =
+    Loading { resources = resources, page = 0 } definition []
 
 
 load :
@@ -107,9 +106,6 @@ update { key } listing msg =
 
                 Ready params definition pages ->
                     ( Ready params definition (records :: pages), Cmd.none )
-
-                Requested params ->
-                    ( Requested params, Cmd.none )
 
         Scrolled ->
             ( listing
@@ -157,9 +153,6 @@ view listing =
                         (header :: viewPagesFold resources fields [] 0 pages)
                     ]
                 ]
-
-        Requested _ ->
-            text ""
 
         Loading _ _ _ ->
             text ""
@@ -320,9 +313,6 @@ sortValues ( name, a ) ( _, b ) =
 toParams : Listing -> Params
 toParams listing =
     case listing of
-        Requested params ->
-            params
-
         Loading params _ _ ->
             params
 
@@ -333,9 +323,6 @@ toParams listing =
 toPages : Listing -> List (List Resource)
 toPages listing =
     case listing of
-        Requested params ->
-            []
-
         Loading _ _ pages ->
             pages
 
@@ -346,9 +333,6 @@ toPages listing =
 isLoading : Listing -> Bool
 isLoading listing =
     case listing of
-        Requested params ->
-            False
-
         Loading params _ _ ->
             True
 

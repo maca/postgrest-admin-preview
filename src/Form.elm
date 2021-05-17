@@ -8,7 +8,7 @@ module Form exposing
     , hasErrors
     , primaryKey
     , primaryKeyName
-    , saveRecord
+    , save
     , setError
     , toId
     , toResource
@@ -32,15 +32,10 @@ import Task exposing (Task)
 import Utils.Task exposing (Error(..), attemptWithError, fail)
 
 
-type alias Params a =
-    { a
-        | resourcesName : String
-        , definition : Definition
+type alias Params =
+    { resourcesName : String
+    , definition : Definition
     }
-
-
-type alias Fields =
-    Dict String Input
 
 
 type alias Form =
@@ -121,13 +116,18 @@ columnRegex =
 -- Http
 
 
-saveRecord : Client a -> Params a -> Form -> Task Error Form
-saveRecord client params form =
-    Debug.todo "crash"
+save : Client a -> Params -> Form -> Task Error Form
+save client params form =
+    case toId form of
+        Just id ->
+            updateRecord client params id form
+
+        Nothing ->
+            createRecord client params form
 
 
-updateRecord : Client a -> Params { id : String } -> Form -> Task Error Form
-updateRecord client { definition, resourcesName, id } record =
+updateRecord : Client a -> Params -> String -> Form -> Task Error Form
+updateRecord client { definition, resourcesName } id record =
     toResource record
         |> Client.update client definition resourcesName id
         |> PG.toTask client.jwt
@@ -135,7 +135,7 @@ updateRecord client { definition, resourcesName, id } record =
         |> Task.map fromResource
 
 
-createRecord : Client a -> Params {} -> Form -> Task Error Form
+createRecord : Client a -> Params -> Form -> Task Error Form
 createRecord client { definition, resourcesName } record =
     toResource record
         |> Client.create client definition resourcesName

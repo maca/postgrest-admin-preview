@@ -68,30 +68,21 @@ type Msg
 
 
 type New
-    = NewRequested String
-    | NewReady CreationParams Form
+    = NewReady Form.Params Form
 
 
 type Edit
-    = EditRequested String String
-    | EditLoading EditionParams
-    | EditReady EditionParams Form
+    = EditLoading Form.Params String
+    | EditReady Form.Params Form
 
 
 type Route
     = Listing Listing
+    | LoadingDefinition String (Definition -> Route)
     | New New
     | Edit Edit
     | Root
     | NotFound
-
-
-type alias EditionParams =
-    Form.Params { id : String }
-
-
-type alias CreationParams =
-    Form.Params {}
 
 
 type Message
@@ -166,7 +157,7 @@ update msg model =
 
         RecordFetched record ->
             case model.route of
-                Edit (EditLoading params) ->
+                Edit (EditLoading params _) ->
                     ( { model | route = Edit <| EditReady params record }
                     , Cmd.none
                     )
@@ -225,13 +216,13 @@ update msg model =
             case model.route of
                 Edit (EditReady params record) ->
                     ( model
-                    , Form.updateRecord model params record
+                    , Form.save model params record
                         |> attemptWithError Failed RecordUpdated
                     )
 
                 New (NewReady params record) ->
                     ( model
-                    , Form.createRecord model params record
+                    , Form.save model params record
                         |> attemptWithError Failed RecordCreated
                     )
 
@@ -277,43 +268,15 @@ urlChanged model =
                 Nothing ->
                     ( model, fail Failed <| BadSchema params.resources )
 
-        Edit (EditRequested resourcesName id) ->
+        Edit (EditLoading { definition, resourcesName } id) ->
+            ( model
+            , fetchOne model definition resourcesName id
+            )
+
+        LoadingDefinition resourcesName makeRoute ->
             case Dict.get resourcesName model.schema of
                 Just definition ->
-                    let
-                        params =
-                            { definition = definition
-                            , resourcesName = resourcesName
-                            , id = id
-                            }
-                    in
-                    ( { model | route = Edit <| EditLoading params }
-                    , fetchOne model definition resourcesName id
-                    )
-
-                Nothing ->
-                    ( model, fail Failed <| BadSchema resourcesName )
-
-        New (NewRequested resourcesName) ->
-            case Dict.get resourcesName model.schema of
-                Just definition ->
-                    let
-                        record =
-                            Definition.toResource definition
-
-                        params =
-                            { resourcesName = resourcesName
-                            , definition = definition
-                            }
-                    in
-                    ( { model
-                        | route =
-                            New <|
-                                NewReady params <|
-                                    Form.fromResource record
-                      }
-                    , Cmd.none
-                    )
+                    urlChanged { model | route = makeRoute definition }
 
                 Nothing ->
                     ( model, fail Failed <| BadSchema resourcesName )
@@ -397,29 +360,26 @@ displayMainContent model =
         Root ->
             text ""
 
+        LoadingDefinition _ _ ->
+            text ""
+
         Listing listing ->
             Html.map (ListingChanged listing) <| Listing.view listing
 
         New (NewReady params record) ->
             displayForm params record
 
-        New (NewRequested _) ->
-            text ""
-
         Edit (EditReady params record) ->
             displayForm params record
 
-        Edit (EditRequested _ _) ->
-            text ""
-
-        Edit (EditLoading _) ->
+        Edit (EditLoading _ _) ->
             text ""
 
         NotFound ->
             notFound
 
 
-displayForm : Form.Params a -> Form -> Html Msg
+displayForm : Form.Params -> Form -> Html Msg
 displayForm { resourcesName } record =
     section
         [ class "resource-form" ]
@@ -567,22 +527,36 @@ routeParser : Model -> Parser (Route -> a) a
 routeParser model =
     Parser.oneOf
         [ Parser.map Root Parser.top
-        , Parser.map makeFormRoute (Parser.string </> Parser.string)
-        , Parser.map (Listing << Listing.init) Parser.string
+        , Parser.map (\res id -> LoadingDefinition res (makeFormRoute res id))
+            (Parser.string </> Parser.string)
+        , Parser.map (\s -> LoadingDefinition s (makeListingRoute s))
+            Parser.string
         ]
 
 
-makeFormRoute : String -> String -> Route
-makeFormRoute resourcesName id =
+makeListingRoute : String -> Definition -> Route
+makeListingRoute resources definition =
+    Listing <| Listing.init resources definition
+
+
+makeFormRoute : String -> String -> Definition -> Route
+makeFormRoute resources id definition =
+    let
+        params =
+            { resourcesName = resources
+            , definition = definition
+            }
+    in
     if id == "new" then
-        New <| NewRequested resourcesName
+        let
+            form =
+                Definition.toResource definition
+                    |> Form.fromResource
+        in
+        New <| NewReady params form
 
     else
-        Edit <| EditRequested resourcesName id
-
-
-
--- To refactor
+        Edit <| EditLoading params id
 
 
 recordIdentifiers : List String
