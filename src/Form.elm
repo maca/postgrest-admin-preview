@@ -9,11 +9,11 @@ module Form exposing
     , fromDefinition
     , fromResource
     , hasErrors
+    , id
     , primaryKey
     , primaryKeyName
     , save
     , setError
-    , toId
     , toResource
     , update
     , updateRecord
@@ -76,12 +76,12 @@ update client msg ((Form params fields) as form) =
         Created resource ->
             -- mesage success
             let
-                id =
+                rid =
                     Resource.id resource |> Maybe.withDefault ""
             in
             ( fromResource params resource
             , Nav.pushUrl client.key <|
-                Url.absolute [ params.resourcesName, id ] []
+                Url.absolute [ params.resourcesName, rid ] []
             )
 
         Updated resource ->
@@ -135,8 +135,8 @@ hasErrors record =
     toResource record |> Resource.hasErrors
 
 
-toId : Form -> Maybe String
-toId record =
+id : Form -> Maybe String
+id record =
     toResource record |> Resource.id
 
 
@@ -185,8 +185,8 @@ columnRegex =
 
 
 fetch : Client a -> Params -> String -> Cmd Msg
-fetch model { definition, resourcesName } id =
-    Client.fetchOne model definition resourcesName id
+fetch model { definition, resourcesName } rid =
+    Client.fetchOne model definition resourcesName rid
         |> PG.toTask model.jwt
         |> Task.mapError PGError
         |> attemptWithError Failed Fetched
@@ -194,9 +194,9 @@ fetch model { definition, resourcesName } id =
 
 save : Client a -> Params -> Form -> Cmd Msg
 save client params form =
-    case toId form of
-        Just id ->
-            updateRecord client params id form
+    case id form of
+        Just rid ->
+            updateRecord client params rid form
                 |> attemptWithError Failed Updated
 
         Nothing ->
@@ -205,9 +205,9 @@ save client params form =
 
 
 updateRecord : Client a -> Params -> String -> Form -> Task Error Resource
-updateRecord client { definition, resourcesName } id record =
+updateRecord client { definition, resourcesName } rid record =
     toResource record
-        |> Client.update client definition resourcesName id
+        |> Client.update client definition resourcesName rid
         |> PG.toTask client.jwt
         |> Task.mapError PGError
 
