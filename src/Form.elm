@@ -1,14 +1,17 @@
 module Form exposing
     ( Form
+    , Params
     , changed
+    , createRecord
     , errors
     , fromResource
     , hasErrors
-    , id
     , primaryKey
     , primaryKeyName
     , setError
+    , toId
     , toResource
+    , updateRecord
     )
 
 import Basics.Extra exposing (flip)
@@ -17,7 +20,26 @@ import Form.Input as Input exposing (Input)
 import Postgrest.Client as PG
 import Postgrest.PrimaryKey exposing (PrimaryKey)
 import Postgrest.Resource as Resource exposing (Resource)
+import Postgrest.Resource.Client as Client exposing (Client)
+import Postgrest.Schema.Definition as Definition
+    exposing
+        ( Column(..)
+        , Definition
+        )
 import Regex exposing (Regex)
+import Task exposing (Task)
+import Utils.Task exposing (Error(..), attemptWithError, fail)
+
+
+type alias Params a =
+    { a
+        | resourcesName : String
+        , definition : Definition
+    }
+
+
+type alias Fields =
+    Dict String Input
 
 
 type alias Form =
@@ -49,8 +71,8 @@ hasErrors record =
     toResource record |> Resource.hasErrors
 
 
-id : Form -> Maybe String
-id record =
+toId : Form -> Maybe String
+toId record =
     toResource record |> Resource.id
 
 
@@ -92,3 +114,25 @@ columnRegex : Regex
 columnRegex =
     Regex.fromString "column \"(\\w+)\""
         |> Maybe.withDefault Regex.never
+
+
+
+-- Http
+
+
+updateRecord : Params { id : String } -> Client a -> Form -> Task Error Form
+updateRecord { definition, resourcesName, id } client record =
+    toResource record
+        |> Client.update client definition resourcesName id
+        |> PG.toTask client.jwt
+        |> Task.mapError PGError
+        |> Task.map fromResource
+
+
+createRecord : Params {} -> Client a -> Form -> Task Error Form
+createRecord { definition, resourcesName } client record =
+    toResource record
+        |> Client.create client definition resourcesName
+        |> PG.toTask client.jwt
+        |> Task.mapError PGError
+        |> Task.map fromResource

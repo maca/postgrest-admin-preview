@@ -86,19 +86,12 @@ type Route
     | NotFound
 
 
-type alias ResourceParams a =
-    { a
-        | resourcesName : String
-        , definition : Definition
-    }
-
-
 type alias EditionParams =
-    ResourceParams { id : String }
+    Form.Params { id : String }
 
 
 type alias CreationParams =
-    ResourceParams {}
+    Form.Params {}
 
 
 type Message
@@ -186,7 +179,7 @@ update msg model =
                 New (NewReady { resourcesName } _) ->
                     let
                         id =
-                            Form.id record |> Maybe.withDefault ""
+                            Form.toId record |> Maybe.withDefault ""
                     in
                     ( confirmation "Creation succeed" model
                     , Nav.pushUrl model.key <|
@@ -231,10 +224,16 @@ update msg model =
         FormSubmitted ->
             case model.route of
                 Edit (EditReady params record) ->
-                    ( model, updateRecord params model record )
+                    ( model
+                    , Form.updateRecord params model record
+                        |> attemptWithError Failed RecordUpdated
+                    )
 
                 New (NewReady params record) ->
-                    ( model, createRecord params model record )
+                    ( model
+                    , Form.createRecord params model record
+                        |> attemptWithError Failed RecordCreated
+                    )
 
                 _ ->
                     ( model, Cmd.none )
@@ -356,29 +355,6 @@ confirmation message model =
 --             }
 --         _ ->
 --             model
-
-
-updateRecord : EditionParams -> Model -> Form -> Cmd Msg
-updateRecord { definition, resourcesName, id } model record =
-    Form.toResource record
-        |> Client.update model definition resourcesName id
-        |> PG.toTask model.jwt
-        |> Task.mapError PGError
-        |> Task.map Form.fromResource
-        |> attemptWithError Failed RecordUpdated
-
-
-createRecord : CreationParams -> Model -> Form -> Cmd Msg
-createRecord { definition, resourcesName } model record =
-    Form.toResource record
-        |> Client.create model definition resourcesName
-        |> PG.toTask model.jwt
-        |> Task.mapError PGError
-        |> Task.map Form.fromResource
-        |> attemptWithError Failed RecordCreated
-
-
-
 -- View
 
 
@@ -443,7 +419,7 @@ displayMainContent model =
             notFound
 
 
-displayForm : ResourceParams a -> Form -> Html Msg
+displayForm : Form.Params a -> Form -> Html Msg
 displayForm { resourcesName } record =
     section
         [ class "resource-form" ]
