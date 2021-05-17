@@ -9,7 +9,6 @@ module Listing exposing
     , view
     )
 
-import Array
 import Basics.Extra exposing (flip)
 import Browser.Dom as Dom exposing (Viewport)
 import Browser.Navigation as Nav
@@ -22,7 +21,6 @@ import Html
         , h1
         , header
         , section
-        , table
         , tbody
         , td
         , text
@@ -47,7 +45,7 @@ import String.Extra as String
 import Task
 import Time.Extra as Time
 import Url.Builder as Url
-import Utils.Task exposing (Error(..), attemptWithError, fail)
+import Utils.Task exposing (Error(..), attemptWithError)
 
 
 type Listing
@@ -81,20 +79,22 @@ init resources definition =
     Loading { resources = resources, page = 0 } definition []
 
 
-load :
-    Client a
-    -> Params
-    -> Definition
-    -> List (List Resource)
-    -> ( Listing, Cmd Msg )
-load client params definition pages =
-    ( Loading params definition pages
+load : Client a -> Listing -> ( Listing, Cmd Msg )
+load client listing =
+    let
+        params =
+            toParams listing
+
+        definition =
+            toDefinition listing
+    in
+    ( Loading params definition (toPages listing)
     , fetchResources client definition params
     )
 
 
-update : { a | key : Nav.Key } -> Listing -> Msg -> ( Listing, Cmd Msg )
-update { key } listing msg =
+update : { a | key : Nav.Key } -> Msg -> Listing -> ( Listing, Cmd Msg )
+update { key } msg listing =
     case msg of
         ResourceLinkClicked resources id ->
             ( listing, Nav.pushUrl key <| Url.absolute [ resources, id ] [] )
@@ -114,7 +114,7 @@ update { key } listing msg =
                 |> attemptWithError Failed Info
             )
 
-        Info ({ scene, viewport } as info) ->
+        Info { scene, viewport } ->
             if scene.height - viewport.y > 2000 then
                 ( listing, Cmd.none )
 
@@ -320,6 +320,16 @@ toParams listing =
             params
 
 
+toDefinition : Listing -> Definition
+toDefinition listing =
+    case listing of
+        Loading _ definition _ ->
+            definition
+
+        Ready _ definition _ ->
+            definition
+
+
 toPages : Listing -> List (List Resource)
 toPages listing =
     case listing of
@@ -328,16 +338,6 @@ toPages listing =
 
         Ready _ _ pages ->
             pages
-
-
-isLoading : Listing -> Bool
-isLoading listing =
-    case listing of
-        Loading params _ _ ->
-            True
-
-        Ready params _ _ ->
-            False
 
 
 listingId : Listing -> String
@@ -360,14 +360,14 @@ perPage =
 
 
 fetchResources : Client a -> Definition -> Params -> Cmd Msg
-fetchResources ({ schema, jwt } as model) definition { resources } =
+fetchResources ({ jwt } as client) definition { resources } =
     let
         params =
             [ PG.select <| Client.selects definition
             , PG.limit perPage
             ]
     in
-    Client.fetchMany model definition resources
+    Client.fetchMany client definition resources
         |> PG.setParams params
         |> PG.toTask jwt
         |> Task.mapError PGError

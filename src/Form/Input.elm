@@ -12,7 +12,7 @@ module Form.Input exposing
 
 import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
-import Html exposing (..)
+import Html exposing (Html, a, div, label, option, p, text)
 import Html.Attributes
     exposing
         ( attribute

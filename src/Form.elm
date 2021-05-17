@@ -1,9 +1,12 @@
 module Form exposing
-    ( Form
+    ( Form(..)
+    , Msg
     , Params
     , changed
     , createRecord
     , errors
+    , fetch
+    , fromDefinition
     , fromResource
     , hasErrors
     , primaryKey
@@ -12,14 +15,20 @@ module Form exposing
     , setError
     , toId
     , toResource
+    , update
     , updateRecord
+    , view
     )
 
 import Basics.Extra exposing (flip)
+import Browser.Navigation as Nav
 import Dict exposing (Dict)
 import Form.Input as Input exposing (Input)
+import Html exposing (Html, button, fieldset, h1, section, text)
+import Html.Attributes exposing (autocomplete, class, disabled, novalidate)
+import Html.Events exposing (onSubmit)
 import Postgrest.Client as PG
-import Postgrest.PrimaryKey exposing (PrimaryKey)
+import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
 import Postgrest.Schema.Definition as Definition
@@ -27,9 +36,12 @@ import Postgrest.Schema.Definition as Definition
         ( Column(..)
         , Definition
         )
+import Postgrest.Value exposing (Value(..))
 import Regex exposing (Regex)
+import String.Extra as String
 import Task exposing (Task)
-import Utils.Task exposing (Error(..), attemptWithError, fail)
+import Url.Builder as Url
+import Utils.Task exposing (Error(..), attemptWithError)
 
 
 type alias Params =
@@ -38,23 +50,79 @@ type alias Params =
     }
 
 
-type alias Form =
+type Msg
+    = Fetched Resource
+    | Created Resource
+    | Updated Resource
+    | Changed Input.Msg
+    | Submitted
+    | Failed Error
+
+
+type alias Fields =
     Dict String Input
 
 
+type Form
+    = Form Params Fields
+
+
+update : Client { a | key : Nav.Key } -> Msg -> Form -> ( Form, Cmd Msg )
+update client msg ((Form params fields) as form) =
+    case msg of
+        Fetched resource ->
+            ( fromResource params resource, Cmd.none )
+
+        Created resource ->
+            -- mesage success
+            let
+                id =
+                    Resource.id resource |> Maybe.withDefault ""
+            in
+            ( fromResource params resource
+            , Nav.pushUrl client.key <|
+                Url.absolute [ params.resourcesName, id ] []
+            )
+
+        Updated resource ->
+            -- mesage success
+            ( fromResource params resource, Cmd.none )
+
+        Changed inputMsg ->
+            Input.update client inputMsg fields
+                |> Tuple.mapFirst (Form params)
+                |> Tuple.mapSecond (Cmd.map Changed)
+
+        Submitted ->
+            ( form, save client params form )
+
+        Failed _ ->
+            ( form, Cmd.none )
+
+
+
+-- Utils
+
+
 toResource : Form -> Resource
-toResource record =
-    Dict.map (\_ input -> Input.toField input) record
+toResource (Form _ fields) =
+    Dict.map (\_ input -> Input.toField input) fields
 
 
-fromResource : Resource -> Form
-fromResource resource =
-    Dict.map (\_ input -> Input.fromField input) resource
+fromResource : Params -> Resource -> Form
+fromResource params resource =
+    Form params <| Dict.map (\_ input -> Input.fromField input) resource
+
+
+fromDefinition : Params -> Definition -> Form
+fromDefinition params definition =
+    Definition.toResource definition
+        |> fromResource params
 
 
 changed : Form -> Bool
-changed record =
-    Dict.values record |> List.any (.changed << Input.toField)
+changed (Form _ fields) =
+    Dict.values fields |> List.any (.changed << Input.toField)
 
 
 errors : Form -> Dict String (Maybe String)
@@ -83,7 +151,7 @@ primaryKeyName record =
 
 
 setError : PG.PostgrestErrorJSON -> Form -> Form
-setError error resource =
+setError error ((Form params fields) as form) =
     let
         mapFun columnName key input =
             if key == columnName then
@@ -94,8 +162,8 @@ setError error resource =
     in
     error.message
         |> Maybe.andThen extractColumnName
-        |> Maybe.map (mapFun >> flip Dict.map resource)
-        |> Maybe.withDefault resource
+        |> Maybe.map (mapFun >> flip Dict.map fields >> Form params)
+        |> Maybe.withDefault form
 
 
 extractColumnName : String -> Maybe String
@@ -116,29 +184,141 @@ columnRegex =
 -- Http
 
 
-save : Client a -> Params -> Form -> Task Error Form
+fetch : Client a -> Params -> String -> Cmd Msg
+fetch model { definition, resourcesName } id =
+    Client.fetchOne model definition resourcesName id
+        |> PG.toTask model.jwt
+        |> Task.mapError PGError
+        |> attemptWithError Failed Fetched
+
+
+save : Client a -> Params -> Form -> Cmd Msg
 save client params form =
     case toId form of
         Just id ->
             updateRecord client params id form
+                |> attemptWithError Failed Updated
 
         Nothing ->
             createRecord client params form
+                |> attemptWithError Failed Created
 
 
-updateRecord : Client a -> Params -> String -> Form -> Task Error Form
+updateRecord : Client a -> Params -> String -> Form -> Task Error Resource
 updateRecord client { definition, resourcesName } id record =
     toResource record
         |> Client.update client definition resourcesName id
         |> PG.toTask client.jwt
         |> Task.mapError PGError
-        |> Task.map fromResource
 
 
-createRecord : Client a -> Params -> Form -> Task Error Form
+createRecord : Client a -> Params -> Form -> Task Error Resource
 createRecord client { definition, resourcesName } record =
     toResource record
         |> Client.create client definition resourcesName
         |> PG.toTask client.jwt
         |> Task.mapError PGError
-        |> Task.map fromResource
+
+
+
+-- View
+
+
+view : Form -> Html Msg
+view ((Form { resourcesName } record) as form) =
+    let
+        fields =
+            Dict.toList record
+                |> List.sortWith sortInputs
+                |> List.map
+                    (\( name, input ) ->
+                        Input.view name input |> Html.map Changed
+                    )
+    in
+    section
+        [ class "resource-form" ]
+        [ h1 []
+            [ recordLabel form
+                |> Maybe.withDefault "New"
+                |> (++) (String.humanize resourcesName ++ " - ")
+                |> text
+            ]
+        , Html.form
+            [ autocomplete False
+            , onSubmit Submitted
+            , novalidate True
+            ]
+            [ fieldset [] fields
+            , fieldset []
+                [ button
+                    [ disabled (not (changed form) || hasErrors form) ]
+                    [ text "Save" ]
+                ]
+            ]
+        ]
+
+
+recordLabel : Form -> Maybe String
+recordLabel record =
+    let
+        mlabel =
+            List.filterMap (recordLabelHelp record) recordIdentifiers
+                |> List.head
+    in
+    case mlabel of
+        Just _ ->
+            mlabel
+
+        Nothing ->
+            primaryKey record |> Maybe.map PrimaryKey.toString
+
+
+recordLabelHelp : Form -> String -> Maybe String
+recordLabelHelp (Form _ fields) fieldName =
+    case Dict.get fieldName fields |> Maybe.map Input.toValue of
+        Just (PString label) ->
+            label
+
+        _ ->
+            Nothing
+
+
+
+-- To refactor
+
+
+recordIdentifiers : List String
+recordIdentifiers =
+    [ "title", "name", "full name", "email", "first name", "last name" ]
+
+
+sortInputs : ( String, Input ) -> ( String, Input ) -> Order
+sortInputs ( name, input ) ( name_, input_ ) =
+    sortValues ( name, Input.toValue input ) ( name_, Input.toValue input_ )
+
+
+sortValues : ( String, Value ) -> ( String, Value ) -> Order
+sortValues ( name, a ) ( _, b ) =
+    case ( a, b ) of
+        ( PPrimaryKey _, _ ) ->
+            LT
+
+        ( _, PPrimaryKey _ ) ->
+            GT
+
+        ( PForeignKey _ _, _ ) ->
+            LT
+
+        ( _, PForeignKey _ _ ) ->
+            GT
+
+        ( PString _, _ ) ->
+            recordIdentifiers
+                |> List.indexedMap (flip Tuple.pair)
+                |> Dict.fromList
+                |> Dict.get name
+                |> Maybe.map (toFloat >> flip compare (1 / 0))
+                |> Maybe.withDefault GT
+
+        _ ->
+            EQ
