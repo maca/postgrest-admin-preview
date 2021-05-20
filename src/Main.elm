@@ -129,7 +129,7 @@ urlChanged model =
                     ( model, fail Failed <| BadSchema resourcesName )
 
         Listing listing ->
-            Listing.load model listing
+            Listing.fetch model listing
                 |> mapNested Listing ListingChanged model
 
         FormLoad params form id ->

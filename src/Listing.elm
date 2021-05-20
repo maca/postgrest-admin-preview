@@ -2,8 +2,8 @@ module Listing exposing
     ( Listing
     , Msg
     , Params
+    , fetch
     , init
-    , load
     , toParams
     , update
     , view
@@ -81,8 +81,8 @@ init resources definition =
         []
 
 
-load : Client a -> Listing -> ( Listing, Cmd Msg )
-load client listing =
+fetch : Client a -> Listing -> ( Listing, Cmd Msg )
+fetch client listing =
     let
         params =
             toParams listing
@@ -141,7 +141,7 @@ update client msg listing =
                             scene.height - viewport.y < (viewport.height * 2)
                     in
                     if scrollingDown && closeToBottom then
-                        load client listing_
+                        fetch client listing_
 
                     else
                         ( listing_, Cmd.none )
