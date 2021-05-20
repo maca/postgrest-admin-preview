@@ -112,6 +112,35 @@ input, textarea, .grow-wrap > textarea, .grow-wrap::after {
 }
 
 
+/* message */
+.message {
+    position: fixed;
+    display: flex;
+    top: 4rem;
+    right: 4rem;
+    padding: 0.5rem 2rem;
+    border-radius: 0.5rem;
+    justify-content: space-between;
+}
+
+.message .close {
+    justify-content: flex-end;
+}
+
+.message p {
+    margin-top: 0.4rem;
+    padding-right: 4rem;
+}
+
+.message.confirmation {
+    background: rgba(204, 229, 189, 0.6);
+}
+
+.message.confirmation, .message.confirmation i {
+    color: #698658;
+}
+
+
 /* textarea autogrow
 https://css-tricks.com/the-cleanest-trick-for-autogrowing-textareas/
 */
@@ -137,6 +166,6 @@ https://css-tricks.com/the-cleanest-trick-for-autogrowing-textareas/
 }
 
 /* misc */
-.icono-cross, .listing-row {
+i.icono-cross, .listing-row {
     cursor: pointer;
 }

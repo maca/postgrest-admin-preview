@@ -10,6 +10,7 @@ module Form exposing
     , fromResource
     , hasErrors
     , id
+    , message
     , primaryKey
     , primaryKeyName
     , save
@@ -27,6 +28,7 @@ import Form.Input as Input exposing (Input)
 import Html exposing (Html, button, fieldset, h1, section, text)
 import Html.Attributes exposing (autocomplete, class, disabled, novalidate)
 import Html.Events exposing (onSubmit)
+import Message exposing (Message)
 import Postgrest.Client as PG
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
 import Postgrest.Resource as Resource exposing (Resource)
@@ -47,6 +49,7 @@ import Utils.Task exposing (Error(..), attemptWithError)
 type alias Params =
     { resourcesName : String
     , definition : Definition
+    , message : Message
     }
 
 
@@ -56,6 +59,7 @@ type Msg
     | Updated Resource
     | Changed Input.Msg
     | Submitted
+    | MessageChanged Message.Msg
     | Failed Error
 
 
@@ -74,27 +78,47 @@ update client msg ((Form params fields) as form) =
             ( fromResource params resource, Cmd.none )
 
         Created resource ->
-            -- mesage success
             let
+                confirmation =
+                    Message.confirm "The record was created"
+
                 rid =
                     Resource.id resource |> Maybe.withDefault ""
             in
-            ( fromResource params resource
+            ( fromResource { params | message = confirmation } resource
             , Nav.pushUrl client.key <|
                 Url.absolute [ params.resourcesName, rid ] []
             )
 
         Updated resource ->
-            -- mesage success
-            ( fromResource params resource, Cmd.none )
+            let
+                confirmation =
+                    Message.confirm "The record was updated"
+            in
+            ( fromResource { params | message = confirmation } resource, Cmd.none )
 
         Changed inputMsg ->
+            let
+                ( updatedMsg, messageCmd ) =
+                    Message.update Message.dismiss params.message
+            in
             Input.update client inputMsg fields
-                |> Tuple.mapFirst (Form params)
-                |> Tuple.mapSecond (Cmd.map Changed)
+                |> Tuple.mapFirst (Form { params | message = updatedMsg })
+                |> Tuple.mapSecond
+                    (\cmd ->
+                        Cmd.batch
+                            [ Cmd.map Changed cmd
+                            , Cmd.map MessageChanged messageCmd
+                            ]
+                    )
 
         Submitted ->
             ( form, save client params form )
+
+        MessageChanged messageMsg ->
+            Message.update messageMsg params.message
+                |> Tuple.mapFirst (\m -> Form { params | message = m } fields)
+                |> Tuple.mapSecond (Cmd.map MessageChanged)
 
         Failed _ ->
             ( form, Cmd.none )
@@ -133,6 +157,11 @@ errors record =
 hasErrors : Form -> Bool
 hasErrors record =
     toResource record |> Resource.hasErrors
+
+
+message : Form -> Message
+message (Form params _) =
+    params.message
 
 
 id : Form -> Maybe String
@@ -225,7 +254,7 @@ createRecord client { definition, resourcesName } record =
 
 
 view : Form -> Html Msg
-view ((Form { resourcesName } record) as form) =
+view ((Form params record) as form) =
     let
         fields =
             Dict.toList record
@@ -240,9 +269,10 @@ view ((Form { resourcesName } record) as form) =
         [ h1 []
             [ recordLabel form
                 |> Maybe.withDefault "New"
-                |> (++) (String.humanize resourcesName ++ " - ")
+                |> (++) (String.humanize params.resourcesName ++ " - ")
                 |> text
             ]
+        , Message.view params.message |> Html.map MessageChanged
         , Html.form
             [ autocomplete False
             , onSubmit Submitted

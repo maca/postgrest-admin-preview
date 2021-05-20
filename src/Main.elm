@@ -9,6 +9,7 @@ import Html exposing (Html, a, aside, div, li, text, ul)
 import Html.Attributes exposing (class, href)
 import Inflect as String
 import Listing exposing (Listing)
+import Message exposing (Message)
 import Postgrest.Client as PG
 import Postgrest.Resource.Client exposing (Client)
 import Postgrest.Schema as Schema exposing (Schema)
@@ -78,7 +79,7 @@ init () url key =
             , jwt = jwt
             }
     in
-    ( { model | route = getRoute url }
+    ( { model | route = getRoute url model }
     , Schema.getSchema host |> attemptWithError Failed SchemaFetched
     )
 
@@ -110,7 +111,7 @@ update msg model =
                     ( model, Nav.load href )
 
         UrlChanged url ->
-            urlChanged { model | route = getRoute url }
+            urlChanged { model | route = getRoute url model }
 
         Failed _ ->
             ( model, Cmd.none )
@@ -232,33 +233,46 @@ subscriptions _ =
 -- Routes
 
 
-getRoute : Url -> Route
-getRoute url =
-    Parser.parse routeParser url |> Maybe.withDefault NotFound
+getRoute : Url -> Model -> Route
+getRoute url model =
+    Parser.parse (routeParser model) url |> Maybe.withDefault NotFound
 
 
-routeParser : Parser (Route -> a) a
-routeParser =
+routeParser : Model -> Parser (Route -> a) a
+routeParser model =
     Parser.oneOf
         [ Parser.map Root Parser.top
-        , Parser.map (\res id -> LoadingDefinition res (makeFormRoute res id))
-            (Parser.string </> Parser.string)
+        , formRouteParser model
         , Parser.map (\s -> LoadingDefinition s (makeListingRoute s))
             Parser.string
         ]
 
 
-makeListingRoute : String -> Definition -> Route
-makeListingRoute resources definition =
-    Listing <| Listing.init resources definition
+formRouteParser : Model -> Parser (Route -> a) a
+formRouteParser model =
+    Parser.map (\res id -> LoadingDefinition res (makeFormRoute res id model))
+        (Parser.string </> Parser.string)
 
 
-makeFormRoute : String -> String -> Definition -> Route
-makeFormRoute resources id definition =
+makeFormRoute : String -> String -> Model -> Definition -> Route
+makeFormRoute resources id model definition =
     let
+        message =
+            case model.route of
+                Form f ->
+                    if Form.id f == Just id then
+                        Form.message f
+
+                    else
+                        Message.none
+
+                _ ->
+                    Message.none
+
         params =
             { resourcesName = resources
             , definition = definition
+            , message = message
             }
 
         form =
@@ -269,3 +283,8 @@ makeFormRoute resources id definition =
 
     else
         FormLoad params form id
+
+
+makeListingRoute : String -> Definition -> Route
+makeListingRoute resources definition =
+    Listing <| Listing.init resources definition
