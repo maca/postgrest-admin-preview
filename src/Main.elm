@@ -9,7 +9,7 @@ import Html exposing (Html, a, aside, div, li, text, ul)
 import Html.Attributes exposing (class, href)
 import Inflect as String
 import Listing exposing (Listing)
-import Message exposing (Message)
+import Message
 import Postgrest.Client as PG
 import Postgrest.Resource.Client exposing (Client)
 import Postgrest.Schema as Schema exposing (Schema)

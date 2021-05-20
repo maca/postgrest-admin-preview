@@ -30,7 +30,6 @@ import Html
         )
 import Html.Attributes exposing (class, href, id, target)
 import Html.Events as Events
-import Html.Keyed as Keyed
 import Html.Lazy exposing (lazy4)
 import Inflect as String
 import Json.Decode as Decode
@@ -50,7 +49,7 @@ import Utils.Task exposing (Error(..), attemptWithError)
 
 type Listing
     = Loading Params Definition (List (List Resource))
-    | Ready Params Definition (List (List Resource))
+    | Idle Params Definition (List (List Resource))
 
 
 type Msg
@@ -64,6 +63,7 @@ type Msg
 type alias Params =
     { resources : String
     , page : Int
+    , scrollPosition : Float
     }
 
 
@@ -76,7 +76,9 @@ type alias EventConfig =
 
 init : String -> Definition -> Listing
 init resources definition =
-    Loading { resources = resources, page = 0 } definition []
+    Loading { resources = resources, page = 0, scrollPosition = 0 }
+        definition
+        []
 
 
 load : Client a -> Listing -> ( Listing, Cmd Msg )
@@ -93,19 +95,25 @@ load client listing =
     )
 
 
-update : { a | key : Nav.Key } -> Msg -> Listing -> ( Listing, Cmd Msg )
-update { key } msg listing =
+update : Client { a | key : Nav.Key } -> Msg -> Listing -> ( Listing, Cmd Msg )
+update client msg listing =
     case msg of
         ResourceLinkClicked resources id ->
-            ( listing, Nav.pushUrl key <| Url.absolute [ resources, id ] [] )
+            ( listing
+            , Nav.pushUrl client.key <| Url.absolute [ resources, id ] []
+            )
 
         Fetched records ->
             case listing of
                 Loading params definition pages ->
-                    ( Ready params definition (records :: pages), Cmd.none )
+                    ( Idle { params | page = params.page + 1 }
+                        definition
+                        (records :: pages)
+                    , Cmd.none
+                    )
 
-                Ready params definition pages ->
-                    ( Ready params definition (records :: pages), Cmd.none )
+                Idle _ _ _ ->
+                    ( listing, Cmd.none )
 
         Scrolled ->
             ( listing
@@ -115,11 +123,28 @@ update { key } msg listing =
             )
 
         Info { scene, viewport } ->
-            if scene.height - viewport.y > 2000 then
-                ( listing, Cmd.none )
+            case listing of
+                Loading _ _ _ ->
+                    ( listing, Cmd.none )
 
-            else
-                ( listing, Cmd.none )
+                Idle params definition pages ->
+                    let
+                        listing_ =
+                            Idle { params | scrollPosition = viewport.y }
+                                definition
+                                pages
+
+                        scrollingDown =
+                            params.scrollPosition < viewport.y
+
+                        closeToBottom =
+                            scene.height - viewport.y < (viewport.height * 2)
+                    in
+                    if scrollingDown && closeToBottom then
+                        load client listing_
+
+                    else
+                        ( listing_, Cmd.none )
 
         Failed _ ->
             ( listing, Cmd.none )
@@ -127,44 +152,52 @@ update { key } msg listing =
 
 view : Listing -> Html Msg
 view listing =
-    case listing of
-        Ready { resources } definition pages ->
-            let
-                fields =
-                    Dict.toList definition
-                        |> List.sortWith sortColumns
-                        |> List.map Tuple.first
+    let
+        { resources } =
+            toParams listing
 
-                toHeader =
-                    String.humanize >> text >> List.singleton >> th []
+        definition =
+            toDefinition listing
 
-                header =
-                    ( "header", thead [] [ tr [] <| List.map toHeader fields ] )
-            in
-            section
-                [ class "resources-listing" ]
-                [ viewListHeader resources
-                , div
-                    [ Events.on "scroll" (Decode.succeed Scrolled)
-                    , id <| listingId listing
-                    ]
-                    [ Keyed.node "table"
-                        []
-                        (header :: viewPagesFold resources fields [] 0 pages)
-                    ]
-                ]
+        pages =
+            toPages listing
 
-        Loading _ _ _ ->
-            text ""
+        fields =
+            Dict.toList definition
+                |> List.sortWith sortColumns
+                |> List.map Tuple.first
+
+        toHeader =
+            String.humanize >> text >> List.singleton >> th []
+
+        header =
+            thead [] [ tr [] <| List.map toHeader fields ]
+    in
+    section
+        [ class "resources-listing" ]
+        [ viewListHeader resources
+        , div
+            [ if isIdle listing then
+                Events.on "scroll" (Decode.succeed Scrolled)
+
+              else
+                class ""
+            , id <| listingId listing
+            ]
+            [ Html.table
+                []
+                (header :: viewPagesFold resources fields [] 0 pages)
+            ]
+        ]
 
 
 viewPagesFold :
     String
     -> List String
-    -> List ( String, Html Msg )
+    -> List (Html Msg)
     -> Int
     -> List (List Resource)
-    -> List ( String, Html Msg )
+    -> List (Html Msg)
 viewPagesFold rname fields acc pageNum pages =
     case pages of
         [] ->
@@ -173,7 +206,7 @@ viewPagesFold rname fields acc pageNum pages =
         page :: rest ->
             let
                 elem =
-                    ( pageId pageNum, lazy4 viewPage rname fields pageNum page )
+                    lazy4 viewPage rname fields pageNum page
             in
             viewPagesFold rname fields (elem :: acc) (pageNum + 1) rest
 
@@ -310,13 +343,23 @@ sortValues ( name, a ) ( _, b ) =
             EQ
 
 
+isIdle : Listing -> Bool
+isIdle listing =
+    case listing of
+        Loading _ _ _ ->
+            False
+
+        Idle _ _ _ ->
+            True
+
+
 toParams : Listing -> Params
 toParams listing =
     case listing of
         Loading params _ _ ->
             params
 
-        Ready params _ _ ->
+        Idle params _ _ ->
             params
 
 
@@ -326,7 +369,7 @@ toDefinition listing =
         Loading _ definition _ ->
             definition
 
-        Ready _ definition _ ->
+        Idle _ definition _ ->
             definition
 
 
@@ -336,7 +379,7 @@ toPages listing =
         Loading _ _ pages ->
             pages
 
-        Ready _ _ pages ->
+        Idle _ _ pages ->
             pages
 
 
@@ -360,11 +403,12 @@ perPage =
 
 
 fetchResources : Client a -> Definition -> Params -> Cmd Msg
-fetchResources ({ jwt } as client) definition { resources } =
+fetchResources ({ jwt } as client) definition { resources, page } =
     let
         params =
             [ PG.select <| Client.selects definition
             , PG.limit perPage
+            , PG.offset (perPage * page)
             ]
     in
     Client.fetchMany client definition resources

@@ -45,7 +45,7 @@ dismiss =
 
 
 update : Msg -> Message -> ( Message, Cmd Msg )
-update Dismiss message =
+update Dismiss _ =
     ( None, Cmd.none )
 
 
