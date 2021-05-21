@@ -1,10 +1,8 @@
 module Listing exposing
     ( Listing
     , Msg
-    , Params
     , fetch
     , init
-    , toParams
     , update
     , view
     )
@@ -47,11 +45,6 @@ import Url.Builder as Url
 import Utils.Task exposing (Error(..), attemptWithError)
 
 
-type Listing
-    = Loading Params (List (List Resource))
-    | Idle Params (List (List Resource))
-
-
 type Msg
     = ResourceLinkClicked String String
     | Fetched (List Resource)
@@ -60,11 +53,12 @@ type Msg
     | Failed Error
 
 
-type alias Params =
-    { resources : String
+type alias Listing =
+    { resourcesName : String
     , page : Int
     , scrollPosition : Float
     , definition : Definition
+    , resources : List (List Resource)
     }
 
 
@@ -76,27 +70,18 @@ type alias EventConfig =
 
 
 init : String -> Definition -> Listing
-init resources definition =
-    let
-        params =
-            { resources = resources
-            , page = 0
-            , scrollPosition = 0
-            , definition = definition
-            }
-    in
-    Loading params []
+init resourcesName definition =
+    { resourcesName = resourcesName
+    , page = 0
+    , scrollPosition = 0
+    , definition = definition
+    , resources = []
+    }
 
 
 fetch : Client a -> Listing -> ( Listing, Cmd Msg )
 fetch client listing =
-    let
-        params =
-            toParams listing
-    in
-    ( Loading params (toPages listing)
-    , fetchResources client params
-    )
+    ( listing, fetchResources client listing )
 
 
 update : Client { a | key : Nav.Key } -> Msg -> Listing -> ( Listing, Cmd Msg )
@@ -108,57 +93,42 @@ update client msg listing =
             )
 
         Fetched records ->
-            case listing of
-                Loading params pages ->
-                    ( Idle { params | page = params.page + 1 } (records :: pages)
-                    , Cmd.none
-                    )
-
-                Idle _ _ ->
-                    ( listing, Cmd.none )
+            ( { listing
+                | page = listing.page + 1
+                , resources = records :: listing.resources
+              }
+            , Cmd.none
+            )
 
         Scrolled ->
             ( listing
-            , Dom.getViewportOf (listingId listing)
+            , Dom.getViewportOf listing.resourcesName
                 |> Task.mapError DomError
                 |> attemptWithError Failed Info
             )
 
         Info { scene, viewport } ->
-            case listing of
-                Loading _ _ ->
-                    ( listing, Cmd.none )
+            let
+                scrollingDown =
+                    listing.scrollPosition < viewport.y
 
-                Idle params pages ->
-                    let
-                        listing_ =
-                            Idle { params | scrollPosition = viewport.y } pages
+                closeToBottom =
+                    scene.height - viewport.y < (viewport.height * 2)
+            in
+            if scrollingDown && closeToBottom then
+                { listing | scrollPosition = viewport.y }
+                    |> fetch client
 
-                        scrollingDown =
-                            params.scrollPosition < viewport.y
-
-                        closeToBottom =
-                            scene.height - viewport.y < (viewport.height * 2)
-                    in
-                    if scrollingDown && closeToBottom then
-                        fetch client listing_
-
-                    else
-                        ( listing_, Cmd.none )
+            else
+                ( listing, Cmd.none )
 
         Failed _ ->
             ( listing, Cmd.none )
 
 
 view : Listing -> Html Msg
-view listing =
+view { resources, resourcesName, definition } =
     let
-        { resources, definition } =
-            toParams listing
-
-        pages =
-            toPages listing
-
         fields =
             Dict.toList definition
                 |> List.sortWith sortColumns
@@ -172,18 +142,14 @@ view listing =
     in
     section
         [ class "resources-listing" ]
-        [ viewListHeader resources
+        [ viewListHeader resourcesName
         , div
-            [ if isIdle listing then
-                Events.on "scroll" (Decode.succeed Scrolled)
-
-              else
-                class ""
-            , id <| listingId listing
+            [ Events.on "scroll" (Decode.succeed Scrolled)
+            , id resourcesName
             ]
             [ Html.table
                 []
-                (header :: viewPagesFold resources fields [] 0 pages)
+                (header :: viewPagesFold resourcesName fields [] 0 resources)
             ]
         ]
 
@@ -340,41 +306,6 @@ sortValues ( name, a ) ( _, b ) =
             EQ
 
 
-isIdle : Listing -> Bool
-isIdle listing =
-    case listing of
-        Loading _ _ ->
-            False
-
-        Idle _ _ ->
-            True
-
-
-toParams : Listing -> Params
-toParams listing =
-    case listing of
-        Loading params _ ->
-            params
-
-        Idle params _ ->
-            params
-
-
-toPages : Listing -> List (List Resource)
-toPages listing =
-    case listing of
-        Loading _ pages ->
-            pages
-
-        Idle _ pages ->
-            pages
-
-
-listingId : Listing -> String
-listingId listing =
-    toParams listing |> .resources
-
-
 pageId : Int -> String
 pageId pageNum =
     "page-" ++ String.fromInt pageNum
@@ -389,8 +320,8 @@ perPage =
 -- Http interactions
 
 
-fetchResources : Client a -> Params -> Cmd Msg
-fetchResources ({ jwt } as client) { resources, page, definition } =
+fetchResources : Client a -> Listing -> Cmd Msg
+fetchResources ({ jwt } as client) { resourcesName, page, definition } =
     let
         params =
             [ PG.select <| Client.selects definition
@@ -398,7 +329,7 @@ fetchResources ({ jwt } as client) { resources, page, definition } =
             , PG.offset (perPage * page)
             ]
     in
-    Client.fetchMany client definition resources
+    Client.fetchMany client definition resourcesName
         |> PG.setParams params
         |> PG.toTask jwt
         |> Task.mapError PGError
