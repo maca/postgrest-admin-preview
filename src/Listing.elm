@@ -38,6 +38,7 @@ import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value exposing (Value(..))
+import Process
 import String.Extra as String
 import Task
 import Time.Extra as Time
@@ -59,6 +60,7 @@ type alias Listing =
     , scrollPosition : Float
     , definition : Definition
     , resources : List (List Resource)
+    , loading : Bool
     }
 
 
@@ -76,6 +78,7 @@ init resourcesName definition =
     , scrollPosition = 0
     , definition = definition
     , resources = []
+    , loading = False
     }
 
 
@@ -96,6 +99,7 @@ update client msg listing =
             ( { listing
                 | page = listing.page + 1
                 , resources = records :: listing.resources
+                , loading = False
               }
             , Cmd.none
             )
@@ -113,10 +117,10 @@ update client msg listing =
                     listing.scrollPosition < viewport.y
 
                 closeToBottom =
-                    scene.height - viewport.y < (viewport.height * 2)
+                    scene.height - viewport.y < viewport.height
             in
-            if scrollingDown && closeToBottom then
-                { listing | scrollPosition = viewport.y }
+            if scrollingDown && closeToBottom && not listing.loading then
+                { listing | scrollPosition = viewport.y, loading = True }
                     |> fetch client
 
             else
@@ -127,7 +131,7 @@ update client msg listing =
 
 
 view : Listing -> Html Msg
-view { resources, resourcesName, definition } =
+view { resources, resourcesName, definition, loading, page } =
     let
         fields =
             Dict.toList definition
@@ -139,17 +143,22 @@ view { resources, resourcesName, definition } =
 
         header =
             thead [] [ tr [] <| List.map toHeader fields ]
+
+        body =
+            header :: viewPagesFold resourcesName fields [] 0 resources
     in
     section
         [ class "resources-listing" ]
         [ viewListHeader resourcesName
         , div
-            [ Events.on "scroll" (Decode.succeed Scrolled)
+            [ if loading then
+                class ""
+
+              else
+                Events.on "scroll" (Decode.succeed Scrolled)
             , id resourcesName
             ]
-            [ Html.table
-                []
-                (header :: viewPagesFold resourcesName fields [] 0 resources)
+            [ Html.table [] body
             ]
         ]
 
