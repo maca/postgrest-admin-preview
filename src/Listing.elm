@@ -48,8 +48,8 @@ import Utils.Task exposing (Error(..), attemptWithError)
 
 
 type Listing
-    = Loading Params Definition (List (List Resource))
-    | Idle Params Definition (List (List Resource))
+    = Loading Params (List (List Resource))
+    | Idle Params (List (List Resource))
 
 
 type Msg
@@ -64,6 +64,7 @@ type alias Params =
     { resources : String
     , page : Int
     , scrollPosition : Float
+    , definition : Definition
     }
 
 
@@ -76,9 +77,15 @@ type alias EventConfig =
 
 init : String -> Definition -> Listing
 init resources definition =
-    Loading { resources = resources, page = 0, scrollPosition = 0 }
-        definition
-        []
+    let
+        params =
+            { resources = resources
+            , page = 0
+            , scrollPosition = 0
+            , definition = definition
+            }
+    in
+    Loading params []
 
 
 fetch : Client a -> Listing -> ( Listing, Cmd Msg )
@@ -86,12 +93,9 @@ fetch client listing =
     let
         params =
             toParams listing
-
-        definition =
-            toDefinition listing
     in
-    ( Loading params definition (toPages listing)
-    , fetchResources client definition params
+    ( Loading params (toPages listing)
+    , fetchResources client params
     )
 
 
@@ -105,14 +109,12 @@ update client msg listing =
 
         Fetched records ->
             case listing of
-                Loading params definition pages ->
-                    ( Idle { params | page = params.page + 1 }
-                        definition
-                        (records :: pages)
+                Loading params pages ->
+                    ( Idle { params | page = params.page + 1 } (records :: pages)
                     , Cmd.none
                     )
 
-                Idle _ _ _ ->
+                Idle _ _ ->
                     ( listing, Cmd.none )
 
         Scrolled ->
@@ -124,15 +126,13 @@ update client msg listing =
 
         Info { scene, viewport } ->
             case listing of
-                Loading _ _ _ ->
+                Loading _ _ ->
                     ( listing, Cmd.none )
 
-                Idle params definition pages ->
+                Idle params pages ->
                     let
                         listing_ =
-                            Idle { params | scrollPosition = viewport.y }
-                                definition
-                                pages
+                            Idle { params | scrollPosition = viewport.y } pages
 
                         scrollingDown =
                             params.scrollPosition < viewport.y
@@ -153,11 +153,8 @@ update client msg listing =
 view : Listing -> Html Msg
 view listing =
     let
-        { resources } =
+        { resources, definition } =
             toParams listing
-
-        definition =
-            toDefinition listing
 
         pages =
             toPages listing
@@ -346,40 +343,30 @@ sortValues ( name, a ) ( _, b ) =
 isIdle : Listing -> Bool
 isIdle listing =
     case listing of
-        Loading _ _ _ ->
+        Loading _ _ ->
             False
 
-        Idle _ _ _ ->
+        Idle _ _ ->
             True
 
 
 toParams : Listing -> Params
 toParams listing =
     case listing of
-        Loading params _ _ ->
+        Loading params _ ->
             params
 
-        Idle params _ _ ->
+        Idle params _ ->
             params
-
-
-toDefinition : Listing -> Definition
-toDefinition listing =
-    case listing of
-        Loading _ definition _ ->
-            definition
-
-        Idle _ definition _ ->
-            definition
 
 
 toPages : Listing -> List (List Resource)
 toPages listing =
     case listing of
-        Loading _ _ pages ->
+        Loading _ pages ->
             pages
 
-        Idle _ _ pages ->
+        Idle _ pages ->
             pages
 
 
@@ -402,8 +389,8 @@ perPage =
 -- Http interactions
 
 
-fetchResources : Client a -> Definition -> Params -> Cmd Msg
-fetchResources ({ jwt } as client) definition { resources, page } =
+fetchResources : Client a -> Params -> Cmd Msg
+fetchResources ({ jwt } as client) { resources, page, definition } =
     let
         params =
             [ PG.select <| Client.selects definition
