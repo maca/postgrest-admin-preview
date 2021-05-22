@@ -14,8 +14,18 @@ Sequel.migration do
       primary_key :id
       varchar :title, null: false
       column :status, :todo_status
+
       date :due
     end
+
+    run <<-SQL
+      create or replace function api.todos_users_name(api.todos) returns text as $$
+        select users.name from api.todos join api.users on api.users.id = $1.user_id limit 1;
+      $$ immutable language sql;
+
+      create index todos_users_name_idx on api.todos
+        using gin (to_tsvector('english', api.todos_users_name(todos)));
+    SQL
 
     run <<-SQL
       grant select on api.todos to todo_anon;

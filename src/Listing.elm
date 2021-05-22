@@ -444,7 +444,7 @@ fetchResources ({ jwt } as client) { resourcesName, page, definition, order } =
     let
         pgOrder =
             Dict.toList definition
-                |> List.filterMap (sortBy order)
+                |> List.filterMap (sortBy resourcesName order)
 
         params =
             [ PG.select <| Client.selects definition
@@ -459,14 +459,18 @@ fetchResources ({ jwt } as client) { resourcesName, page, definition, order } =
         |> attemptWithError Failed Fetched
 
 
-sortBy : SortOrder -> ( String, Column ) -> Maybe PG.Param
-sortBy sort ( name, Column _ value ) =
+sortBy : String -> SortOrder -> ( String, Column ) -> Maybe PG.Param
+sortBy resourcesName sort ( name, Column _ value ) =
     let
         colName =
             case value of
                 PForeignKey mprimaryKey params ->
                     params.labelColumnName
-                        |> Maybe.map (\cn -> params.table ++ "." ++ cn)
+                        |> Maybe.map
+                            (\cn ->
+                                [ resourcesName, params.table, cn ]
+                                    |> String.join "_"
+                            )
                         |> Maybe.withDefault name
 
                 _ ->

@@ -17,6 +17,15 @@ Sequel.migration do
     end
 
     run <<-SQL
+      create or replace function api.songs_users_name(api.songs) returns text as $$
+        select users.name from api.songs join api.users on api.users.id = $1.user_id limit 1;
+      $$ immutable language sql;
+
+      create index songs_users_name_idx on api.songs
+        using gin (to_tsvector('english', api.songs_users_name(songs)));
+    SQL
+
+    run <<-SQL
       grant select on api.songs to todo_anon;
       grant all on api.songs to todo_user;
       grant usage, select on sequence api.songs_id_seq to todo_user;
