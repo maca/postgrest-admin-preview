@@ -46,6 +46,11 @@ import Url.Builder as Url
 import Utils.Task exposing (Error(..), attemptWithError)
 
 
+type Page
+    = Page (List Resource)
+    | Blank
+
+
 type Msg
     = ResourceLinkClicked String String
     | Fetched (List Resource)
@@ -59,8 +64,7 @@ type alias Listing =
     , page : Int
     , scrollPosition : Float
     , definition : Definition
-    , resources : List (List Resource)
-    , loading : Bool
+    , pages : List Page
     }
 
 
@@ -77,8 +81,7 @@ init resourcesName definition =
     , page = 0
     , scrollPosition = 0
     , definition = definition
-    , resources = []
-    , loading = False
+    , pages = []
     }
 
 
@@ -90,16 +93,28 @@ fetch client listing =
 update : Client { a | key : Nav.Key } -> Msg -> Listing -> ( Listing, Cmd Msg )
 update client msg listing =
     case msg of
-        ResourceLinkClicked resources id ->
+        ResourceLinkClicked resourcesName id ->
             ( listing
-            , Nav.pushUrl client.key <| Url.absolute [ resources, id ] []
+            , Nav.pushUrl client.key <| Url.absolute [ resourcesName, id ] []
             )
 
         Fetched records ->
+            let
+                pages =
+                    case listing.pages of
+                        Blank :: ps ->
+                            if List.length records < perPage then
+                                Blank :: Page records :: ps
+
+                            else
+                                Page records :: ps
+
+                        _ ->
+                            Page records :: listing.pages
+            in
             ( { listing
                 | page = listing.page + 1
-                , resources = records :: listing.resources
-                , loading = False
+                , pages = pages
               }
             , Cmd.none
             )
@@ -111,17 +126,18 @@ update client msg listing =
                 |> attemptWithError Failed Info
             )
 
-        Info { scene, viewport } ->
-            let
-                scrollingDown =
-                    listing.scrollPosition < viewport.y
+        Info viewport ->
+            if scrollingDown viewport listing && closeToBottom viewport then
+                case listing.pages of
+                    Blank :: _ ->
+                        ( listing, Cmd.none )
 
-                closeToBottom =
-                    scene.height - viewport.y < viewport.height
-            in
-            if scrollingDown && closeToBottom && not listing.loading then
-                { listing | scrollPosition = viewport.y, loading = True }
-                    |> fetch client
+                    _ ->
+                        fetch client
+                            { listing
+                                | scrollPosition = viewport.viewport.y
+                                , pages = Blank :: listing.pages
+                            }
 
             else
                 ( listing, Cmd.none )
@@ -130,8 +146,18 @@ update client msg listing =
             ( listing, Cmd.none )
 
 
+scrollingDown : Viewport -> Listing -> Bool
+scrollingDown { scene, viewport } { scrollPosition } =
+    scrollPosition < viewport.y
+
+
+closeToBottom : Viewport -> Bool
+closeToBottom { scene, viewport } =
+    scene.height - viewport.y < (viewport.height * 2)
+
+
 view : Listing -> Html Msg
-view { resources, resourcesName, definition, loading, page } =
+view { pages, resourcesName, definition, page } =
     let
         fields =
             Dict.toList definition
@@ -145,20 +171,35 @@ view { resources, resourcesName, definition, loading, page } =
             thead [] [ tr [] <| List.map toHeader fields ]
 
         body =
-            header :: viewPagesFold resourcesName fields [] 0 resources
+            header :: viewPagesFold resourcesName fields [] 0 pages
     in
     section
         [ class "resources-listing" ]
         [ viewListHeader resourcesName
         , div
-            [ if loading then
-                class ""
+            [ id resourcesName
+            , case pages of
+                Blank :: _ ->
+                    class ""
 
-              else
-                Events.on "scroll" (Decode.succeed Scrolled)
-            , id resourcesName
+                _ ->
+                    Events.on "scroll" (Decode.succeed Scrolled)
             ]
             [ Html.table [] body
+            ]
+        ]
+
+
+viewListHeader : String -> Html Msg
+viewListHeader resourcesName =
+    header []
+        [ h1 [] [ text <| String.humanize resourcesName ]
+        , div []
+            [ a
+                [ class "button"
+                , href <| Url.absolute [ resourcesName, "new" ] []
+                ]
+                [ text <| "New " ++ String.singularize resourcesName ]
             ]
         ]
 
@@ -168,7 +209,7 @@ viewPagesFold :
     -> List String
     -> List (Html Msg)
     -> Int
-    -> List (List Resource)
+    -> List Page
     -> List (Html Msg)
 viewPagesFold rname fields acc pageNum pages =
     case pages of
@@ -178,7 +219,12 @@ viewPagesFold rname fields acc pageNum pages =
         page :: rest ->
             let
                 elem =
-                    lazy4 viewPage rname fields pageNum page
+                    case page of
+                        Page resources ->
+                            lazy4 viewPage rname fields pageNum resources
+
+                        Blank ->
+                            text ""
             in
             viewPagesFold rname fields (elem :: acc) (pageNum + 1) rest
 
@@ -189,25 +235,11 @@ viewPage rname fields pageNum records =
         List.map (viewRow rname fields) records
 
 
-viewListHeader : String -> Html Msg
-viewListHeader resources =
-    header []
-        [ h1 [] [ text <| String.humanize resources ]
-        , div []
-            [ a
-                [ class "button"
-                , href <| Url.absolute [ resources, "new" ] []
-                ]
-                [ text <| "New " ++ String.singularize resources ]
-            ]
-        ]
-
-
 viewRow : String -> List String -> Resource -> Html Msg
-viewRow resources names record =
+viewRow resourcesName names record =
     let
         toTd =
-            viewValue resources >> List.singleton >> td []
+            viewValue resourcesName >> List.singleton >> td []
 
         id =
             Resource.id record |> Maybe.withDefault ""
@@ -215,12 +247,12 @@ viewRow resources names record =
     List.filterMap (flip Dict.get record >> Maybe.map toTd) names
         |> tr
             [ class "listing-row"
-            , clickResource resources id
+            , clickResource resourcesName id
             ]
 
 
 viewValue : String -> Field -> Html Msg
-viewValue resources { value } =
+viewValue resourcesName { value } =
     case value of
         PFloat (Just float) ->
             text <| String.fromFloat float
@@ -250,7 +282,7 @@ viewValue resources { value } =
             recordLink table primaryKey label
 
         PPrimaryKey (Just primaryKey) ->
-            recordLink resources primaryKey Nothing
+            recordLink resourcesName primaryKey Nothing
 
         BadValue _ ->
             text "?"
@@ -260,24 +292,24 @@ viewValue resources { value } =
 
 
 recordLink : String -> PrimaryKey -> Maybe String -> Html Msg
-recordLink resources primaryKey mtext =
+recordLink resourcesName primaryKey mtext =
     let
         id =
             PrimaryKey.toString primaryKey
     in
     a
-        [ href <| Url.absolute [ resources, id ] []
+        [ href <| Url.absolute [ resourcesName, id ] []
         , target "_self"
-        , clickResource resources id
+        , clickResource resourcesName id
         ]
         [ text <| Maybe.withDefault id mtext ]
 
 
 clickResource : String -> String -> Html.Attribute Msg
-clickResource resources id =
+clickResource resourcesName id =
     let
         msg =
-            ResourceLinkClicked resources id
+            ResourceLinkClicked resourcesName id
     in
     Events.custom "click" <|
         Decode.map (EventConfig True True) (Decode.succeed msg)
