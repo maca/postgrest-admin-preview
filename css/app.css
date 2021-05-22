@@ -76,6 +76,22 @@
 }
 
 
+.resources-listing .sort {
+    cursor: pointer;
+    transform: scale(0.6);
+    margin-left: -5px;
+}
+
+.resources-listing .desc {
+    transform: scale(0.6) rotate(90deg);
+}
+
+.resources-listing .asc {
+    transform: scale(0.6) rotate(-90deg);
+}
+
+
+
 /* forms */
 section.resource-form {
     padding: 4rem;

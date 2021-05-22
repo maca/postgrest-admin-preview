@@ -18,7 +18,9 @@ import Html
         , div
         , h1
         , header
+        , i
         , section
+        , span
         , tbody
         , td
         , text
@@ -26,8 +28,8 @@ import Html
         , thead
         , tr
         )
-import Html.Attributes exposing (class, href, id, target)
-import Html.Events as Events
+import Html.Attributes exposing (class, classList, href, id, target)
+import Html.Events as Events exposing (onClick)
 import Html.Lazy exposing (lazy4)
 import Inflect as String
 import Json.Decode as Decode
@@ -51,9 +53,16 @@ type Page
     | Blank
 
 
+type Sort
+    = Asc String
+    | Desc String
+    | Unsorted
+
+
 type Msg
     = ResourceLinkClicked String String
     | Fetched (List Resource)
+    | Sort Sort
     | Scrolled
     | Info Viewport
     | Failed Error
@@ -65,6 +74,7 @@ type alias Listing =
     , scrollPosition : Float
     , definition : Definition
     , pages : List Page
+    , sort : Sort
     }
 
 
@@ -82,6 +92,7 @@ init resourcesName definition =
     , scrollPosition = 0
     , definition = definition
     , pages = []
+    , sort = Unsorted
     }
 
 
@@ -118,6 +129,9 @@ update client msg listing =
               }
             , Cmd.none
             )
+
+        Sort sort ->
+            ( { listing | sort = sort }, Cmd.none )
 
         Scrolled ->
             ( listing
@@ -157,28 +171,23 @@ closeToBottom { scene, viewport } =
 
 
 view : Listing -> Html Msg
-view { pages, resourcesName, definition, page } =
+view listing =
     let
         fields =
-            Dict.toList definition
+            Dict.toList listing.definition
                 |> List.sortWith sortColumns
                 |> List.map Tuple.first
 
-        toHeader =
-            String.humanize >> text >> List.singleton >> th []
-
-        header =
-            thead [] [ tr [] <| List.map toHeader fields ]
-
         body =
-            header :: viewPagesFold resourcesName fields [] 0 pages
+            tableHeading listing fields
+                :: pagesFold listing.resourcesName fields [] 0 listing.pages
     in
     section
         [ class "resources-listing" ]
-        [ viewListHeader resourcesName
+        [ listHeader listing.resourcesName
         , div
-            [ id resourcesName
-            , case pages of
+            [ id listing.resourcesName
+            , case listing.pages of
                 Blank :: _ ->
                     class ""
 
@@ -190,8 +199,8 @@ view { pages, resourcesName, definition, page } =
         ]
 
 
-viewListHeader : String -> Html Msg
-viewListHeader resourcesName =
+listHeader : String -> Html Msg
+listHeader resourcesName =
     header []
         [ h1 [] [ text <| String.humanize resourcesName ]
         , div []
@@ -204,14 +213,56 @@ viewListHeader resourcesName =
         ]
 
 
-viewPagesFold :
+tableHeading : Listing -> List String -> Html Msg
+tableHeading listing fields =
+    thead []
+        [ tr [] <| List.map (tableHeader listing) fields ]
+
+
+tableHeader : Listing -> String -> Html Msg
+tableHeader { sort } name =
+    let
+        defaultSort =
+            i [ class "sort icono-play", onClick <| Sort <| Desc name ] []
+    in
+    th []
+        [ case sort of
+            Asc col ->
+                if col == name then
+                    i
+                        [ class "asc sort icono-play"
+                        , onClick <| Sort <| Desc name
+                        ]
+                        []
+
+                else
+                    defaultSort
+
+            Desc col ->
+                if col == name then
+                    i
+                        [ class "desc sort icono-play"
+                        , onClick <| Sort <| Asc name
+                        ]
+                        []
+
+                else
+                    defaultSort
+
+            Unsorted ->
+                defaultSort
+        , text <| String.humanize name
+        ]
+
+
+pagesFold :
     String
     -> List String
     -> List (Html Msg)
     -> Int
     -> List Page
     -> List (Html Msg)
-viewPagesFold rname fields acc pageNum pages =
+pagesFold rname fields acc pageNum pages =
     case pages of
         [] ->
             acc
@@ -226,17 +277,17 @@ viewPagesFold rname fields acc pageNum pages =
                         Blank ->
                             text ""
             in
-            viewPagesFold rname fields (elem :: acc) (pageNum + 1) rest
+            pagesFold rname fields (elem :: acc) (pageNum + 1) rest
 
 
 viewPage : String -> List String -> Int -> List Resource -> Html Msg
 viewPage rname fields pageNum records =
     tbody [ id <| pageId pageNum ] <|
-        List.map (viewRow rname fields) records
+        List.map (row rname fields) records
 
 
-viewRow : String -> List String -> Resource -> Html Msg
-viewRow resourcesName names record =
+row : String -> List String -> Resource -> Html Msg
+row resourcesName names record =
     let
         toTd =
             viewValue resourcesName >> List.singleton >> td []
@@ -362,7 +413,7 @@ perPage =
 
 
 fetchResources : Client a -> Listing -> Cmd Msg
-fetchResources ({ jwt } as client) { resourcesName, page, definition } =
+fetchResources ({ jwt } as client) { resourcesName, page, definition, sort } =
     let
         params =
             [ PG.select <| Client.selects definition
