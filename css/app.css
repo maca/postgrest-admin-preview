@@ -82,16 +82,18 @@
 }
 
 .resources-listing .sort i {
+    transition: all 0.2s ease;
     transform: scale(0.6);
-    margin-left: -5px;
 }
 
 .resources-listing .sort .desc {
-    transform: scale(0.6) rotate(90deg);
+    color: inherit;
+    transform: scale(0.6) rotate(90deg) translateX(2px);
 }
 
 .resources-listing .sort .asc {
-    transform: scale(0.6) rotate(-90deg);
+    color: inherit;
+    transform: scale(0.6) rotate(-90deg) translateX(8px);
 }
 
 

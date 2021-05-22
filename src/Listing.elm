@@ -28,7 +28,7 @@ import Html
         , thead
         , tr
         )
-import Html.Attributes exposing (class, classList, href, id, target)
+import Html.Attributes exposing (attribute, class, classList, href, id, target)
 import Html.Events as Events exposing (onClick)
 import Html.Lazy exposing (lazy4)
 import Inflect as String
@@ -42,7 +42,7 @@ import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value exposing (Value(..))
 import Process
 import String.Extra as String
-import Task
+import Task exposing (Task)
 import Time.Extra as Time
 import Url.Builder as Url
 import Utils.Task exposing (Error(..), attemptWithError)
@@ -53,18 +53,19 @@ type Page
     | Blank
 
 
-type Sort
+type SortOrder
     = Asc String
     | Desc String
-    | Unsorted
+    | Unordered
 
 
 type Msg
     = ResourceLinkClicked String String
     | Fetched (List Resource)
-    | Sort Sort
+    | Sort SortOrder
     | Scrolled
     | Info Viewport
+    | NoOp
     | Failed Error
 
 
@@ -74,7 +75,7 @@ type alias Listing =
     , scrollPosition : Float
     , definition : Definition
     , pages : List Page
-    , sort : Sort
+    , order : SortOrder
     }
 
 
@@ -92,13 +93,15 @@ init resourcesName definition =
     , scrollPosition = 0
     , definition = definition
     , pages = []
-    , sort = Unsorted
+    , order = Unordered
     }
 
 
 fetch : Client a -> Listing -> ( Listing, Cmd Msg )
 fetch client listing =
-    ( listing, fetchResources client listing )
+    ( listing
+    , fetchResources client listing
+    )
 
 
 update : Client { a | key : Nav.Key } -> Msg -> Listing -> ( Listing, Cmd Msg )
@@ -111,27 +114,36 @@ update client msg listing =
 
         Fetched records ->
             let
-                pages =
-                    case listing.pages of
-                        Blank :: ps ->
-                            if List.length records < perPage then
-                                Blank :: Page records :: ps
-
-                            else
-                                Page records :: ps
-
-                        _ ->
-                            Page records :: listing.pages
+                page =
+                    listing.page + 1
             in
-            ( { listing
-                | page = listing.page + 1
-                , pages = pages
-              }
-            , Cmd.none
-            )
+            if listing.page == 0 then
+                ( { listing | page = page, pages = [ Page records ] }
+                , Dom.setViewportOf listing.resourcesName 0 0
+                    |> Task.attempt (always NoOp)
+                )
 
-        Sort sort ->
-            ( { listing | sort = sort }, Cmd.none )
+            else
+                let
+                    pages =
+                        case listing.pages of
+                            Blank :: ps ->
+                                if List.length records < perPage then
+                                    Blank :: Page records :: ps
+
+                                else
+                                    Page records :: ps
+
+                            _ ->
+                                Page records :: listing.pages
+                in
+                ( { listing | page = page, pages = pages }
+                , Cmd.none
+                )
+
+        Sort order ->
+            fetch client
+                { listing | order = order, scrollPosition = 0, page = 0 }
 
         Scrolled ->
             ( listing
@@ -144,7 +156,9 @@ update client msg listing =
             if scrollingDown viewport listing && closeToBottom viewport then
                 case listing.pages of
                     Blank :: _ ->
-                        ( listing, Cmd.none )
+                        ( { listing | scrollPosition = viewport.viewport.y }
+                        , Cmd.none
+                        )
 
                     _ ->
                         fetch client
@@ -154,9 +168,12 @@ update client msg listing =
                             }
 
             else
-                ( listing, Cmd.none )
+                ( { listing | scrollPosition = viewport.viewport.y }, Cmd.none )
 
-        Failed _ ->
+        NoOp ->
+            ( listing, Cmd.none )
+
+        Failed err ->
             ( listing, Cmd.none )
 
 
@@ -220,17 +237,25 @@ tableHeading listing fields =
 
 
 tableHeader : Listing -> String -> Html Msg
-tableHeader { sort } name =
+tableHeader { order } name =
     let
         defaultHeader =
-            span [ class "sort", onClick <| Sort <| Desc name ]
+            span
+                [ class "sort"
+                , attribute "aria-sort" "other"
+                , onClick <| Sort <| Desc name
+                ]
                 [ i [ class "icono-play" ] [], text <| String.humanize name ]
     in
     th []
-        [ case sort of
+        [ case order of
             Asc col ->
                 if col == name then
-                    span [ class "sort", onClick <| Sort <| Desc name ]
+                    span
+                        [ class "sort"
+                        , attribute "aria-sort" "ascending"
+                        , onClick <| Sort <| Desc name
+                        ]
                         [ i [ class "asc icono-play" ] []
                         , text <| String.humanize name
                         ]
@@ -240,7 +265,11 @@ tableHeader { sort } name =
 
             Desc col ->
                 if col == name then
-                    span [ class "sort", onClick <| Sort <| Asc name ]
+                    span
+                        [ class "sort"
+                        , attribute "aria-sort" "descending"
+                        , onClick <| Sort <| Asc name
+                        ]
                         [ i [ class "desc icono-play" ] []
                         , text <| String.humanize name
                         ]
@@ -248,7 +277,7 @@ tableHeader { sort } name =
                 else
                     defaultHeader
 
-            Unsorted ->
+            Unordered ->
                 defaultHeader
         ]
 
@@ -270,7 +299,7 @@ pagesFold rname fields acc pageNum pages =
                 elem =
                     case page of
                         Page resources ->
-                            lazy4 viewPage rname fields pageNum resources
+                            viewPage rname fields pageNum resources
 
                         Blank ->
                             text ""
@@ -411,8 +440,12 @@ perPage =
 
 
 fetchResources : Client a -> Listing -> Cmd Msg
-fetchResources ({ jwt } as client) { resourcesName, page, definition, sort } =
+fetchResources ({ jwt } as client) { resourcesName, page, definition, order } =
     let
+        pgOrder =
+            Dict.toList definition
+                |> List.filterMap (sortBy order)
+
         params =
             [ PG.select <| Client.selects definition
             , PG.limit perPage
@@ -420,10 +453,42 @@ fetchResources ({ jwt } as client) { resourcesName, page, definition, sort } =
             ]
     in
     Client.fetchMany client definition resourcesName
-        |> PG.setParams params
+        |> PG.setParams (params ++ pgOrder)
         |> PG.toTask jwt
         |> Task.mapError PGError
         |> attemptWithError Failed Fetched
+
+
+sortBy : SortOrder -> ( String, Column ) -> Maybe PG.Param
+sortBy sort ( name, Column _ value ) =
+    let
+        colName =
+            case value of
+                PForeignKey mprimaryKey params ->
+                    params.labelColumnName
+                        |> Maybe.map (\cn -> params.table ++ "." ++ cn)
+                        |> Maybe.withDefault name
+
+                _ ->
+                    name
+    in
+    case sort of
+        Asc f ->
+            if f == name then
+                Just <| PG.order [ PG.asc colName ]
+
+            else
+                Nothing
+
+        Desc f ->
+            if f == name then
+                Just <| PG.order [ PG.desc colName ]
+
+            else
+                Nothing
+
+        Unordered ->
+            Nothing
 
 
 recordIdentifiers : List String
