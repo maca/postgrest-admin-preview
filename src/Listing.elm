@@ -222,36 +222,34 @@ tableHeading listing fields =
 tableHeader : Listing -> String -> Html Msg
 tableHeader { sort } name =
     let
-        defaultSort =
-            i [ class "sort icono-play", onClick <| Sort <| Desc name ] []
+        defaultHeader =
+            span [ class "sort", onClick <| Sort <| Desc name ]
+                [ i [ class "icono-play" ] [], text <| String.humanize name ]
     in
     th []
         [ case sort of
             Asc col ->
                 if col == name then
-                    i
-                        [ class "asc sort icono-play"
-                        , onClick <| Sort <| Desc name
+                    span [ class "sort", onClick <| Sort <| Desc name ]
+                        [ i [ class "asc icono-play" ] []
+                        , text <| String.humanize name
                         ]
-                        []
 
                 else
-                    defaultSort
+                    defaultHeader
 
             Desc col ->
                 if col == name then
-                    i
-                        [ class "desc sort icono-play"
-                        , onClick <| Sort <| Asc name
+                    span [ class "sort", onClick <| Sort <| Asc name ]
+                        [ i [ class "desc icono-play" ] []
+                        , text <| String.humanize name
                         ]
-                        []
 
                 else
-                    defaultSort
+                    defaultHeader
 
             Unsorted ->
-                defaultSort
-        , text <| String.humanize name
+                defaultHeader
         ]
 
 

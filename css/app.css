@@ -78,15 +78,19 @@
 
 .resources-listing .sort {
     cursor: pointer;
+    user-select: none; 
+}
+
+.resources-listing .sort i {
     transform: scale(0.6);
     margin-left: -5px;
 }
 
-.resources-listing .desc {
+.resources-listing .sort .desc {
     transform: scale(0.6) rotate(90deg);
 }
 
-.resources-listing .asc {
+.resources-listing .sort .asc {
     transform: scale(0.6) rotate(-90deg);
 }
 
