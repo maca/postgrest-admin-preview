@@ -1,5 +1,5 @@
 module Form exposing
-    ( Form(..)
+    ( Form
     , Msg
     , Params
     , changed
@@ -213,8 +213,8 @@ columnRegex =
 -- Http
 
 
-fetch : Client a -> Params -> String -> Cmd Msg
-fetch model { definition, resourcesName } rid =
+fetch : Client a -> Form -> String -> Cmd Msg
+fetch model (Form { definition, resourcesName } _) rid =
     Client.fetchOne model definition resourcesName rid
         |> PG.toTask model.jwt
         |> Task.mapError PGError

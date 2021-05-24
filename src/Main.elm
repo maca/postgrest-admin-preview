@@ -36,7 +36,7 @@ type Route
     = Root
     | LoadingDefinition String (Definition -> Route)
     | Listing Listing
-    | FormLoad Form.Params Form String
+    | FormLoading Form String
     | Form Form
     | NotFound
 
@@ -133,8 +133,8 @@ urlChanged model =
             Listing.fetch model listing
                 |> mapNested Listing ListingChanged model
 
-        FormLoad params form id ->
-            ( model, Form.fetch model params id |> Cmd.map (FormChanged form) )
+        FormLoading form id ->
+            ( model, Form.fetch model form id |> Cmd.map (FormChanged form) )
 
         _ ->
             ( model, Cmd.none )
@@ -201,7 +201,7 @@ displayMainContent model =
         Listing listing ->
             Html.map (ListingChanged listing) <| Listing.view listing
 
-        FormLoad _ _ _ ->
+        FormLoading _ _ ->
             loading
 
         Form form ->
@@ -282,22 +282,20 @@ formRouteParser model =
 makeFormRoute : String -> String -> Model -> Definition -> Route
 makeFormRoute resources id model definition =
     let
-        message =
-            case model.route of
-                Form f ->
-                    if Form.id f == Just id then
-                        Form.message f
-
-                    else
-                        Message.none
-
-                _ ->
-                    Message.none
-
         params =
             { resourcesName = resources
             , definition = definition
-            , message = message
+            , message =
+                case model.route of
+                    Form f ->
+                        if Form.id f == Just id then
+                            Form.message f
+
+                        else
+                            Message.none
+
+                    _ ->
+                        Message.none
             }
 
         form =
@@ -307,4 +305,4 @@ makeFormRoute resources id model definition =
         Form form
 
     else
-        FormLoad params form id
+        FormLoading form id
