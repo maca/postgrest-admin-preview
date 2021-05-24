@@ -1,6 +1,9 @@
 module Listing exposing
     ( Listing
     , Msg
+    , SortOrder(..)
+    , ascendingBy
+    , descendingBy
     , fetch
     , init
     , update
@@ -28,9 +31,8 @@ import Html
         , thead
         , tr
         )
-import Html.Attributes exposing (attribute, class, classList, href, id, target)
+import Html.Attributes exposing (attribute, class, href, id, target)
 import Html.Events as Events exposing (onClick)
-import Html.Lazy exposing (lazy4)
 import Inflect as String
 import Json.Decode as Decode
 import Postgrest.Client as PG
@@ -40,11 +42,10 @@ import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value exposing (Value(..))
-import Process
 import String.Extra as String
-import Task exposing (Task)
+import Task
 import Time.Extra as Time
-import Url.Builder as Url
+import Url.Builder as Url exposing (QueryParameter)
 import Utils.Task exposing (Error(..), attemptWithError)
 
 
@@ -65,16 +66,15 @@ type Msg
     | Sort SortOrder
     | Scrolled
     | Info Viewport
-    | NoOp
     | Failed Error
 
 
 type alias Listing =
     { resourcesName : String
-    , page : Int
     , scrollPosition : Float
     , definition : Definition
     , pages : List Page
+    , page : Int
     , order : SortOrder
     }
 
@@ -97,6 +97,16 @@ init resourcesName definition =
     }
 
 
+ascendingBy : String -> Listing -> Listing
+ascendingBy column listing =
+    { listing | order = Asc column }
+
+
+descendingBy : String -> Listing -> Listing
+descendingBy column listing =
+    { listing | order = Desc column }
+
+
 fetch : Client a -> Listing -> ( Listing, Cmd Msg )
 fetch client listing =
     ( listing
@@ -114,36 +124,28 @@ update client msg listing =
 
         Fetched records ->
             let
-                page =
-                    listing.page + 1
+                pages =
+                    case listing.pages of
+                        Blank :: ps ->
+                            if List.length records < perPage then
+                                Blank :: Page records :: ps
+
+                            else
+                                Page records :: ps
+
+                        _ ->
+                            Page records :: listing.pages
             in
-            if listing.page == 0 then
-                ( { listing | page = page, pages = [ Page records ] }
-                , Dom.setViewportOf listing.resourcesName 0 0
-                    |> Task.attempt (always NoOp)
-                )
-
-            else
-                let
-                    pages =
-                        case listing.pages of
-                            Blank :: ps ->
-                                if List.length records < perPage then
-                                    Blank :: Page records :: ps
-
-                                else
-                                    Page records :: ps
-
-                            _ ->
-                                Page records :: listing.pages
-                in
-                ( { listing | page = page, pages = pages }
-                , Cmd.none
-                )
+            ( { listing | page = listing.page + 1, pages = pages }
+            , Cmd.none
+            )
 
         Sort order ->
-            fetch client
-                { listing | order = order, scrollPosition = 0, page = 0 }
+            ( listing
+            , Url.absolute [ listing.resourcesName ]
+                (orderToQueryParams order)
+                |> Nav.pushUrl client.key
+            )
 
         Scrolled ->
             ( listing
@@ -170,21 +172,31 @@ update client msg listing =
             else
                 ( { listing | scrollPosition = viewport.viewport.y }, Cmd.none )
 
-        NoOp ->
-            ( listing, Cmd.none )
-
-        Failed err ->
+        Failed _ ->
             ( listing, Cmd.none )
 
 
 scrollingDown : Viewport -> Listing -> Bool
-scrollingDown { scene, viewport } { scrollPosition } =
+scrollingDown { viewport } { scrollPosition } =
     scrollPosition < viewport.y
 
 
 closeToBottom : Viewport -> Bool
 closeToBottom { scene, viewport } =
     scene.height - viewport.y < (viewport.height * 2)
+
+
+orderToQueryParams : SortOrder -> List QueryParameter
+orderToQueryParams order =
+    case order of
+        Asc column ->
+            [ Url.string "order" <| column ++ "." ++ "asc" ]
+
+        Desc column ->
+            [ Url.string "order" <| column ++ "." ++ "desc" ]
+
+        Unordered ->
+            []
 
 
 view : Listing -> Html Msg
@@ -243,7 +255,7 @@ tableHeader { order } name =
             span
                 [ class "sort"
                 , attribute "aria-sort" "other"
-                , onClick <| Sort <| Desc name
+                , onClick <| Sort <| Asc name
                 ]
                 [ i [ class "icono-play" ] [], text <| String.humanize name ]
     in
@@ -464,7 +476,7 @@ sortBy resourcesName sort ( name, Column _ value ) =
     let
         colName =
             case value of
-                PForeignKey mprimaryKey params ->
+                PForeignKey _ params ->
                     params.labelColumnName
                         |> Maybe.map
                             (\cn ->
@@ -479,14 +491,14 @@ sortBy resourcesName sort ( name, Column _ value ) =
     case sort of
         Asc f ->
             if f == name then
-                Just <| PG.order [ PG.asc colName ]
+                Just <| PG.order [ PG.asc colName |> PG.nullslast ]
 
             else
                 Nothing
 
         Desc f ->
             if f == name then
-                Just <| PG.order [ PG.desc colName ]
+                Just <| PG.order [ PG.desc colName |> PG.nullslast ]
 
             else
                 Nothing

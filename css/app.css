@@ -75,6 +75,16 @@
     top: 0;
 }
 
+.resources-listing .listing-row {
+    cursor: pointer;
+}
+
+.resources-listing .listing-row:hover {
+    background-color: #eee;
+    transition: all 0.1s ease-out;
+    cursor: pointer;
+}
+
 
 .resources-listing .sort {
     cursor: pointer;
@@ -188,6 +198,6 @@ https://css-tricks.com/the-cleanest-trick-for-autogrowing-textareas/
 }
 
 /* misc */
-i.icono-cross, .listing-row {
+i.icono-cross {
     cursor: pointer;
 }
