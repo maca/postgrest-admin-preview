@@ -64,9 +64,9 @@ type Msg
     = ResourceLinkClicked String String
     | Fetched (List Resource)
     | Sort SortOrder
-    | SortNavigate
+    | Reload
     | Scrolled
-    | Info Viewport
+    | ScrollInfo Viewport
     | Failed Error
 
 
@@ -144,10 +144,10 @@ update client msg listing =
         Sort order ->
             ( { listing | order = order }
             , Dom.setViewportOf listing.resourcesName 0 0
-                |> Task.attempt (always SortNavigate)
+                |> Task.attempt (always Reload)
             )
 
-        SortNavigate ->
+        Reload ->
             ( listing
             , Url.absolute [ listing.resourcesName ]
                 (orderToQueryParams listing.order)
@@ -158,10 +158,10 @@ update client msg listing =
             ( listing
             , Dom.getViewportOf listing.resourcesName
                 |> Task.mapError DomError
-                |> attemptWithError Failed Info
+                |> attemptWithError Failed ScrollInfo
             )
 
-        Info viewport ->
+        ScrollInfo viewport ->
             if scrollingDown viewport listing && closeToBottom viewport then
                 case listing.pages of
                     Blank :: _ ->
