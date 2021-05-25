@@ -64,6 +64,7 @@ type Msg
     = ResourceLinkClicked String String
     | Fetched (List Resource)
     | Sort SortOrder
+    | SortNavigate
     | Scrolled
     | Info Viewport
     | Failed Error
@@ -141,9 +142,15 @@ update client msg listing =
             )
 
         Sort order ->
+            ( { listing | order = order }
+            , Dom.setViewportOf listing.resourcesName 0 0
+                |> Task.attempt (always SortNavigate)
+            )
+
+        SortNavigate ->
             ( listing
             , Url.absolute [ listing.resourcesName ]
-                (orderToQueryParams order)
+                (orderToQueryParams listing.order)
                 |> Nav.pushUrl client.key
             )
 
