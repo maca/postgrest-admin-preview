@@ -35,6 +35,7 @@ import Html.Attributes exposing (attribute, class, href, id, target)
 import Html.Events as Events exposing (onClick)
 import Inflect as String
 import Json.Decode as Decode
+import Listing.Search as Search exposing (Search)
 import Postgrest.Client as PG
 import Postgrest.Field exposing (Field)
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
@@ -67,6 +68,7 @@ type Msg
     | Reload
     | Scrolled
     | ScrollInfo Viewport
+    | SearchChanged Search.Msg
     | Failed Error
 
 
@@ -77,6 +79,7 @@ type alias Listing =
     , pages : List Page
     , page : Int
     , order : SortOrder
+    , search : Search
     }
 
 
@@ -95,6 +98,7 @@ init resourcesName definition =
     , definition = definition
     , pages = []
     , order = Unordered
+    , search = Search.init definition
     }
 
 
@@ -179,6 +183,11 @@ update client msg listing =
             else
                 ( { listing | scrollPosition = viewport.viewport.y }, Cmd.none )
 
+        SearchChanged searchMsg ->
+            Search.update searchMsg listing.search
+                |> Tuple.mapFirst (\search -> { listing | search = search })
+                |> Tuple.mapSecond (Cmd.map SearchChanged)
+
         Failed _ ->
             ( listing, Cmd.none )
 
@@ -221,6 +230,7 @@ view listing =
     section
         [ class "resources-listing" ]
         [ listHeader listing.resourcesName
+        , Html.map SearchChanged <| Search.view listing.search
         , div
             [ id listing.resourcesName
             , case listing.pages of

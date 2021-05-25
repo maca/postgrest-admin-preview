@@ -108,6 +108,21 @@
 
 
 
+.text.filter {
+    display: flex;
+    padding: 0 4rem 0 0;
+}
+
+.text.filter > :first-child {
+    margin-right: 1rem;
+}
+
+.text.filter > :last-child {
+    margin-left: 1rem;
+}
+
+
+
 /* forms */
 section.resource-form {
     padding: 4rem;
