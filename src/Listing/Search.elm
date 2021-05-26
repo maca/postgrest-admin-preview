@@ -31,21 +31,21 @@ type TextOp
     | TextEndsWith (Maybe String)
 
 
-type EnumOp
-    = EnumAll
-    | EnumSelect (List String)
-
-
 type NumOp
-    = NumEquals String
-    | NumBetween String String
-    | NumGreaterThan String
-    | NumLesserThan String
+    = NumEquals (Maybe Float)
+    | NumBetween (Maybe Float) (Maybe Float)
+    | NumGreaterThan (Maybe Float)
+    | NumLesserThan (Maybe Float)
 
 
 type BoolOp
     = BoolTrue
     | BoolFalse
+
+
+type EnumOp
+    = EnumAll
+    | EnumSelect (List String)
 
 
 type DateOp
@@ -63,8 +63,8 @@ type TimeOp
 
 type Filter
     = TextFilter String TextOp
-    | BoolFilter String BoolOp
     | NumFilter String NumOp
+    | BoolFilter String BoolOp
     | EnumFilter String EnumOp
     | DateFilter String DateOp
     | TimeFilter String TimeOp
@@ -103,7 +103,7 @@ update msg search =
                     search.definition
                         |> Dict.toList
                         |> List.head
-                        |> Maybe.map (\( n, c ) -> fromColumn Nothing n c)
+                        |> Maybe.map (\( n, c ) -> fromColumn n c)
                         |> Maybe.withDefault Blank
             in
             ( { search | filters = Array.push filter search.filters }
@@ -113,14 +113,15 @@ update msg search =
 
 view : Search -> Html Msg
 view { definition, filters } =
+    let
+        _ =
+            Debug.log "filters" filters
+    in
     div
         []
         ([ h3 [] [ text "filter" ] ]
             ++ (Array.indexedMap (viewFilter definition) filters |> Array.toList)
-            ++ [ button
-                    [ onClick AddFilter ]
-                    [ i [ class "icono-plus" ] [] ]
-               ]
+            ++ [ button [ onClick AddFilter ] [ i [ class "icono-plus" ] [] ] ]
         )
 
 
@@ -157,7 +158,7 @@ viewFilter definition idx filter =
                 optsDict =
                     Dict.fromList opts
 
-                makeSelect f mstring =
+                opSelect f mstring =
                     let
                         makeOption ( s, f_ ) =
                             option
@@ -184,13 +185,13 @@ viewFilter definition idx filter =
                         ]
                         []
 
-                inputs makeOp mstring =
+                filterInputs makeOp mstring =
                     let
                         makeF k =
                             let
                                 f =
                                     Dict.get k definition
-                                        |> Maybe.map (fromColumn mstring name)
+                                        |> Maybe.map (fromColumn name)
                                         |> Maybe.withDefault Blank
                             in
                             case f of
@@ -202,44 +203,35 @@ viewFilter definition idx filter =
                     in
                     div [ class "text filter" ]
                         [ fieldSelect name makeF
-                        , makeSelect makeOp mstring
+                        , opSelect makeOp mstring
                         , makeInput makeOp mstring
                         ]
             in
             case op of
                 TextEquals mstring ->
-                    inputs TextEquals mstring
+                    filterInputs TextEquals mstring
 
                 TextContains mstring ->
-                    inputs TextContains mstring
+                    filterInputs TextContains mstring
 
                 TextStartsWith mstring ->
-                    inputs TextStartsWith mstring
+                    filterInputs TextStartsWith mstring
 
                 TextEndsWith mstring ->
-                    inputs TextEndsWith mstring
+                    filterInputs TextEndsWith mstring
 
         _ ->
             text ""
 
 
-fromColumn : Maybe String -> String -> Column -> Filter
-fromColumn mdefault name (Column _ value) =
-    let
-        default =
-            mdefault
-                |> Maybe.andThen
-                    (flip Value.updateWithString value >> Value.toString)
-    in
+fromColumn : String -> Column -> Filter
+fromColumn name (Column _ value) =
     case value of
         PString _ ->
-            TextFilter name <| TextEquals default
+            TextFilter name <| TextEquals Nothing
 
         PText _ ->
-            TextFilter name <| TextEquals default
-
-        PEnum _ _ ->
-            EnumFilter name EnumAll
+            TextFilter name <| TextEquals Nothing
 
         PFloat _ ->
             Blank
@@ -249,6 +241,9 @@ fromColumn mdefault name (Column _ value) =
 
         PBool _ ->
             Blank
+
+        PEnum _ _ ->
+            EnumFilter name EnumAll
 
         PTime _ ->
             Blank
