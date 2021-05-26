@@ -145,66 +145,41 @@ viewFilter definition idx filter =
 
         TextFilter name op ->
             let
-                makeFilter =
+                updateMsg =
                     TextFilter name >> UpdateFilter idx
 
-                opts =
-                    [ ( "equals", TextEquals )
-                    , ( "contains", TextContains )
-                    , ( "starts with", TextStartsWith )
-                    , ( "ends with", TextEndsWith )
-                    ]
-
-                optsDict =
-                    Dict.fromList opts
-
-                opSelect f mstring =
+                operationSelect makeOp mstring options =
                     let
                         makeOption ( s, f_ ) =
                             option
-                                [ selected (f mstring == f_ mstring) ]
+                                [ selected (makeOp mstring == f_ mstring) ]
                                 [ text s ]
-                    in
-                    select
-                        [ onInput <|
-                            \s ->
-                                let
-                                    makeOp =
-                                        Dict.get s optsDict
-                                            |> Maybe.withDefault TextEquals
-                                in
-                                makeOp mstring |> makeFilter
-                        ]
-                    <|
-                        List.map makeOption opts
 
-                makeInput makeOp mstring =
-                    input
-                        [ onInput (Just >> makeOp >> makeFilter)
-                        , value <| Maybe.withDefault "" mstring
-                        ]
-                        []
+                        inputMsg userSelection =
+                            case Dict.get userSelection options of
+                                Just f ->
+                                    updateMsg <| f mstring
+
+                                Nothing ->
+                                    updateMsg <| TextEquals mstring
+                    in
+                    select [ onInput inputMsg ] <| List.map makeOption textFilterOpts
 
                 filterInputs makeOp mstring =
                     let
-                        makeF k =
-                            let
-                                f =
-                                    Dict.get k definition
-                                        |> Maybe.map (fromColumn name)
-                                        |> Maybe.withDefault Blank
-                            in
-                            case f of
+                        makeFilter selection =
+                            case defaultFilter selection definition of
                                 TextFilter _ _ ->
-                                    TextFilter k <| makeOp mstring
+                                    TextFilter selection <| makeOp mstring
 
                                 _ ->
-                                    f
+                                    defaultFilter selection definition
                     in
                     div [ class "text filter" ]
-                        [ fieldSelect name makeF
-                        , opSelect makeOp mstring
-                        , makeInput makeOp mstring
+                        [ fieldSelect name makeFilter
+                        , operationSelect makeOp mstring <|
+                            Dict.fromList textFilterOpts
+                        , filterInput (Just >> makeOp >> updateMsg) mstring
                         ]
             in
             case op of
@@ -224,6 +199,31 @@ viewFilter definition idx filter =
             text ""
 
 
+filterInput : (String -> Msg) -> Maybe String -> Html Msg
+filterInput tagger mstring =
+    input
+        [ onInput tagger
+        , value <| Maybe.withDefault "" mstring
+        ]
+        []
+
+
+defaultFilter : String -> Definition -> Filter
+defaultFilter colName definition =
+    Dict.get colName definition
+        |> Maybe.map (fromColumn colName)
+        |> Maybe.withDefault Blank
+
+
+textFilterOpts : List ( String, Maybe String -> TextOp )
+textFilterOpts =
+    [ ( "equals", TextEquals )
+    , ( "contains", TextContains )
+    , ( "starts with", TextStartsWith )
+    , ( "ends with", TextEndsWith )
+    ]
+
+
 fromColumn : String -> Column -> Filter
 fromColumn name (Column _ value) =
     case value of
@@ -234,10 +234,10 @@ fromColumn name (Column _ value) =
             TextFilter name <| TextEquals Nothing
 
         PFloat _ ->
-            Blank
+            NumFilter name <| NumEquals Nothing
 
         PInt _ ->
-            Blank
+            NumFilter name <| NumEquals Nothing
 
         PBool _ ->
             Blank
