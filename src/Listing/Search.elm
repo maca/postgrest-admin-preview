@@ -19,56 +19,15 @@ import Html
         )
 import Html.Attributes exposing (class, selected, value)
 import Html.Events exposing (onClick, onInput)
+import Listing.Search.Bool as Bool exposing (BoolOp)
+import Listing.Search.Enum as Enum exposing (EnumOp(..))
+import Listing.Search.Filter as Filter exposing (Filter(..))
+import Listing.Search.Num as Num exposing (NumOp(..))
+import Listing.Search.Text as Text exposing (TextOp(..))
+import Listing.Search.Time as Time exposing (TimeOp(..))
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value as Value exposing (Value(..))
 import String.Extra as String
-
-
-type TextOp
-    = TextEquals (Maybe String)
-    | TextContains (Maybe String)
-    | TextStartsWith (Maybe String)
-    | TextEndsWith (Maybe String)
-
-
-type NumOp
-    = NumEquals (Maybe Float)
-    | NumBetween (Maybe Float) (Maybe Float)
-    | NumGreaterThan (Maybe Float)
-    | NumLesserThan (Maybe Float)
-
-
-type BoolOp
-    = BoolTrue
-    | BoolFalse
-
-
-type EnumOp
-    = EnumAll
-    | EnumSelect (List String)
-
-
-type DateOp
-    = DateEquals String
-    | DateBetween String String
-    | DateGreaterThan String
-    | DateLesserThan String
-
-
-type TimeOp
-    = TimeBetween String String
-    | TimeGreaterThan String
-    | TimeLesserThan String
-
-
-type Filter
-    = TextFilter String TextOp
-    | NumFilter String NumOp
-    | BoolFilter String BoolOp
-    | EnumFilter String EnumOp
-    | DateFilter String DateOp
-    | TimeFilter String TimeOp
-    | Blank
 
 
 type Msg
@@ -103,7 +62,7 @@ update msg search =
                     search.definition
                         |> Dict.toList
                         |> List.head
-                        |> Maybe.map (\( n, c ) -> fromColumn n c)
+                        |> Maybe.map (\( n, c ) -> Filter.fromColumn n c)
                         |> Maybe.withDefault Blank
             in
             ( { search | filters = Array.push filter search.filters }
@@ -127,135 +86,57 @@ view { definition, filters } =
 
 viewFilter definition idx filter =
     let
-        fieldSelect name makeF =
-            select
-                [ onInput (makeF >> UpdateFilter idx) ]
-                (Dict.keys definition
-                    |> List.map
-                        (\s ->
-                            option
-                                [ selected (s == name), value s ]
-                                [ text <| String.humanize s ]
-                        )
-                )
+        inputs name content =
+            div
+                [ class "filter"
+                , class <| Filter.toString filter
+                ]
+                ([ fieldSelect definition idx name filter ] ++ content)
     in
     case filter of
+        TextFilter name op ->
+            inputs name <|
+                List.map (Html.map (TextFilter name >> UpdateFilter idx)) <|
+                    [ Text.select op, Text.input op ]
+
+        NumFilter name op ->
+            Debug.todo "crash"
+
         Blank ->
             text ""
-
-        TextFilter name op ->
-            let
-                updateMsg =
-                    TextFilter name >> UpdateFilter idx
-
-                operationSelect makeOp mstring options =
-                    let
-                        makeOption ( s, f_ ) =
-                            option
-                                [ selected (makeOp mstring == f_ mstring) ]
-                                [ text s ]
-
-                        inputMsg userSelection =
-                            case Dict.get userSelection options of
-                                Just f ->
-                                    updateMsg <| f mstring
-
-                                Nothing ->
-                                    updateMsg <| TextEquals mstring
-                    in
-                    select [ onInput inputMsg ] <| List.map makeOption textFilterOpts
-
-                filterInputs makeOp mstring =
-                    let
-                        makeFilter selection =
-                            case defaultFilter selection definition of
-                                TextFilter _ _ ->
-                                    TextFilter selection <| makeOp mstring
-
-                                _ ->
-                                    defaultFilter selection definition
-                    in
-                    div [ class "text filter" ]
-                        [ fieldSelect name makeFilter
-                        , operationSelect makeOp mstring <|
-                            Dict.fromList textFilterOpts
-                        , filterInput (Just >> makeOp >> updateMsg) mstring
-                        ]
-            in
-            case op of
-                TextEquals mstring ->
-                    filterInputs TextEquals mstring
-
-                TextContains mstring ->
-                    filterInputs TextContains mstring
-
-                TextStartsWith mstring ->
-                    filterInputs TextStartsWith mstring
-
-                TextEndsWith mstring ->
-                    filterInputs TextEndsWith mstring
 
         _ ->
             text ""
 
 
-filterInput : (String -> Msg) -> Maybe String -> Html Msg
-filterInput tagger mstring =
-    input
-        [ onInput tagger
-        , value <| Maybe.withDefault "" mstring
-        ]
-        []
+fieldSelect : Definition -> Int -> String -> Filter -> Html Msg
+fieldSelect definition idx name filter =
+    let
+        makeFilter selection =
+            let
+                filter_ =
+                    defaultFilter selection definition
+            in
+            if Filter.toString filter_ == Filter.toString filter then
+                Filter.reassign selection filter
+
+            else
+                filter_
+    in
+    select
+        [ onInput (makeFilter >> UpdateFilter idx) ]
+        (Dict.keys definition
+            |> List.map
+                (\s ->
+                    option
+                        [ selected (s == name), value s ]
+                        [ text <| String.humanize s ]
+                )
+        )
 
 
 defaultFilter : String -> Definition -> Filter
 defaultFilter colName definition =
     Dict.get colName definition
-        |> Maybe.map (fromColumn colName)
+        |> Maybe.map (Filter.fromColumn colName)
         |> Maybe.withDefault Blank
-
-
-textFilterOpts : List ( String, Maybe String -> TextOp )
-textFilterOpts =
-    [ ( "equals", TextEquals )
-    , ( "contains", TextContains )
-    , ( "starts with", TextStartsWith )
-    , ( "ends with", TextEndsWith )
-    ]
-
-
-fromColumn : String -> Column -> Filter
-fromColumn name (Column _ value) =
-    case value of
-        PString _ ->
-            TextFilter name <| TextEquals Nothing
-
-        PText _ ->
-            TextFilter name <| TextEquals Nothing
-
-        PFloat _ ->
-            NumFilter name <| NumEquals Nothing
-
-        PInt _ ->
-            NumFilter name <| NumEquals Nothing
-
-        PBool _ ->
-            Blank
-
-        PEnum _ _ ->
-            EnumFilter name EnumAll
-
-        PTime _ ->
-            Blank
-
-        PDate _ ->
-            Blank
-
-        PPrimaryKey mprimaryKey ->
-            Blank
-
-        PForeignKey mprimaryKey { label } ->
-            Blank
-
-        BadValue _ ->
-            Blank
