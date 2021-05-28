@@ -95,14 +95,14 @@ viewFilter definition idx filter =
     in
     case filter of
         TextFilter name op ->
-            inputs name <|
-                List.map (Html.map (TextFilter name >> UpdateFilter idx)) <|
-                    [ Text.select op, Text.input op ]
+            Text.inputs op
+                |> List.map (Html.map (TextFilter name >> UpdateFilter idx))
+                |> inputs name
 
         NumFilter name op ->
-            inputs name <|
-                List.map (Html.map (NumFilter name >> UpdateFilter idx)) <|
-                    [ Num.select op, Num.input op ]
+            Num.inputs op
+                |> List.map (Html.map (NumFilter name >> UpdateFilter idx))
+                |> inputs name
 
         Blank ->
             text ""

@@ -1,4 +1,4 @@
-module Listing.Search.Text exposing (TextOp(..), input, select)
+module Listing.Search.Text exposing (TextOp(..), inputs)
 
 import Dict exposing (Dict)
 import Html exposing (Html, option, text)
@@ -15,6 +15,11 @@ type TextOp
 
 type alias Options =
     List ( String, Maybe String -> TextOp )
+
+
+inputs : TextOp -> List (Html TextOp)
+inputs op =
+    [ select op, input op ]
 
 
 options : Options

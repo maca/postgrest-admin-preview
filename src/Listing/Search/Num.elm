@@ -1,4 +1,4 @@
-module Listing.Search.Num exposing (NumOp(..), input, select)
+module Listing.Search.Num exposing (NumOp(..), inputs)
 
 import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
@@ -9,25 +9,26 @@ import Html.Events exposing (onInput)
 
 type NumOp
     = NumEquals (Maybe Float)
-    | NumBetween (Maybe Float) (Maybe Float)
-    | NumGreaterThan (Maybe Float)
     | NumLesserThan (Maybe Float)
+    | NumGreaterThan (Maybe Float)
+    | NumBetween (Maybe Float) (Maybe Float)
 
 
 type alias OperationC =
     Maybe Float -> Maybe Float -> NumOp
 
 
-type alias Options =
-    List ( String, OperationC )
+inputs : NumOp -> List (Html NumOp)
+inputs op =
+    [ select op, input op ]
 
 
-options : Options
+options : List ( String, OperationC )
 options =
     [ ( "equals", \s _ -> NumEquals s )
-    , ( "is between", NumBetween )
-    , ( "is greater than", \s _ -> NumGreaterThan s )
     , ( "is lesser than", \s _ -> NumLesserThan s )
+    , ( "is greater than", \s _ -> NumGreaterThan s )
+    , ( "is between", NumBetween )
     ]
 
 
@@ -48,14 +49,14 @@ select op =
         NumEquals a ->
             opSelect (\s _ -> NumEquals s) a Nothing
 
-        NumBetween a b ->
-            opSelect NumBetween a b
+        NumLesserThan a ->
+            opSelect (\s _ -> NumLesserThan s) a Nothing
 
         NumGreaterThan a ->
             opSelect (\s _ -> NumGreaterThan s) a Nothing
 
-        NumLesserThan a ->
-            opSelect (\s _ -> NumLesserThan s) a Nothing
+        NumBetween a b ->
+            opSelect NumBetween a b
 
 
 opSelect : OperationC -> Maybe Float -> Maybe Float -> Html NumOp
@@ -77,18 +78,18 @@ input op =
         NumEquals a ->
             floatInput NumEquals a
 
+        NumLesserThan a ->
+            floatInput NumLesserThan a
+
+        NumGreaterThan a ->
+            floatInput NumGreaterThan a
+
         NumBetween a b ->
             div []
                 [ floatInput (flip NumBetween b) a
                 , span [] [ text "and" ]
                 , floatInput (NumBetween a) b
                 ]
-
-        NumGreaterThan a ->
-            floatInput NumGreaterThan a
-
-        NumLesserThan a ->
-            floatInput NumLesserThan a
 
 
 floatInput : (Maybe Float -> NumOp) -> Maybe Float -> Html NumOp
