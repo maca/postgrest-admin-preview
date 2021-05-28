@@ -100,7 +100,9 @@ viewFilter definition idx filter =
                     [ Text.select op, Text.input op ]
 
         NumFilter name op ->
-            Debug.todo "crash"
+            inputs name <|
+                List.map (Html.map (NumFilter name >> UpdateFilter idx)) <|
+                    [ Num.select op, Num.input op ]
 
         Blank ->
             text ""

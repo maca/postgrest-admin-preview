@@ -6,15 +6,15 @@ import Html.Attributes exposing (class, selected, value)
 import Html.Events exposing (onInput)
 
 
-type alias Options =
-    List ( String, Maybe String -> TextOp )
-
-
 type TextOp
     = TextEquals (Maybe String)
     | TextContains (Maybe String)
     | TextStartsWith (Maybe String)
     | TextEndsWith (Maybe String)
+
+
+type alias Options =
+    List ( String, Maybe String -> TextOp )
 
 
 options : Options
