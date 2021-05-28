@@ -10,6 +10,7 @@ Sequel.migration do
       foreign_key :user_id, api[:users], null: false
       primary_key :id
 
+      int :rating
       varchar :title, null: false
       column :categories, 'varchar[]'
 
