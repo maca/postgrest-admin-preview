@@ -12,6 +12,7 @@ type NumOp
     | NumLesserThan (Maybe String)
     | NumGreaterThan (Maybe String)
     | NumBetween (Maybe String) (Maybe String)
+    | IsNull
 
 
 type NumInput
@@ -23,49 +24,58 @@ type alias OperationC =
     Maybe String -> Maybe String -> NumOp
 
 
-inputs : NumInput -> NumOp -> List (Html NumOp)
-inputs inputType op =
-    [ select op, input inputType op ]
+inputs : NumInput -> Bool -> NumOp -> List (Html NumOp)
+inputs inputType required op =
+    [ select required op, input inputType op ]
 
 
-options : List ( String, OperationC )
-options =
+options : Bool -> List ( String, OperationC )
+options required =
     [ ( "equals", \s _ -> NumEquals s )
     , ( "is lesser than", \s _ -> NumLesserThan s )
     , ( "is greater than", \s _ -> NumGreaterThan s )
     , ( "is between", NumBetween )
     ]
+        ++ (if required then
+                []
+
+            else
+                [ ( "is not set", \_ _ -> IsNull ) ]
+           )
 
 
-optionSelected : Maybe String -> Maybe String -> String -> NumOp
-optionSelected a b selection =
+optionSelected : Bool -> Maybe String -> Maybe String -> String -> NumOp
+optionSelected required a b selection =
     let
         makeOp =
-            Dict.fromList options
+            Dict.fromList (options required)
                 |> Dict.get selection
                 |> Maybe.withDefault (\s _ -> NumEquals s)
     in
     makeOp a b
 
 
-select : NumOp -> Html NumOp
-select op =
+select : Bool -> NumOp -> Html NumOp
+select required op =
     case op of
         NumEquals a ->
-            opSelect (\s _ -> NumEquals s) a Nothing
+            opSelect (\s _ -> NumEquals s) required a Nothing
 
         NumLesserThan a ->
-            opSelect (\s _ -> NumLesserThan s) a Nothing
+            opSelect (\s _ -> NumLesserThan s) required a Nothing
 
         NumGreaterThan a ->
-            opSelect (\s _ -> NumGreaterThan s) a Nothing
+            opSelect (\s _ -> NumGreaterThan s) required a Nothing
 
         NumBetween a b ->
-            opSelect NumBetween a b
+            opSelect NumBetween required a b
+
+        IsNull ->
+            opSelect (\_ _ -> IsNull) required Nothing Nothing
 
 
-opSelect : OperationC -> Maybe String -> Maybe String -> Html NumOp
-opSelect makeOp a b =
+opSelect : OperationC -> Bool -> Maybe String -> Maybe String -> Html NumOp
+opSelect makeOp required a b =
     let
         makeOption ( s, f_ ) =
             Html.option
@@ -73,8 +83,8 @@ opSelect makeOp a b =
                 [ text s ]
     in
     Html.select
-        [ onInput (optionSelected a b) ]
-        (List.map makeOption options)
+        [ onInput (optionSelected required a b) ]
+        (List.map makeOption (options required))
 
 
 input : NumInput -> NumOp -> Html NumOp
@@ -95,6 +105,9 @@ input inputType op =
                 , span [] [ text "and" ]
                 , floatInput inputType (NumBetween a) b
                 ]
+
+        IsNull ->
+            text ""
 
 
 floatInput : NumInput -> (Maybe String -> NumOp) -> Maybe String -> Html NumOp

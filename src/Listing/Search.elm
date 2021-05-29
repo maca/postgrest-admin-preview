@@ -82,6 +82,11 @@ view { definition, filters } =
 
 viewFilter definition idx filter =
     let
+        required name =
+            Dict.get name definition
+                |> Maybe.map (\(Column req _) -> req)
+                |> Maybe.withDefault False
+
         inputs name content =
             div
                 [ class "filter"
@@ -91,29 +96,29 @@ viewFilter definition idx filter =
     in
     case filter of
         TextFilter name op ->
-            Text.inputs op
+            Text.inputs (required name) op
                 |> List.map (Html.map (TextFilter name >> UpdateFilter idx))
                 |> inputs name
 
         NumFilter name inputType op ->
-            Num.inputs inputType op
+            Num.inputs inputType (required name) op
                 |> List.map
                     (Html.map (NumFilter name inputType >> UpdateFilter idx))
                 |> inputs name
 
         TimeFilter name inputType op ->
-            Time.inputs inputType op
+            Time.inputs inputType (required name) op
                 |> List.map
                     (Html.map (TimeFilter name inputType >> UpdateFilter idx))
                 |> inputs name
 
         BoolFilter name op ->
-            [ Bool.input op ]
+            [ Bool.input (required name) op ]
                 |> List.map (Html.map (BoolFilter name >> UpdateFilter idx))
                 |> inputs name
 
         EnumFilter name op ->
-            Enum.inputs op idx
+            Enum.inputs (required name) op idx
                 |> List.map (Html.map (EnumFilter name >> UpdateFilter idx))
                 |> inputs name
 

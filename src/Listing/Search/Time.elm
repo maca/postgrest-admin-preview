@@ -14,6 +14,7 @@ type TimeOp
     | TimeLesserThan (Maybe String)
     | TimeGreaterThan (Maybe String)
     | TimeBetween (Maybe String) (Maybe String)
+    | IsNull
 
 
 type TimeInput
@@ -25,49 +26,58 @@ type alias OperationC =
     Maybe String -> Maybe String -> TimeOp
 
 
-inputs : TimeInput -> TimeOp -> List (Html TimeOp)
-inputs inputType op =
-    [ select op, input inputType op ]
+inputs : TimeInput -> Bool -> TimeOp -> List (Html TimeOp)
+inputs inputType required op =
+    [ select required op, input inputType op ]
 
 
-options : List ( String, OperationC )
-options =
+options : Bool -> List ( String, OperationC )
+options required =
     [ ( "is on date", \s _ -> TimeInDate s )
     , ( "is lesser than", \s _ -> TimeLesserThan s )
     , ( "is greater than", \s _ -> TimeGreaterThan s )
     , ( "is between", TimeBetween )
     ]
+        ++ (if required then
+                []
+
+            else
+                [ ( "is not set", \_ _ -> IsNull ) ]
+           )
 
 
-optionSelected : Maybe String -> Maybe String -> String -> TimeOp
-optionSelected a b selection =
+optionSelected : Bool -> Maybe String -> Maybe String -> String -> TimeOp
+optionSelected required a b selection =
     let
         makeOp =
-            Dict.fromList options
+            Dict.fromList (options required)
                 |> Dict.get selection
                 |> Maybe.withDefault (\s _ -> TimeInDate s)
     in
     makeOp a b
 
 
-select : TimeOp -> Html TimeOp
-select op =
+select : Bool -> TimeOp -> Html TimeOp
+select required op =
     case op of
         TimeInDate a ->
-            opSelect (\s _ -> TimeInDate s) a Nothing
+            opSelect (\s _ -> TimeInDate s) required a Nothing
 
         TimeLesserThan a ->
-            opSelect (\s _ -> TimeLesserThan s) a Nothing
+            opSelect (\s _ -> TimeLesserThan s) required a Nothing
 
         TimeGreaterThan a ->
-            opSelect (\s _ -> TimeGreaterThan s) a Nothing
+            opSelect (\s _ -> TimeGreaterThan s) required a Nothing
 
         TimeBetween a b ->
-            opSelect TimeBetween a b
+            opSelect TimeBetween required a b
+
+        IsNull ->
+            opSelect (\_ _ -> IsNull) required Nothing Nothing
 
 
-opSelect : OperationC -> Maybe String -> Maybe String -> Html TimeOp
-opSelect makeOp a b =
+opSelect : OperationC -> Bool -> Maybe String -> Maybe String -> Html TimeOp
+opSelect makeOp required a b =
     let
         makeOption ( s, f_ ) =
             Html.option
@@ -75,8 +85,8 @@ opSelect makeOp a b =
                 [ text s ]
     in
     Html.select
-        [ onInput (optionSelected a b) ]
-        (List.map makeOption options)
+        [ onInput (optionSelected required a b) ]
+        (List.map makeOption (options required))
 
 
 input : TimeInput -> TimeOp -> Html TimeOp
@@ -97,6 +107,9 @@ input inputType op =
                 , span [] [ text "and" ]
                 , timeInput inputType (TimeBetween a) b
                 ]
+
+        IsNull ->
+            text ""
 
 
 timeInput : TimeInput -> (Maybe String -> TimeOp) -> Maybe String -> Html TimeOp

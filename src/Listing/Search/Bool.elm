@@ -13,8 +13,8 @@ type alias Options =
     List ( String, Maybe String -> BoolOp )
 
 
-input : BoolOp -> Html BoolOp
-input (BoolOp val) =
+input : Bool -> BoolOp -> Html BoolOp
+input required (BoolOp val) =
     div []
         [ span [] [ text "is" ]
         , Html.select

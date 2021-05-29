@@ -12,47 +12,57 @@ import String.Extra as String
 type EnumOp
     = OneOf (Set String) (Set String)
     | NoneOf (Set String) (Set String)
+    | IsNull (Set String)
 
 
 type alias OperationC =
     Set String -> Set String -> EnumOp
 
 
-inputs : EnumOp -> Int -> List (Html EnumOp)
-inputs op idx =
-    [ select op, checkboxes op idx ]
+inputs : Bool -> EnumOp -> Int -> List (Html EnumOp)
+inputs required op idx =
+    [ select required op, checkboxes op idx ]
 
 
-options : List ( String, OperationC )
-options =
+options : Bool -> List ( String, OperationC )
+options required =
     [ ( "is one of", OneOf )
     , ( "is none of", NoneOf )
     ]
+        ++ (if required then
+                []
+
+            else
+                [ ( "is not set", \choices _ -> IsNull choices ) ]
+           )
 
 
-optionSelected : Set String -> Set String -> String -> EnumOp
-optionSelected choices chosen selection =
+optionSelected : Bool -> Set String -> Set String -> String -> EnumOp
+optionSelected required choices chosen selection =
     let
         makeOp =
-            Dict.fromList options
+            Dict.fromList (options required)
                 |> Dict.get selection
                 |> Maybe.withDefault OneOf
     in
     makeOp choices chosen
 
 
-select : EnumOp -> Html EnumOp
-select op =
+select : Bool -> EnumOp -> Html EnumOp
+select required op =
     case op of
         OneOf choices chosen ->
-            operationSelect OneOf choices chosen
+            operationSelect OneOf required choices chosen
 
         NoneOf choices chosen ->
-            operationSelect NoneOf choices chosen
+            operationSelect NoneOf required choices chosen
+
+        IsNull choices ->
+            operationSelect (always IsNull) required choices Set.empty
 
 
-operationSelect : OperationC -> Set String -> Set String -> Html EnumOp
-operationSelect makeOp choices chosen =
+operationSelect : OperationC -> Bool -> Set String -> Set String -> Html EnumOp
+operationSelect makeOp required choices chosen =
     let
         makeOption ( s, f_ ) =
             option
@@ -60,8 +70,8 @@ operationSelect makeOp choices chosen =
                 [ text s ]
     in
     Html.select
-        [ onInput (optionSelected choices chosen) ]
-        (List.map makeOption options)
+        [ onInput (optionSelected required choices chosen) ]
+        (List.map makeOption (options required))
 
 
 checkboxes : EnumOp -> Int -> Html EnumOp
@@ -72,6 +82,9 @@ checkboxes op idx =
 
         NoneOf choices chosen ->
             enumCheckboxes NoneOf idx choices chosen
+
+        IsNull choices ->
+            text ""
 
 
 enumCheckboxes : OperationC -> Int -> Set String -> Set String -> Html EnumOp

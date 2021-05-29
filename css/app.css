@@ -233,3 +233,7 @@ https://css-tricks.com/the-cleanest-trick-for-autogrowing-textareas/
 i.icono-cross {
     cursor: pointer;
 }
+
+label {
+   user-select: none;
+}

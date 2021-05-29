@@ -11,35 +11,42 @@ type TextOp
     | TextContains (Maybe String)
     | TextStartsWith (Maybe String)
     | TextEndsWith (Maybe String)
+    | IsNull
 
 
-inputs : TextOp -> List (Html TextOp)
-inputs op =
-    [ select op, input op ]
+inputs : Bool -> TextOp -> List (Html TextOp)
+inputs required op =
+    [ select required op, input op ]
 
 
-options : List ( String, Maybe String -> TextOp )
-options =
+options : Bool -> List ( String, Maybe String -> TextOp )
+options required =
     [ ( "equals", TextEquals )
     , ( "contains", TextContains )
     , ( "starts with", TextStartsWith )
     , ( "ends with", TextEndsWith )
     ]
+        ++ (if required then
+                []
+
+            else
+                [ ( "is not set", always IsNull ) ]
+           )
 
 
-optionSelected : Maybe String -> String -> TextOp
-optionSelected mstring selection =
+optionSelected : Bool -> Maybe String -> String -> TextOp
+optionSelected required mstring selection =
     let
         makeOp =
-            Dict.fromList options
+            Dict.fromList (options required)
                 |> Dict.get selection
                 |> Maybe.withDefault TextEquals
     in
     makeOp mstring
 
 
-select : TextOp -> Html TextOp
-select op =
+select : Bool -> TextOp -> Html TextOp
+select required op =
     let
         opSelect makeOp mstring =
             let
@@ -49,8 +56,8 @@ select op =
                         [ text s ]
             in
             Html.select
-                [ onInput (optionSelected mstring) ]
-                (List.map makeOption options)
+                [ onInput (optionSelected required mstring) ]
+                (List.map makeOption (options required))
     in
     case op of
         TextEquals mstring ->
@@ -64,6 +71,9 @@ select op =
 
         TextEndsWith mstring ->
             opSelect TextEndsWith mstring
+
+        IsNull ->
+            opSelect (always IsNull) Nothing
 
 
 input : TextOp -> Html TextOp
@@ -89,3 +99,6 @@ input op =
 
         TextEndsWith mstring ->
             textInput TextEndsWith mstring
+
+        IsNull ->
+            text ""
