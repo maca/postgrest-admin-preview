@@ -13,7 +13,7 @@ type Filter
     | BoolFilter String Operator
     | DateFilter String Operator
     | TimeFilter String Operator
-    | EnumFilter String Operator
+    | EnumFilter String (List String) Operator
     | Blank
 
 
@@ -38,7 +38,7 @@ toString filter =
         TimeFilter _ _ ->
             "time"
 
-        EnumFilter _ _ ->
+        EnumFilter _ _ _ ->
             "enum"
 
         Blank ->
@@ -66,8 +66,8 @@ reassign name filter =
         TimeFilter _ op ->
             TimeFilter name op
 
-        EnumFilter _ op ->
-            EnumFilter name op
+        EnumFilter _ choices op ->
+            EnumFilter name choices op
 
         Blank ->
             Blank
@@ -92,7 +92,7 @@ fromColumn name (Column _ value) =
             BoolFilter name IsTrue
 
         PEnum _ choices ->
-            EnumFilter name <| OneOf choices Set.empty
+            EnumFilter name choices <| OneOf Set.empty
 
         PTime _ ->
             TimeFilter name <| InDate Nothing

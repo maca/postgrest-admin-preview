@@ -38,8 +38,8 @@ type Operator
     | GreaterThan (Maybe String)
     | Between (Maybe String) (Maybe String)
     | InDate (Maybe String)
-    | OneOf (List String) (Set String)
-    | NoneOf (List String) (Set String)
+    | OneOf (Set String)
+    | NoneOf (Set String)
     | IsTrue
     | IsFalse
     | IsNull
@@ -63,63 +63,82 @@ textFilterInputs required op =
             , ( "ends with", endsWith )
             ]
     in
-    inputs 0 [ type_ "text" ] (options ++ nullOption required) op
+    inputs [ type_ "text" ] (options ++ nullOption required) op
 
 
 intFilterInputs : Bool -> Operator -> List (Html Operator)
 intFilterInputs required op =
-    inputs 0 [ type_ "number", step "1" ] (numberOptions ++ nullOption required) op
+    inputs [ type_ "number", step "1" ]
+        (numberOptions ++ nullOption required)
+        op
 
 
 floatFilterInputs : Bool -> Operator -> List (Html Operator)
 floatFilterInputs required op =
-    inputs 0 [ type_ "number", step "0.01" ] (numberOptions ++ nullOption required) op
+    inputs [ type_ "number", step "0.01" ]
+        (numberOptions ++ nullOption required)
+        op
 
 
 dateFilterInputs : Bool -> Operator -> List (Html Operator)
 dateFilterInputs required op =
-    inputs 0 [ type_ "date" ] (timeOptions ++ nullOption required) op
+    inputs [ type_ "date" ] (timeOptions ++ nullOption required) op
 
 
 timeFilterInputs : Bool -> Operator -> List (Html Operator)
 timeFilterInputs required op =
-    inputs 0 [ type_ "datetime-local" ] (timeOptions ++ nullOption required) op
+    inputs [ type_ "datetime-local" ] (timeOptions ++ nullOption required) op
 
 
-enumInputs : Bool -> Int -> Operator -> List (Html Operator)
-enumInputs required idx op =
+enumInputs : Bool -> List String -> Int -> Operator -> List (Html Operator)
+enumInputs required choices idx op =
     let
         options =
             case op of
-                OneOf choices chosen ->
-                    [ ( "is one of", oneOf choices chosen )
-                    , ( "is none of", noneOf choices chosen )
+                OneOf chosen ->
+                    [ ( "is one of", oneOf chosen )
+                    , ( "is none of", noneOf chosen )
                     ]
 
-                NoneOf choices chosen ->
-                    [ ( "is one of", oneOf choices chosen )
-                    , ( "is none of", noneOf choices chosen )
+                NoneOf chosen ->
+                    [ ( "is one of", oneOf chosen )
+                    , ( "is none of", noneOf chosen )
                     ]
 
                 _ ->
-                    []
+                    [ ( "is one of", oneOf Set.empty )
+                    , ( "is none of", noneOf Set.empty )
+                    ]
     in
-    inputs idx [] (timeOptions ++ nullOption required) op
+    [ select (options ++ nullOption required) op
+    , case op of
+        OneOf chosen ->
+            choices
+                |> List.map (checkbox (oneOf chosen) idx chosen)
+                |> div [ class "checkboxes" ]
+
+        NoneOf chosen ->
+            choices
+                |> List.map (checkbox (noneOf chosen) idx chosen)
+                |> div [ class "checkboxes" ]
+
+        _ ->
+            text ""
+    ]
 
 
 boolFilterInputs : Bool -> Operator -> List (Html Operator)
 boolFilterInputs required op =
-    inputs 0 [] (boolOptions ++ nullOption required) op
+    inputs [] (boolOptions ++ nullOption required) op
 
 
 inputs :
-    Int
-    -> List (Attribute Operator)
+    List (Attribute Operator)
     -> Options
     -> Operator
     -> List (Html Operator)
-inputs idx attributes options op =
-    [ select options op, input idx attributes op ]
+inputs attributes options op =
+    [ select options op, input attributes op ]
 
 
 equals : OperatorC
@@ -152,30 +171,30 @@ isFalse _ _ =
     IsFalse
 
 
-oneOf : List String -> Set String -> OperatorC
-oneOf choices chosen mstring _ =
+oneOf : Set String -> OperatorC
+oneOf chosen mstring _ =
     let
         choice =
             Maybe.withDefault "" mstring
     in
     if Set.member choice chosen then
-        OneOf choices (Set.remove choice chosen)
+        OneOf (Set.remove choice chosen)
 
     else
-        OneOf choices (Set.insert choice chosen)
+        OneOf (Set.insert choice chosen)
 
 
-noneOf : List String -> Set String -> OperatorC
-noneOf choices chosen mstring _ =
+noneOf : Set String -> OperatorC
+noneOf chosen mstring _ =
     let
         choice =
             Maybe.withDefault "" mstring
     in
     if Set.member choice chosen then
-        NoneOf choices (Set.remove choice chosen)
+        NoneOf (Set.remove choice chosen)
 
     else
-        NoneOf choices (Set.insert choice chosen)
+        NoneOf (Set.insert choice chosen)
 
 
 lesserThan : OperatorC
@@ -242,11 +261,11 @@ select options op =
         InDate a ->
             opSelect inDate a Nothing
 
-        OneOf choices chosen ->
-            opSelect (oneOf choices chosen) Nothing Nothing
+        OneOf chosen ->
+            opSelect (oneOf chosen) Nothing Nothing
 
-        NoneOf choices chosen ->
-            opSelect (noneOf choices chosen) Nothing Nothing
+        NoneOf chosen ->
+            opSelect (noneOf chosen) Nothing Nothing
 
         IsTrue ->
             opSelect isTrue Nothing Nothing
@@ -258,12 +277,7 @@ select options op =
             opSelect isNull Nothing Nothing
 
 
-optionSelected :
-    Options
-    -> Maybe String
-    -> Maybe String
-    -> String
-    -> Operator
+optionSelected : Options -> Maybe String -> Maybe String -> String -> Operator
 optionSelected options a b selection =
     let
         makeOp =
@@ -274,8 +288,8 @@ optionSelected options a b selection =
     makeOp a b
 
 
-input : Int -> List (Attribute Operator) -> Operator -> Html Operator
-input idx attributes op =
+input : List (Attribute Operator) -> Operator -> Html Operator
+input attributes op =
     case op of
         Equals a ->
             textInput attributes Equals a
@@ -305,15 +319,11 @@ input idx attributes op =
         InDate a ->
             textInput [ type_ "date" ] InDate a
 
-        OneOf choices chosen ->
-            choices
-                |> List.map (checkbox (oneOf choices chosen) idx chosen)
-                |> div [ class "checkboxes" ]
+        OneOf chosen ->
+            text ""
 
-        NoneOf choices chosen ->
-            choices
-                |> List.map (checkbox (oneOf choices chosen) idx chosen)
-                |> div [ class "checkboxes" ]
+        NoneOf chosen ->
+            text ""
 
         IsTrue ->
             text ""

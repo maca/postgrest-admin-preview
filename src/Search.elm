@@ -82,6 +82,10 @@ update msg search =
 
 view : Search -> Html Msg
 view { definition, filters } =
+    let
+        _ =
+            Debug.log "filter" filters
+    in
     aside
         [ class "filters" ]
         (h3 [] [ text "Filter" ]
@@ -151,9 +155,10 @@ viewFilter definition idx filter =
                 |> List.map (Html.map (BoolFilter name >> UpdateFilter idx))
                 |> inputs name
 
-        EnumFilter name op ->
-            enumInputs (required name) idx op
-                |> List.map (Html.map (EnumFilter name >> UpdateFilter idx))
+        EnumFilter name choices op ->
+            enumInputs (required name) choices idx op
+                |> List.map
+                    (Html.map (EnumFilter name choices >> UpdateFilter idx))
                 |> inputs name
 
         Blank ->
