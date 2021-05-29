@@ -4,11 +4,16 @@ import Array exposing (Array)
 import Array.Extra as Array
 import Dict
 import Filter as Filter exposing (Filter(..))
-import Filter.Bool as Bool
-import Filter.Enum as Enum
-import Filter.Num as Num
-import Filter.Text as Text
-import Filter.Time as Time
+import Filter.Operator
+    exposing
+        ( boolFilterInputs
+        , dateFilterInputs
+        , enumInputs
+        , floatFilterInputs
+        , intFilterInputs
+        , textFilterInputs
+        , timeFilterInputs
+        )
 import Html
     exposing
         ( Html
@@ -117,29 +122,37 @@ viewFilter definition idx filter =
     in
     case filter of
         TextFilter name op ->
-            Text.inputs (required name) op
+            textFilterInputs (required name) op
                 |> List.map (Html.map (TextFilter name >> UpdateFilter idx))
                 |> inputs name
 
-        NumFilter name inputType op ->
-            Num.inputs inputType (required name) op
-                |> List.map
-                    (Html.map (NumFilter name inputType >> UpdateFilter idx))
+        IntFilter name op ->
+            intFilterInputs (required name) op
+                |> List.map (Html.map (IntFilter name >> UpdateFilter idx))
                 |> inputs name
 
-        TimeFilter name inputType op ->
-            Time.inputs inputType (required name) op
-                |> List.map
-                    (Html.map (TimeFilter name inputType >> UpdateFilter idx))
+        FloatFilter name op ->
+            floatFilterInputs (required name) op
+                |> List.map (Html.map (FloatFilter name >> UpdateFilter idx))
+                |> inputs name
+
+        DateFilter name op ->
+            dateFilterInputs (required name) op
+                |> List.map (Html.map (DateFilter name >> UpdateFilter idx))
+                |> inputs name
+
+        TimeFilter name op ->
+            timeFilterInputs (required name) op
+                |> List.map (Html.map (TimeFilter name >> UpdateFilter idx))
                 |> inputs name
 
         BoolFilter name op ->
-            [ Bool.input (required name) op ]
+            boolFilterInputs (required name) op
                 |> List.map (Html.map (BoolFilter name >> UpdateFilter idx))
                 |> inputs name
 
         EnumFilter name op ->
-            Enum.inputs (required name) op idx
+            enumInputs (required name) idx op
                 |> List.map (Html.map (EnumFilter name >> UpdateFilter idx))
                 |> inputs name
 

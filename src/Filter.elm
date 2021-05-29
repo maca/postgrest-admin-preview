@@ -1,20 +1,19 @@
 module Filter exposing (Filter(..), fromColumn, reassign, toString)
 
-import Filter.Bool as FBool exposing (BoolOp)
-import Filter.Enum as FEnum exposing (EnumOp)
-import Filter.Num as FNum exposing (NumInput(..), NumOp)
-import Filter.Text as FText exposing (TextOp)
-import Filter.Time as FTime exposing (TimeInput(..), TimeOp)
+import Filter.Operator exposing (Operator(..))
 import Postgrest.Schema.Definition exposing (Column(..))
 import Postgrest.Value exposing (Value(..))
+import Set
 
 
 type Filter
-    = TextFilter String TextOp
-    | NumFilter String NumInput NumOp
-    | BoolFilter String BoolOp
-    | EnumFilter String EnumOp
-    | TimeFilter String TimeInput TimeOp
+    = TextFilter String Operator
+    | IntFilter String Operator
+    | FloatFilter String Operator
+    | BoolFilter String Operator
+    | DateFilter String Operator
+    | TimeFilter String Operator
+    | EnumFilter String Operator
     | Blank
 
 
@@ -24,17 +23,23 @@ toString filter =
         TextFilter _ _ ->
             "text"
 
-        NumFilter _ _ _ ->
-            "number"
+        IntFilter _ _ ->
+            "integer"
+
+        FloatFilter _ _ ->
+            "float"
 
         BoolFilter _ _ ->
             "bool"
 
+        DateFilter _ _ ->
+            "date"
+
+        TimeFilter _ _ ->
+            "time"
+
         EnumFilter _ _ ->
             "enum"
-
-        TimeFilter _ _ _ ->
-            "time"
 
         Blank ->
             ""
@@ -46,17 +51,23 @@ reassign name filter =
         TextFilter _ op ->
             TextFilter name op
 
-        NumFilter _ inputType op ->
-            NumFilter name inputType op
+        IntFilter _ op ->
+            IntFilter name op
+
+        FloatFilter _ op ->
+            FloatFilter name op
 
         BoolFilter _ op ->
             BoolFilter name op
 
+        DateFilter _ op ->
+            TimeFilter name op
+
+        TimeFilter _ op ->
+            TimeFilter name op
+
         EnumFilter _ op ->
             EnumFilter name op
-
-        TimeFilter _ inputType op ->
-            TimeFilter name inputType op
 
         Blank ->
             Blank
@@ -66,28 +77,28 @@ fromColumn : String -> Column -> Filter
 fromColumn name (Column _ value) =
     case value of
         PString _ ->
-            TextFilter name FText.init
+            TextFilter name <| Equals Nothing
 
         PText _ ->
-            TextFilter name FText.init
-
-        PFloat _ ->
-            NumFilter name FloatInput FNum.init
+            TextFilter name <| Equals Nothing
 
         PInt _ ->
-            NumFilter name IntInput FNum.init
+            IntFilter name <| Equals Nothing
+
+        PFloat _ ->
+            FloatFilter name <| Equals Nothing
 
         PBool _ ->
-            BoolFilter name FBool.init
+            BoolFilter name IsTrue
 
         PEnum _ choices ->
-            EnumFilter name <| FEnum.init choices
+            EnumFilter name <| OneOf choices Set.empty
 
         PTime _ ->
-            TimeFilter name TimeInput FTime.init
+            TimeFilter name <| InDate Nothing
 
         PDate _ ->
-            TimeFilter name DateInput FTime.init
+            TimeFilter name <| InDate Nothing
 
         PPrimaryKey mprimaryKey ->
             Blank
