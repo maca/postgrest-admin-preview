@@ -99,9 +99,16 @@ viewFilter definition idx filter =
                 |> List.map (Html.map (TextFilter name >> UpdateFilter idx))
                 |> inputs name
 
-        NumFilter name op ->
-            Num.inputs op
-                |> List.map (Html.map (NumFilter name >> UpdateFilter idx))
+        NumFilter name inputType op ->
+            Num.inputs inputType op
+                |> List.map
+                    (Html.map (NumFilter name inputType >> UpdateFilter idx))
+                |> inputs name
+
+        TimeFilter name inputType op ->
+            Time.inputs inputType op
+                |> List.map
+                    (Html.map (TimeFilter name inputType >> UpdateFilter idx))
                 |> inputs name
 
         Blank ->

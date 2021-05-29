@@ -1,20 +1,25 @@
-module Listing.Search.Filter exposing (Filter(..), fromColumn, reassign, toString)
+module Listing.Search.Filter exposing
+    ( Filter(..)
+    , fromColumn
+    , reassign
+    , toString
+    )
 
 import Listing.Search.Bool exposing (BoolOp(..))
 import Listing.Search.Enum exposing (EnumOp(..))
-import Listing.Search.Num exposing (NumOp(..))
+import Listing.Search.Num exposing (NumInput(..), NumOp(..))
 import Listing.Search.Text exposing (TextOp(..))
-import Listing.Search.Time exposing (TimeOp(..))
+import Listing.Search.Time exposing (TimeInput(..), TimeOp(..))
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value as Value exposing (Value(..))
 
 
 type Filter
     = TextFilter String TextOp
-    | NumFilter String NumOp
+    | NumFilter String NumInput NumOp
     | BoolFilter String BoolOp
     | EnumFilter String EnumOp
-    | TimeFilter String TimeOp
+    | TimeFilter String TimeInput TimeOp
     | Blank
 
 
@@ -24,7 +29,7 @@ toString filter =
         TextFilter _ _ ->
             "text"
 
-        NumFilter _ _ ->
+        NumFilter _ _ _ ->
             "number"
 
         BoolFilter _ _ ->
@@ -33,7 +38,7 @@ toString filter =
         EnumFilter _ _ ->
             "enum"
 
-        TimeFilter _ _ ->
+        TimeFilter _ _ _ ->
             "time"
 
         Blank ->
@@ -46,8 +51,8 @@ reassign name filter =
         TextFilter _ op ->
             TextFilter name op
 
-        NumFilter _ op ->
-            NumFilter name op
+        NumFilter _ inputType op ->
+            NumFilter name inputType op
 
         BoolFilter _ op ->
             BoolFilter name op
@@ -55,8 +60,8 @@ reassign name filter =
         EnumFilter _ op ->
             EnumFilter name op
 
-        TimeFilter _ op ->
-            TimeFilter name op
+        TimeFilter _ inputType op ->
+            TimeFilter name inputType op
 
         Blank ->
             Blank
@@ -72,10 +77,10 @@ fromColumn name (Column _ value) =
             TextFilter name <| TextEquals Nothing
 
         PFloat _ ->
-            NumFilter name <| NumEquals Nothing
+            NumFilter name FloatInput <| NumEquals Nothing
 
         PInt _ ->
-            NumFilter name <| NumEquals Nothing
+            NumFilter name IntInput <| NumEquals Nothing
 
         PBool _ ->
             Blank
@@ -84,10 +89,10 @@ fromColumn name (Column _ value) =
             EnumFilter name EnumAll
 
         PTime _ ->
-            Blank
+            TimeFilter name TimeInput <| TimeInDate Nothing
 
         PDate _ ->
-            Blank
+            TimeFilter name DateInput <| TimeInDate Nothing
 
         PPrimaryKey mprimaryKey ->
             Blank

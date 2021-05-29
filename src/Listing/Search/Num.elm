@@ -1,26 +1,31 @@
-module Listing.Search.Num exposing (NumOp(..), inputs)
+module Listing.Search.Num exposing (NumInput(..), NumOp(..), inputs)
 
 import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
 import Html exposing (Html, div, span, text)
-import Html.Attributes exposing (class, selected, value)
+import Html.Attributes exposing (class, selected, step, type_, value)
 import Html.Events exposing (onInput)
 
 
 type NumOp
-    = NumEquals (Maybe Float)
-    | NumLesserThan (Maybe Float)
-    | NumGreaterThan (Maybe Float)
-    | NumBetween (Maybe Float) (Maybe Float)
+    = NumEquals (Maybe String)
+    | NumLesserThan (Maybe String)
+    | NumGreaterThan (Maybe String)
+    | NumBetween (Maybe String) (Maybe String)
+
+
+type NumInput
+    = FloatInput
+    | IntInput
 
 
 type alias OperationC =
-    Maybe Float -> Maybe Float -> NumOp
+    Maybe String -> Maybe String -> NumOp
 
 
-inputs : NumOp -> List (Html NumOp)
-inputs op =
-    [ select op, input op ]
+inputs : NumInput -> NumOp -> List (Html NumOp)
+inputs inputType op =
+    [ select op, input inputType op ]
 
 
 options : List ( String, OperationC )
@@ -32,7 +37,7 @@ options =
     ]
 
 
-optionSelected : Maybe Float -> Maybe Float -> String -> NumOp
+optionSelected : Maybe String -> Maybe String -> String -> NumOp
 optionSelected a b selection =
     let
         makeOp =
@@ -59,7 +64,7 @@ select op =
             opSelect NumBetween a b
 
 
-opSelect : OperationC -> Maybe Float -> Maybe Float -> Html NumOp
+opSelect : OperationC -> Maybe String -> Maybe String -> Html NumOp
 opSelect makeOp a b =
     let
         makeOption ( s, f_ ) =
@@ -72,30 +77,41 @@ opSelect makeOp a b =
         (List.map makeOption options)
 
 
-input : NumOp -> Html NumOp
-input op =
+input : NumInput -> NumOp -> Html NumOp
+input inputType op =
     case op of
         NumEquals a ->
-            floatInput NumEquals a
+            floatInput inputType NumEquals a
 
         NumLesserThan a ->
-            floatInput NumLesserThan a
+            floatInput inputType NumLesserThan a
 
         NumGreaterThan a ->
-            floatInput NumGreaterThan a
+            floatInput inputType NumGreaterThan a
 
         NumBetween a b ->
             div []
-                [ floatInput (flip NumBetween b) a
+                [ floatInput inputType (flip NumBetween b) a
                 , span [] [ text "and" ]
-                , floatInput (NumBetween a) b
+                , floatInput inputType (NumBetween a) b
                 ]
 
 
-floatInput : (Maybe Float -> NumOp) -> Maybe Float -> Html NumOp
-floatInput makeOp mfloat =
+floatInput : NumInput -> (Maybe String -> NumOp) -> Maybe String -> Html NumOp
+floatInput inputType makeOp mfloat =
+    let
+        step_ =
+            case inputType of
+                FloatInput ->
+                    step "0.01"
+
+                IntInput ->
+                    step "1"
+    in
     Html.input
-        [ onInput (String.toFloat >> makeOp)
-        , value <| Maybe.withDefault "" <| Maybe.map String.fromFloat mfloat
+        [ type_ "number"
+        , step_
+        , onInput (Just >> makeOp)
+        , value <| Maybe.withDefault "" mfloat
         ]
         []
