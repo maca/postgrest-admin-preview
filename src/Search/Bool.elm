@@ -1,4 +1,4 @@
-module Search.Bool exposing (BoolOp(..), init, input)
+module Search.Bool exposing (BoolOp, init, input)
 
 import Html exposing (Html, div, option, span, text)
 import Html.Attributes exposing (selected)

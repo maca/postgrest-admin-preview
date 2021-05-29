@@ -1,4 +1,4 @@
-module Search.Time exposing (TimeInput(..), TimeOp(..), init, inputs)
+module Search.Time exposing (TimeInput(..), TimeOp, init, inputs)
 
 import Basics.Extra exposing (flip)
 import Dict

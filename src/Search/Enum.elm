@@ -1,4 +1,4 @@
-module Search.Enum exposing (EnumOp(..), init, inputs)
+module Search.Enum exposing (EnumOp, init, inputs)
 
 import Dict
 import Html exposing (Html, div, label, option, text)
