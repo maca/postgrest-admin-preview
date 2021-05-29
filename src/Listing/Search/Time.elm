@@ -1,12 +1,10 @@
-module Listing.Search.Time exposing (TimeInput(..), TimeOp(..), inputs)
+module Listing.Search.Time exposing (TimeInput(..), TimeOp(..), init, inputs)
 
 import Basics.Extra exposing (flip)
-import Dict exposing (Dict)
+import Dict
 import Html exposing (Html, div, span, text)
-import Html.Attributes exposing (class, selected, type_, value)
+import Html.Attributes exposing (selected, type_, value)
 import Html.Events exposing (onInput)
-import Iso8601
-import Time exposing (utc)
 
 
 type TimeOp
@@ -24,6 +22,11 @@ type TimeInput
 
 type alias OperationC =
     Maybe String -> Maybe String -> TimeOp
+
+
+init : TimeOp
+init =
+    TimeInDate Nothing
 
 
 inputs : TimeInput -> Bool -> TimeOp -> List (Html TimeOp)

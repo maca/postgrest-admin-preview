@@ -5,14 +5,13 @@ module Listing.Search.Filter exposing
     , toString
     )
 
-import Listing.Search.Bool exposing (BoolOp(..))
-import Listing.Search.Enum exposing (EnumOp(..))
-import Listing.Search.Num exposing (NumInput(..), NumOp(..))
-import Listing.Search.Text exposing (TextOp(..))
-import Listing.Search.Time exposing (TimeInput(..), TimeOp(..))
-import Postgrest.Schema.Definition exposing (Column(..), Definition)
-import Postgrest.Value as Value exposing (Value(..))
-import Set
+import Listing.Search.Bool as FBool exposing (BoolOp)
+import Listing.Search.Enum as FEnum exposing (EnumOp)
+import Listing.Search.Num as FNum exposing (NumInput(..), NumOp)
+import Listing.Search.Text as FText exposing (TextOp)
+import Listing.Search.Time as FTime exposing (TimeInput(..), TimeOp)
+import Postgrest.Schema.Definition exposing (Column(..))
+import Postgrest.Value exposing (Value(..))
 
 
 type Filter
@@ -72,28 +71,28 @@ fromColumn : String -> Column -> Filter
 fromColumn name (Column _ value) =
     case value of
         PString _ ->
-            TextFilter name <| TextEquals Nothing
+            TextFilter name FText.init
 
         PText _ ->
-            TextFilter name <| TextEquals Nothing
+            TextFilter name FText.init
 
         PFloat _ ->
-            NumFilter name FloatInput <| NumEquals Nothing
+            NumFilter name FloatInput FNum.init
 
         PInt _ ->
-            NumFilter name IntInput <| NumEquals Nothing
+            NumFilter name IntInput FNum.init
 
         PBool _ ->
-            BoolFilter name <| BoolOp True
+            BoolFilter name FBool.init
 
         PEnum _ choices ->
-            EnumFilter name <| OneOf (Set.fromList choices) Set.empty
+            EnumFilter name <| FEnum.init choices
 
         PTime _ ->
-            TimeFilter name TimeInput <| TimeInDate Nothing
+            TimeFilter name TimeInput FTime.init
 
         PDate _ ->
-            TimeFilter name DateInput <| TimeInDate Nothing
+            TimeFilter name DateInput FTime.init
 
         PPrimaryKey mprimaryKey ->
             Blank

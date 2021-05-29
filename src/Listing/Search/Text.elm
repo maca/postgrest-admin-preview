@@ -1,8 +1,8 @@
-module Listing.Search.Text exposing (TextOp(..), inputs)
+module Listing.Search.Text exposing (TextOp(..), init, inputs)
 
-import Dict exposing (Dict)
+import Dict
 import Html exposing (Html, option, text)
-import Html.Attributes exposing (class, selected, type_, value)
+import Html.Attributes exposing (selected, type_, value)
 import Html.Events exposing (onInput)
 
 
@@ -12,6 +12,11 @@ type TextOp
     | TextStartsWith (Maybe String)
     | TextEndsWith (Maybe String)
     | IsNull
+
+
+init : TextOp
+init =
+    TextEquals Nothing
 
 
 inputs : Bool -> TextOp -> List (Html TextOp)

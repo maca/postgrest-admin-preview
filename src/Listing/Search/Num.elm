@@ -1,9 +1,9 @@
-module Listing.Search.Num exposing (NumInput(..), NumOp(..), inputs)
+module Listing.Search.Num exposing (NumInput(..), NumOp(..), init, inputs)
 
 import Basics.Extra exposing (flip)
-import Dict exposing (Dict)
+import Dict
 import Html exposing (Html, div, span, text)
-import Html.Attributes exposing (class, selected, step, type_, value)
+import Html.Attributes exposing (selected, step, type_, value)
 import Html.Events exposing (onInput)
 
 
@@ -22,6 +22,11 @@ type NumInput
 
 type alias OperationC =
     Maybe String -> Maybe String -> NumOp
+
+
+init : NumOp
+init =
+    NumEquals Nothing
 
 
 inputs : NumInput -> Bool -> NumOp -> List (Html NumOp)

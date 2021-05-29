@@ -1,8 +1,7 @@
-module Listing.Search.Enum exposing (EnumOp(..), inputs)
+module Listing.Search.Enum exposing (EnumOp(..), init, inputs)
 
-import Basics.Extra exposing (flip)
-import Dict exposing (Dict)
-import Html exposing (Html, div, label, option, span, text)
+import Dict
+import Html exposing (Html, div, label, option, text)
 import Html.Attributes exposing (checked, for, id, selected, type_, value)
 import Html.Events exposing (onInput)
 import Set exposing (Set)
@@ -17,6 +16,11 @@ type EnumOp
 
 type alias OperationC =
     Set String -> Set String -> EnumOp
+
+
+init : List String -> EnumOp
+init choices =
+    OneOf (Set.fromList choices) Set.empty
 
 
 inputs : Bool -> EnumOp -> Int -> List (Html EnumOp)
@@ -83,7 +87,7 @@ checkboxes op idx =
         NoneOf choices chosen ->
             enumCheckboxes NoneOf idx choices chosen
 
-        IsNull choices ->
+        IsNull _ ->
             text ""
 
 

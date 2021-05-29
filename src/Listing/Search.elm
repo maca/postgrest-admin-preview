@@ -1,16 +1,13 @@
 module Listing.Search exposing (Msg, Search, init, update, view)
 
 import Array exposing (Array)
-import Basics.Extra exposing (flip)
-import Dict exposing (Dict)
+import Dict
 import Html
     exposing
         ( Html
         , button
         , div
-        , form
         , h3
-        , h4
         , i
         , input
         , option
@@ -26,7 +23,7 @@ import Listing.Search.Num as Num
 import Listing.Search.Text as Text
 import Listing.Search.Time as Time
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
-import Postgrest.Value as Value exposing (Value(..))
+import Postgrest.Value exposing (Value(..))
 import String.Extra as String
 
 
@@ -74,12 +71,13 @@ view : Search -> Html Msg
 view { definition, filters } =
     div
         []
-        ([ h3 [] [ text "filter" ] ]
-            ++ (Array.indexedMap (viewFilter definition) filters |> Array.toList)
+        (h3 [] [ text "filter" ]
+            :: (Array.indexedMap (viewFilter definition) filters |> Array.toList)
             ++ [ button [ onClick AddFilter ] [ i [ class "icono-plus" ] [] ] ]
         )
 
 
+viewFilter : Definition -> Int -> Filter -> Html Msg
 viewFilter definition idx filter =
     let
         required name =
@@ -92,7 +90,7 @@ viewFilter definition idx filter =
                 [ class "filter"
                 , class <| Filter.toString filter
                 ]
-                ([ fieldSelect definition idx name filter ] ++ content)
+                (fieldSelect definition idx name filter :: content)
     in
     case filter of
         TextFilter name op ->
