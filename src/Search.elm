@@ -1,4 +1,4 @@
-module Listing.Search exposing (Msg, Search, init, update, view)
+module Search exposing (Msg, Search, init, update, view)
 
 import Array exposing (Array)
 import Dict
@@ -16,14 +16,14 @@ import Html
         )
 import Html.Attributes exposing (class, selected, value)
 import Html.Events exposing (onClick, onInput)
-import Listing.Search.Bool as Bool
-import Listing.Search.Enum as Enum
-import Listing.Search.Filter as Filter exposing (Filter(..))
-import Listing.Search.Num as Num
-import Listing.Search.Text as Text
-import Listing.Search.Time as Time
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value exposing (Value(..))
+import Search.Bool as Bool
+import Search.Enum as Enum
+import Search.Filter as Filter exposing (Filter(..))
+import Search.Num as Num
+import Search.Text as Text
+import Search.Time as Time
 import String.Extra as String
 
 

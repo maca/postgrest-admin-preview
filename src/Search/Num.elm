@@ -1,4 +1,4 @@
-module Listing.Search.Num exposing (NumInput(..), NumOp(..), init, inputs)
+module Search.Num exposing (NumInput(..), NumOp(..), init, inputs)
 
 import Basics.Extra exposing (flip)
 import Dict

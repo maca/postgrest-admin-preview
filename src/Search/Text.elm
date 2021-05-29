@@ -1,4 +1,4 @@
-module Listing.Search.Text exposing (TextOp(..), init, inputs)
+module Search.Text exposing (TextOp(..), init, inputs)
 
 import Dict
 import Html exposing (Html, option, text)

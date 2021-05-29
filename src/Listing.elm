@@ -35,7 +35,6 @@ import Html.Attributes exposing (attribute, class, href, id, target)
 import Html.Events as Events exposing (onClick)
 import Inflect as String
 import Json.Decode as Decode
-import Listing.Search as Search exposing (Search)
 import Postgrest.Client as PG
 import Postgrest.Field exposing (Field)
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
@@ -43,6 +42,7 @@ import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value exposing (Value(..))
+import Search exposing (Search)
 import String.Extra as String
 import Task
 import Time.Extra as Time
