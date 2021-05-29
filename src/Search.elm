@@ -1,6 +1,7 @@
 module Search exposing (Msg, Search, init, update, view)
 
 import Array exposing (Array)
+import Array.Extra as Array
 import Dict
 import Filter as Filter exposing (Filter(..))
 import Filter.Bool as Bool
@@ -11,6 +12,7 @@ import Filter.Time as Time
 import Html
     exposing
         ( Html
+        , aside
         , button
         , div
         , h3
@@ -20,7 +22,7 @@ import Html
         , select
         , text
         )
-import Html.Attributes exposing (class, selected, value)
+import Html.Attributes exposing (attribute, class, selected, title, value)
 import Html.Events exposing (onClick, onInput)
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value exposing (Value(..))
@@ -30,6 +32,7 @@ import String.Extra as String
 type Msg
     = UpdateFilter Int Filter
     | AddFilter
+    | RemoveFilter Int
 
 
 type alias Search =
@@ -66,14 +69,25 @@ update msg search =
             , Cmd.none
             )
 
+        RemoveFilter idx ->
+            ( { search | filters = Array.removeAt idx search.filters }
+            , Cmd.none
+            )
+
 
 view : Search -> Html Msg
 view { definition, filters } =
-    div
-        []
-        (h3 [] [ text "filter" ]
+    aside
+        [ class "filters" ]
+        (h3 [] [ text "Filter" ]
             :: (Array.indexedMap (viewFilter definition) filters |> Array.toList)
-            ++ [ button [ onClick AddFilter ] [ i [ class "icono-plus" ] [] ] ]
+            ++ [ button
+                    [ onClick AddFilter
+                    , class "button-clear"
+                    , class "add-filter"
+                    ]
+                    [ text "Add filter", i [ class "icono-plus" ] [] ]
+               ]
         )
 
 
@@ -90,7 +104,16 @@ viewFilter definition idx filter =
                 [ class "filter"
                 , class <| Filter.toString filter
                 ]
-                (fieldSelect definition idx name filter :: content)
+                [ div [ class "filter-inputs" ]
+                    (fieldSelect definition idx name filter :: content)
+                , button
+                    [ class "button-clear"
+                    , onClick <| RemoveFilter idx
+                    , title "Remove filter"
+                    , class "filter-remove"
+                    ]
+                    [ i [ class "icono-cross" ] [] ]
+                ]
     in
     case filter of
         TextFilter name op ->

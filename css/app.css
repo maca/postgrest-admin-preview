@@ -118,35 +118,71 @@
 
 /* ------------ */
 /* Filter       */
+.filters {
+    width: 70rem;
+}
+
+button.add-filter {
+    float: right;
+    color: #508c8a;
+}
+
+.add-filter .icono-plus {
+    color: #508c8a;
+    margin-left: 2rem;
+}
+
+.add-filter:hover .icono-plus {
+    color: #606c76;
+}
+
+button.filter-remove {
+    padding: 0;
+}
+
+.filter-remove i {
+    color: #af6868;
+}
+
+.filter-remove:hover i {
+    color: #606c76;
+}
+
 .filter {
+    background:  #f3f3f3;
+    border-radius: 5px;
+    display: flex;
+    gap: 1.5rem;
+    padding: 1rem 1rem 0 1rem;
+    margin: 0 2rem 0.5rem 0;
+}
+
+.filter-inputs {
+    flex: 1 1 0;
+    gap: 1.5rem;
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
-    padding: 1rem 1rem 0 1rem;
-    margin: 0 2rem 0.5rem 0;
-    gap: 1.5rem;
-    background: #f3f3f3;
-    border-radius: 5px;
 }
 
-.filter > div:not(.checkboxes) {
+.filter-inputs > div:not(.checkboxes) {
     display: flex;
 }
 
-.filter > * {
+.filter-inputs > * {
     flex: 1 1 0;
+}
+
+.filter-inputs > div > span {
+    margin: 0.6rem 1rem;
 }
 
 .filter.enum .checkboxes {
    flex: 1 1 100%;
-   column-count: 10;
+   column-count: 3;
    column-gap: 2rem;
    margin-top: -2rem;
    margin-bottom: 1rem;
-}
-
-.filter > div > span {
-    margin: 0.6rem 1rem;
 }
 
 .filter.bool select {
@@ -154,7 +190,7 @@
 }
 
 .filter input, .filter select {
-    background: white;
+    background-color: white;
 }
 /* Filter       */
 /* ------------ */
@@ -206,8 +242,8 @@ label {
 /* ------------ */
 
 
-/* Textarea autogrow */
 /* ----------------- */
+/* Textarea autogrow */
 /* https://css-tricks.com/the-cleanest-trick-for-autogrowing-textareas */
 .grow-wrap {
   display: grid;
@@ -229,8 +265,8 @@ label {
 .grow-wrap > textarea, .grow-wrap::after {
   grid-area: 1 / 1 / 2 / 2;
 }
-/* ----------------- */
 /* Textarea autogrow */
+/* ----------------- */
 
 
 /* ------------ */

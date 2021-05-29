@@ -18,18 +18,18 @@ import String.Extra as String
 
 
 type EnumOp
-    = OneOf (Set String) (Set String)
-    | NoneOf (Set String) (Set String)
-    | IsNull (Set String)
+    = OneOf (List String) (Set String)
+    | NoneOf (List String) (Set String)
+    | IsNull (List String)
 
 
 type alias OperationC =
-    Set String -> Set String -> EnumOp
+    List String -> Set String -> EnumOp
 
 
 init : List String -> EnumOp
 init choices =
-    OneOf (Set.fromList choices) Set.empty
+    OneOf choices Set.empty
 
 
 inputs : Bool -> EnumOp -> Int -> List (Html EnumOp)
@@ -50,7 +50,7 @@ options required =
            )
 
 
-optionSelected : Bool -> Set String -> Set String -> String -> EnumOp
+optionSelected : Bool -> List String -> Set String -> String -> EnumOp
 optionSelected required choices chosen selection =
     let
         makeOp =
@@ -71,10 +71,10 @@ select required op =
             operationSelect NoneOf required choices chosen
 
         IsNull choices ->
-            operationSelect (always IsNull) required choices Set.empty
+            operationSelect (\_ _ -> IsNull choices) required choices Set.empty
 
 
-operationSelect : OperationC -> Bool -> Set String -> Set String -> Html EnumOp
+operationSelect : OperationC -> Bool -> List String -> Set String -> Html EnumOp
 operationSelect makeOp required choices chosen =
     let
         makeOption ( s, f_ ) =
@@ -100,9 +100,9 @@ checkboxes op idx =
             text ""
 
 
-enumCheckboxes : OperationC -> Int -> Set String -> Set String -> Html EnumOp
+enumCheckboxes : OperationC -> Int -> List String -> Set String -> Html EnumOp
 enumCheckboxes makeOp idx choices chosen =
-    Set.toList choices
+    choices
         |> List.map (checkbox (makeOp choices) idx chosen)
         |> div [ class "checkboxes" ]
 
