@@ -113,7 +113,7 @@ viewFilter definition idx filter =
                 |> inputs name
 
         EnumFilter name op ->
-            Enum.inputs op
+            Enum.inputs op idx
                 |> List.map (Html.map (EnumFilter name >> UpdateFilter idx))
                 |> inputs name
 

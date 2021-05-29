@@ -18,9 +18,9 @@ type alias OperationC =
     Set String -> Set String -> EnumOp
 
 
-inputs : EnumOp -> List (Html EnumOp)
-inputs op =
-    [ select op, checkboxes op ]
+inputs : EnumOp -> Int -> List (Html EnumOp)
+inputs op idx =
+    [ select op, checkboxes op idx ]
 
 
 options : List ( String, OperationC )
@@ -64,31 +64,35 @@ operationSelect makeOp choices chosen =
         (List.map makeOption options)
 
 
-checkboxes : EnumOp -> Html EnumOp
-checkboxes op =
+checkboxes : EnumOp -> Int -> Html EnumOp
+checkboxes op idx =
     case op of
         OneOf choices chosen ->
-            enumCheckboxes OneOf choices chosen
+            enumCheckboxes OneOf idx choices chosen
 
         NoneOf choices chosen ->
-            enumCheckboxes NoneOf choices chosen
+            enumCheckboxes NoneOf idx choices chosen
 
 
-enumCheckboxes : OperationC -> Set String -> Set String -> Html EnumOp
-enumCheckboxes makeOp choices chosen =
+enumCheckboxes : OperationC -> Int -> Set String -> Set String -> Html EnumOp
+enumCheckboxes makeOp idx choices chosen =
     Set.toList choices
-        |> List.map (checkbox (makeOp choices) chosen)
+        |> List.map (checkbox (makeOp choices) idx chosen)
         |> div []
 
 
-checkbox : (Set String -> EnumOp) -> Set String -> String -> Html EnumOp
-checkbox makeOp chosen choice =
+checkbox : (Set String -> EnumOp) -> Int -> Set String -> String -> Html EnumOp
+checkbox makeOp idx chosen choice =
+    let
+        inputId =
+            String.fromInt idx |> (++) choice
+    in
     div
         []
         [ label
-            [ for choice ]
+            [ for inputId ]
             [ Html.input
-                [ id choice
+                [ id inputId
                 , value choice
                 , onInput
                     (\s ->
