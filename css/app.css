@@ -1,4 +1,5 @@
-/* layout */
+/* ------------ */
+/* Layout       */
 .resources-menu {
     grid-area: menu;
     background: gray;
@@ -17,9 +18,12 @@
     grid-template-rows: auto;
     grid-template-areas: "menu main-area";
 }
+/* Layout       */
+/* ------------ */
 
 
-/* menu */
+/* ------------ */
+/* Menu         */
 .resources-menu ul {
     list-style-type: none;
 }
@@ -40,8 +44,12 @@
     background: #333;
     display: block;
 }
+/* Menu         */
+/* ------------ */
 
-/* listing */
+
+/* ------------ */
+/* Listing      */
 .resources-listing {
     display: flex;
     flex-direction: column;
@@ -85,7 +93,6 @@
     cursor: pointer;
 }
 
-
 .resources-listing .sort {
     cursor: pointer;
     user-select: none;
@@ -105,42 +112,56 @@
     color: inherit;
     transform: scale(0.6) rotate(-90deg) translateX(8px);
 }
+/* Listing      */
+/* ------------ */
 
 
-
+/* ------------ */
+/* Filter       */
 .filter {
     display: flex;
-    padding: 0 4rem 0 0;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    padding: 1rem 1rem 0 1rem;
+    margin: 0 2rem 0.5rem 0;
+    gap: 1.5rem;
+    background: #f3f3f3;
+    border-radius: 5px;
+}
+
+.filter > div:not(.checkboxes) {
+    display: flex;
 }
 
 .filter > * {
-    flex-grow: 1;
-    flex-basis: 0;
+    flex: 1 1 0;
 }
 
-.filter > div {
-    display: flex;
+.filter.enum .checkboxes {
+   flex: 1 1 100%;
+   column-count: 10;
+   column-gap: 2rem;
+   margin-top: -2rem;
+   margin-bottom: 1rem;
 }
 
 .filter > div > span {
     margin: 0.6rem 1rem;
 }
 
-.filter > :first-child {
-    margin-right: 1rem;
-}
-
-.filter > :last-child {
-    margin-left: 1rem;
-}
-
 .filter.bool select {
     margin-right: 0;
 }
 
+.filter input, .filter select {
+    background: white;
+}
+/* Filter       */
+/* ------------ */
 
 
-/* forms */
+/* ------------ */
+/* Form         */
 section.resource-form {
     padding: 4rem;
 }
@@ -169,14 +190,51 @@ section.resource-form {
     text-overflow: ellipsis;
 }
 
-
 input, textarea, .grow-wrap > textarea, .grow-wrap::after {
     font-family: 'Roboto', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
     font: 400 13.3333px Arial;
 }
 
+input[type=checkbox] {
+    margin-right: 1rem;
+}
 
-/* message */
+label {
+   user-select: none;
+}
+/* Form         */
+/* ------------ */
+
+
+/* Textarea autogrow */
+/* ----------------- */
+/* https://css-tricks.com/the-cleanest-trick-for-autogrowing-textareas */
+.grow-wrap {
+  display: grid;
+}
+
+.grow-wrap::after {
+  content: attr(data-replicated-value) " ";
+  white-space: pre-wrap;
+  visibility: hidden;
+  padding: 2rem;
+}
+
+.grow-wrap > textarea {
+  resize: none;
+  overflow: hidden;
+  height: inherit !important;
+}
+
+.grow-wrap > textarea, .grow-wrap::after {
+  grid-area: 1 / 1 / 2 / 2;
+}
+/* ----------------- */
+/* Textarea autogrow */
+
+
+/* ------------ */
+/* Message      */
 .message {
     position: fixed;
     display: flex;
@@ -204,36 +262,8 @@ input, textarea, .grow-wrap > textarea, .grow-wrap::after {
     color: #698658;
 }
 
-
-/* textarea autogrow
-https://css-tricks.com/the-cleanest-trick-for-autogrowing-textareas/
-*/
-.grow-wrap {
-  display: grid;
-}
-
-.grow-wrap::after {
-  content: attr(data-replicated-value) " ";
-  white-space: pre-wrap;
-  visibility: hidden;
-  padding: 2rem;
-}
-
-.grow-wrap > textarea {
-  resize: none;
-  overflow: hidden;
-  height: inherit !important;
-}
-
-.grow-wrap > textarea, .grow-wrap::after {
-  grid-area: 1 / 1 / 2 / 2;
-}
-
-/* misc */
 i.icono-cross {
     cursor: pointer;
 }
-
-label {
-   user-select: none;
-}
+/* Message      */
+/* ------------ */

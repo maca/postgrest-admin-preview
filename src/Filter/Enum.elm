@@ -2,7 +2,16 @@ module Filter.Enum exposing (EnumOp, init, inputs)
 
 import Dict
 import Html exposing (Html, div, label, option, text)
-import Html.Attributes exposing (checked, for, id, selected, type_, value)
+import Html.Attributes
+    exposing
+        ( checked
+        , class
+        , for
+        , id
+        , selected
+        , type_
+        , value
+        )
 import Html.Events exposing (onInput)
 import Set exposing (Set)
 import String.Extra as String
@@ -95,7 +104,7 @@ enumCheckboxes : OperationC -> Int -> Set String -> Set String -> Html EnumOp
 enumCheckboxes makeOp idx choices chosen =
     Set.toList choices
         |> List.map (checkbox (makeOp choices) idx chosen)
-        |> div []
+        |> div [ class "checkboxes" ]
 
 
 checkbox : (Set String -> EnumOp) -> Int -> Set String -> String -> Html EnumOp
