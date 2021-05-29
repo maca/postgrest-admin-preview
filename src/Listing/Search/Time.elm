@@ -32,7 +32,7 @@ inputs inputType op =
 
 options : List ( String, OperationC )
 options =
-    [ ( "is in date", \s _ -> TimeInDate s )
+    [ ( "is on date", \s _ -> TimeInDate s )
     , ( "is lesser than", \s _ -> TimeLesserThan s )
     , ( "is greater than", \s _ -> TimeGreaterThan s )
     , ( "is between", TimeBetween )

@@ -134,6 +134,10 @@
     margin-left: 1rem;
 }
 
+.filter.bool select {
+    margin-right: 0;
+}
+
 
 
 /* forms */

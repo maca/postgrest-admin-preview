@@ -13,16 +13,12 @@ type TextOp
     | TextEndsWith (Maybe String)
 
 
-type alias Options =
-    List ( String, Maybe String -> TextOp )
-
-
 inputs : TextOp -> List (Html TextOp)
 inputs op =
     [ select op, input op ]
 
 
-options : Options
+options : List ( String, Maybe String -> TextOp )
 options =
     [ ( "equals", TextEquals )
     , ( "contains", TextContains )

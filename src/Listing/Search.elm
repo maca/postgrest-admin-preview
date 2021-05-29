@@ -111,10 +111,19 @@ viewFilter definition idx filter =
                     (Html.map (TimeFilter name inputType >> UpdateFilter idx))
                 |> inputs name
 
-        Blank ->
-            text ""
+        BoolFilter name op ->
+            [ Bool.input op ]
+                |> List.map
+                    (Html.map (BoolFilter name >> UpdateFilter idx))
+                |> inputs name
 
-        _ ->
+        EnumFilter name op ->
+            Enum.inputs op
+                |> List.map
+                    (Html.map (EnumFilter name >> UpdateFilter idx))
+                |> inputs name
+
+        Blank ->
             text ""
 
 

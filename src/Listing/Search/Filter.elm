@@ -12,6 +12,7 @@ import Listing.Search.Text exposing (TextOp(..))
 import Listing.Search.Time exposing (TimeInput(..), TimeOp(..))
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value as Value exposing (Value(..))
+import Set
 
 
 type Filter
@@ -83,10 +84,10 @@ fromColumn name (Column _ value) =
             NumFilter name IntInput <| NumEquals Nothing
 
         PBool _ ->
-            Blank
+            BoolFilter name <| BoolOp True
 
-        PEnum _ _ ->
-            EnumFilter name EnumAll
+        PEnum _ choices ->
+            EnumFilter name <| OneOf (Set.fromList choices) Set.empty
 
         PTime _ ->
             TimeFilter name TimeInput <| TimeInDate Nothing
