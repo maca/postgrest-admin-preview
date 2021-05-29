@@ -85,20 +85,23 @@ checkbox : (Set String -> EnumOp) -> Set String -> String -> Html EnumOp
 checkbox makeOp chosen choice =
     div
         []
-        [ label [ for choice ] [ text <| String.humanize choice ]
-        , Html.input
-            [ id choice
-            , value choice
-            , onInput
-                (\s ->
-                    if Set.member s chosen then
-                        makeOp <| Set.remove s chosen
+        [ label
+            [ for choice ]
+            [ Html.input
+                [ id choice
+                , value choice
+                , onInput
+                    (\s ->
+                        if Set.member s chosen then
+                            makeOp <| Set.remove s chosen
 
-                    else
-                        makeOp <| Set.insert s chosen
-                )
-            , Html.Attributes.type_ "checkbox"
-            , checked <| Set.member choice chosen
+                        else
+                            makeOp <| Set.insert s chosen
+                    )
+                , Html.Attributes.type_ "checkbox"
+                , checked <| Set.member choice chosen
+                ]
+                []
+            , text <| String.humanize choice
             ]
-            []
         ]
