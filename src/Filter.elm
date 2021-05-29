@@ -1,12 +1,12 @@
-module Search.Filter exposing (Filter(..), fromColumn, reassign, toString)
+module Filter exposing (Filter(..), fromColumn, reassign, toString)
 
+import Filter.Bool as FBool exposing (BoolOp)
+import Filter.Enum as FEnum exposing (EnumOp)
+import Filter.Num as FNum exposing (NumInput(..), NumOp)
+import Filter.Text as FText exposing (TextOp)
+import Filter.Time as FTime exposing (TimeInput(..), TimeOp)
 import Postgrest.Schema.Definition exposing (Column(..))
 import Postgrest.Value exposing (Value(..))
-import Search.Bool as FBool exposing (BoolOp)
-import Search.Enum as FEnum exposing (EnumOp)
-import Search.Num as FNum exposing (NumInput(..), NumOp)
-import Search.Text as FText exposing (TextOp)
-import Search.Time as FTime exposing (TimeInput(..), TimeOp)
 
 
 type Filter

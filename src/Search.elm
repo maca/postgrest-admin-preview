@@ -2,6 +2,12 @@ module Search exposing (Msg, Search, init, update, view)
 
 import Array exposing (Array)
 import Dict
+import Filter as Filter exposing (Filter(..))
+import Filter.Bool as Bool
+import Filter.Enum as Enum
+import Filter.Num as Num
+import Filter.Text as Text
+import Filter.Time as Time
 import Html
     exposing
         ( Html
@@ -18,12 +24,6 @@ import Html.Attributes exposing (class, selected, value)
 import Html.Events exposing (onClick, onInput)
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value exposing (Value(..))
-import Search.Bool as Bool
-import Search.Enum as Enum
-import Search.Filter as Filter exposing (Filter(..))
-import Search.Num as Num
-import Search.Text as Text
-import Search.Time as Time
 import String.Extra as String
 
 
