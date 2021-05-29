@@ -19,12 +19,12 @@ import Html
         )
 import Html.Attributes exposing (class, selected, value)
 import Html.Events exposing (onClick, onInput)
-import Listing.Search.Bool as Bool exposing (BoolOp)
-import Listing.Search.Enum as Enum exposing (EnumOp(..))
+import Listing.Search.Bool as Bool
+import Listing.Search.Enum as Enum
 import Listing.Search.Filter as Filter exposing (Filter(..))
-import Listing.Search.Num as Num exposing (NumOp(..))
-import Listing.Search.Text as Text exposing (TextOp(..))
-import Listing.Search.Time as Time exposing (TimeOp(..))
+import Listing.Search.Num as Num
+import Listing.Search.Text as Text
+import Listing.Search.Time as Time
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value as Value exposing (Value(..))
 import String.Extra as String
@@ -72,10 +72,6 @@ update msg search =
 
 view : Search -> Html Msg
 view { definition, filters } =
-    let
-        _ =
-            Debug.log "filters" filters
-    in
     div
         []
         ([ h3 [] [ text "filter" ] ]
@@ -113,14 +109,12 @@ viewFilter definition idx filter =
 
         BoolFilter name op ->
             [ Bool.input op ]
-                |> List.map
-                    (Html.map (BoolFilter name >> UpdateFilter idx))
+                |> List.map (Html.map (BoolFilter name >> UpdateFilter idx))
                 |> inputs name
 
         EnumFilter name op ->
             Enum.inputs op
-                |> List.map
-                    (Html.map (EnumFilter name >> UpdateFilter idx))
+                |> List.map (Html.map (EnumFilter name >> UpdateFilter idx))
                 |> inputs name
 
         Blank ->
@@ -146,9 +140,13 @@ fieldSelect definition idx name filter =
         (Dict.keys definition
             |> List.map
                 (\s ->
-                    option
-                        [ selected (s == name), value s ]
-                        [ text <| String.humanize s ]
+                    if makeFilter s == Blank then
+                        text ""
+
+                    else
+                        option
+                            [ selected (s == name), value s ]
+                            [ text <| String.humanize s ]
                 )
         )
 
