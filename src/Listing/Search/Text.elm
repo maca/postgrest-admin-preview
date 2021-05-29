@@ -2,7 +2,7 @@ module Listing.Search.Text exposing (TextOp(..), inputs)
 
 import Dict exposing (Dict)
 import Html exposing (Html, option, text)
-import Html.Attributes exposing (class, selected, value)
+import Html.Attributes exposing (class, selected, type_, value)
 import Html.Events exposing (onInput)
 
 
@@ -76,6 +76,7 @@ input op =
         textInput makeOp mstring =
             Html.input
                 [ onInput (Just >> makeOp)
+                , type_ "text"
                 , value <| Maybe.withDefault "" mstring
                 ]
                 []
