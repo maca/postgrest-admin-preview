@@ -22,12 +22,11 @@ import Html
         , div
         , h3
         , i
-        , input
         , option
         , select
         , text
         )
-import Html.Attributes exposing (attribute, class, selected, title, value)
+import Html.Attributes exposing (class, selected, title, value)
 import Html.Events exposing (onClick, onInput)
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value exposing (Value(..))
@@ -82,10 +81,6 @@ update msg search =
 
 view : Search -> Html Msg
 view { definition, filters } =
-    let
-        _ =
-            Debug.log "filter" filters
-    in
     aside
         [ class "filters" ]
         (h3 [] [ text "Filter" ]

@@ -93,38 +93,31 @@ timeFilterInputs required op =
 enumInputs : Bool -> List String -> Int -> Operator -> List (Html Operator)
 enumInputs required choices idx op =
     let
-        options =
-            case op of
-                OneOf chosen ->
+        select_ chosen =
+            let
+                options =
                     [ ( "is one of", oneOf chosen )
                     , ( "is none of", noneOf chosen )
                     ]
+            in
+            select (options ++ nullOption required) op
 
-                NoneOf chosen ->
-                    [ ( "is one of", oneOf chosen )
-                    , ( "is none of", noneOf chosen )
-                    ]
-
-                _ ->
-                    [ ( "is one of", oneOf Set.empty )
-                    , ( "is none of", noneOf Set.empty )
-                    ]
-    in
-    [ select (options ++ nullOption required) op
-    , case op of
-        OneOf chosen ->
-            choices
-                |> List.map (checkbox (oneOf chosen) idx chosen)
+        inputs_ makeOp chosen =
+            [ select_ chosen
+            , choices
+                |> List.map (checkbox makeOp idx chosen)
                 |> div [ class "checkboxes" ]
+            ]
+    in
+    case op of
+        OneOf chosen ->
+            inputs_ (oneOf chosen) chosen
 
         NoneOf chosen ->
-            choices
-                |> List.map (checkbox (noneOf chosen) idx chosen)
-                |> div [ class "checkboxes" ]
+            inputs_ (oneOf chosen) chosen
 
         _ ->
-            text ""
-    ]
+            [ select_ Set.empty ]
 
 
 boolFilterInputs : Bool -> Operator -> List (Html Operator)
@@ -173,28 +166,26 @@ isFalse _ _ =
 
 oneOf : Set String -> OperatorC
 oneOf chosen mstring _ =
-    let
-        choice =
-            Maybe.withDefault "" mstring
-    in
-    if Set.member choice chosen then
-        OneOf (Set.remove choice chosen)
-
-    else
-        OneOf (Set.insert choice chosen)
+    enum OneOf chosen mstring
 
 
 noneOf : Set String -> OperatorC
 noneOf chosen mstring _ =
-    let
-        choice =
-            Maybe.withDefault "" mstring
-    in
-    if Set.member choice chosen then
-        NoneOf (Set.remove choice chosen)
+    enum NoneOf chosen mstring
 
-    else
-        NoneOf (Set.insert choice chosen)
+
+enum : (Set String -> Operator) -> Set String -> Maybe String -> Operator
+enum makeEnum chosen mstring =
+    case mstring of
+        Just choice ->
+            if Set.member choice chosen then
+                makeEnum (Set.remove choice chosen)
+
+            else
+                makeEnum (Set.insert choice chosen)
+
+        Nothing ->
+            makeEnum chosen
 
 
 lesserThan : OperatorC
@@ -319,10 +310,10 @@ input attributes op =
         InDate a ->
             textInput [ type_ "date" ] InDate a
 
-        OneOf chosen ->
+        OneOf _ ->
             text ""
 
-        NoneOf chosen ->
+        NoneOf _ ->
             text ""
 
         IsTrue ->
