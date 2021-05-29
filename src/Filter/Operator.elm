@@ -114,7 +114,7 @@ enumInputs required choices idx op =
             inputs_ (oneOf chosen) chosen
 
         NoneOf chosen ->
-            inputs_ (oneOf chosen) chosen
+            inputs_ (noneOf chosen) chosen
 
         _ ->
             [ select_ Set.empty ]
