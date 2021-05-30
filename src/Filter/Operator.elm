@@ -7,6 +7,7 @@ module Filter.Operator exposing
     , intFilterInputs
     , textFilterInputs
     , timeFilterInputs
+    , toPGQuery
     )
 
 import Basics.Extra exposing (flip)
@@ -394,3 +395,53 @@ timeOptions =
     , ( "is greater than", greaterThan )
     , ( "is between", between )
     ]
+
+
+toPGQuery : String -> Operator -> Maybe PG.Param
+toPGQuery name op =
+    let
+        param q =
+            Just <| PG.param name q
+    in
+    case op of
+        Equals (Just a) ->
+            param <| PG.eq <| PG.string a
+
+        Contains (Just a) ->
+            param <| PG.ilike <| "*" ++ a ++ "*"
+
+        StartsWith (Just a) ->
+            param <| PG.ilike <| a ++ "*"
+
+        EndsWith (Just a) ->
+            param <| PG.ilike <| "*" ++ a
+
+        LesserThan (Just a) ->
+            param <| PG.lt <| PG.string a
+
+        GreaterThan (Just a) ->
+            param <| PG.gt <| PG.string a
+
+        Between (Just a) (Just b) ->
+            param <| PG.contains [ PG.string a, PG.string b ]
+
+        InDate (Just a) ->
+            param <| PG.eq <| PG.string a
+
+        OneOf chosen ->
+            param <| PG.inList PG.string <| Set.toList chosen
+
+        NoneOf chosen ->
+            param <| PG.not <| PG.inList PG.string <| Set.toList chosen
+
+        IsTrue ->
+            param PG.true
+
+        IsFalse ->
+            param PG.false
+
+        IsNull ->
+            param PG.null
+
+        _ ->
+            Nothing

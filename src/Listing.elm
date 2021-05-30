@@ -469,8 +469,13 @@ perPage =
 
 
 fetchResources : Client a -> Listing -> Cmd Msg
-fetchResources ({ jwt } as client) { resourcesName, page, definition, order } =
+fetchResources client { search, resourcesName, page, definition, order } =
     let
+        _ =
+            Debug.log "log" <|
+                PG.toQueryString <|
+                    Search.toPGQuery search
+
         pgOrder =
             Dict.toList definition
                 |> List.filterMap (sortBy resourcesName order)
@@ -482,8 +487,8 @@ fetchResources ({ jwt } as client) { resourcesName, page, definition, order } =
             ]
     in
     Client.fetchMany client definition resourcesName
-        |> PG.setParams (params ++ pgOrder)
-        |> PG.toTask jwt
+        |> PG.setParams (params ++ pgOrder ++ Search.toPGQuery search)
+        |> PG.toTask client.jwt
         |> Task.mapError PGError
         |> attemptWithError Failed Fetched
 

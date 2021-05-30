@@ -1,4 +1,4 @@
-module Search exposing (Msg, Search, init, update, view)
+module Search exposing (Msg, Search, init, toPGQuery, update, view)
 
 import Array exposing (Array)
 import Array.Extra as Array
@@ -28,6 +28,7 @@ import Html
         )
 import Html.Attributes exposing (class, selected, title, value)
 import Html.Events exposing (onClick, onInput)
+import Postgrest.Client as PG
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value exposing (Value(..))
 import String.Extra as String
@@ -50,6 +51,11 @@ init definition =
     { definition = definition
     , filters = Array.empty
     }
+
+
+toPGQuery : Search -> List PG.Param
+toPGQuery { filters } =
+    Array.toList filters |> List.filterMap Filter.toPGQuery
 
 
 update : Msg -> Search -> ( Search, Cmd Msg )

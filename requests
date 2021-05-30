@@ -10,7 +10,9 @@ Content-Type: application/json
 #
 
 
-GET http://localhost:3000/todos
+
+
+GET http://localhost:3000/songs?title=eq.Bossa%20Jazz&title=ilike.*Bossas*
 
 #
 

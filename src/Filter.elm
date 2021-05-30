@@ -1,6 +1,13 @@
-module Filter exposing (Filter(..), fromColumn, reassign, toString)
+module Filter exposing
+    ( Filter(..)
+    , fromColumn
+    , reassign
+    , toPGQuery
+    , toString
+    )
 
-import Filter.Operator exposing (Operator(..))
+import Filter.Operator as Operator exposing (Operator(..))
+import Postgrest.Client as PG
 import Postgrest.Schema.Definition exposing (Column(..))
 import Postgrest.Value exposing (Value(..))
 import Set
@@ -43,6 +50,34 @@ toString filter =
 
         Blank ->
             ""
+
+
+toPGQuery : Filter -> Maybe PG.Param
+toPGQuery filter =
+    case filter of
+        TextFilter name op ->
+            Operator.toPGQuery name op
+
+        IntFilter name op ->
+            Operator.toPGQuery name op
+
+        FloatFilter name op ->
+            Operator.toPGQuery name op
+
+        BoolFilter name op ->
+            Operator.toPGQuery name op
+
+        DateFilter name op ->
+            Operator.toPGQuery name op
+
+        TimeFilter name op ->
+            Operator.toPGQuery name op
+
+        EnumFilter name _ op ->
+            Operator.toPGQuery name op
+
+        Blank ->
+            Nothing
 
 
 reassign : String -> Filter -> Filter
