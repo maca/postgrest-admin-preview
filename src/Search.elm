@@ -26,7 +26,7 @@ import Html
         , select
         , text
         )
-import Html.Attributes exposing (class, selected, title, value)
+import Html.Attributes exposing (class, hidden, selected, title, value)
 import Html.Events exposing (onClick, onInput)
 import Postgrest.Client as PG
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
@@ -85,20 +85,24 @@ update msg search =
             )
 
 
-view : Search -> Html Msg
-view { definition, filters } =
-    aside
-        [ class "filters" ]
-        (h3 [] [ text "Filter" ]
-            :: (Array.indexedMap (viewFilter definition) filters |> Array.toList)
-            ++ [ button
-                    [ onClick AddFilter
-                    , class "button-clear"
-                    , class "add-filter"
-                    ]
-                    [ text "Add filter", i [ class "icono-plus" ] [] ]
-               ]
-        )
+view : Bool -> Search -> Html Msg
+view open { definition, filters } =
+    div [ class "search", hidden <| not open ]
+        [ div [ class "actions" ]
+            [ button
+                [ onClick AddFilter
+                , class "button-clear"
+                , class "add-filter"
+                ]
+                [ text "Add filter", i [ class "icono-plus" ] [] ]
+            ]
+        , div
+            [ class "filters" ]
+            (Array.indexedMap (viewFilter definition) filters
+                |> Array.toList
+                |> List.reverse
+            )
+        ]
 
 
 viewFilter : Definition -> Int -> Filter -> Html Msg

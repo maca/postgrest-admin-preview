@@ -18,6 +18,8 @@ import Html
     exposing
         ( Html
         , a
+        , aside
+        , button
         , div
         , h1
         , header
@@ -31,7 +33,7 @@ import Html
         , thead
         , tr
         )
-import Html.Attributes exposing (attribute, class, href, id, target)
+import Html.Attributes exposing (attribute, class, classList, hidden, href, id, target)
 import Html.Events as Events exposing (onClick)
 import Inflect as String
 import Json.Decode as Decode
@@ -64,11 +66,13 @@ type SortOrder
 type Msg
     = ResourceLinkClicked String String
     | Fetched (List Resource)
+    | ApplyFilters
     | Sort SortOrder
     | Reload
     | Scrolled
     | ScrollInfo Viewport
     | SearchChanged Search.Msg
+    | ToggleSearchOpen
     | Failed Error
 
 
@@ -80,6 +84,7 @@ type alias Listing =
     , page : Int
     , order : SortOrder
     , search : Search
+    , searchOpen : Bool
     }
 
 
@@ -99,6 +104,7 @@ init resourcesName definition =
     , pages = []
     , order = Unordered
     , search = Search.init definition
+    , searchOpen = True
     }
 
 
@@ -145,6 +151,12 @@ update client msg listing =
             , Cmd.none
             )
 
+        ApplyFilters ->
+            ( listing
+            , Dom.setViewportOf listing.resourcesName 0 0
+                |> Task.attempt (always Reload)
+            )
+
         Sort order ->
             ( { listing | order = order }
             , Dom.setViewportOf listing.resourcesName 0 0
@@ -152,11 +164,30 @@ update client msg listing =
             )
 
         Reload ->
-            ( listing
-            , Url.absolute [ listing.resourcesName ]
-                (orderToQueryParams listing.order)
-                |> Nav.pushUrl client.key
-            )
+            let
+                queryParams =
+                    orderToQueryParams listing.order
+
+                baseUrl =
+                    Url.absolute [ listing.resourcesName ]
+                        (orderToQueryParams listing.order)
+
+                filterQuery =
+                    Search.toPGQuery listing.search |> PG.toQueryString
+
+                joinChar =
+                    if List.isEmpty queryParams then
+                        "?"
+
+                    else
+                        "&"
+
+                url =
+                    [ baseUrl, filterQuery ]
+                        |> List.filterMap String.nonBlank
+                        |> String.join joinChar
+            in
+            ( listing, Nav.pushUrl client.key url )
 
         Scrolled ->
             ( listing
@@ -187,6 +218,9 @@ update client msg listing =
             Search.update searchMsg listing.search
                 |> Tuple.mapFirst (\search -> { listing | search = search })
                 |> Tuple.mapSecond (Cmd.map SearchChanged)
+
+        ToggleSearchOpen ->
+            ( { listing | searchOpen = not listing.searchOpen }, Cmd.none )
 
         Failed _ ->
             ( listing, Cmd.none )
@@ -230,9 +264,9 @@ view listing =
     section
         [ class "resources-listing" ]
         [ listHeader listing.resourcesName
-        , Html.map SearchChanged <| Search.view listing.search
         , div
             [ id listing.resourcesName
+            , class "resources-listing-results"
             , case listing.pages of
                 Blank :: _ ->
                     class ""
@@ -241,6 +275,26 @@ view listing =
                     Events.on "scroll" (Decode.succeed Scrolled)
             ]
             [ Html.table [] body
+            ]
+        , aside [ class "listing-controls" ]
+            [ div [ class "controls" ]
+                [ button
+                    [ class "toggle-button"
+                    , class "button-clear"
+                    , classList [ ( "open", listing.searchOpen ) ]
+                    , onClick ToggleSearchOpen
+                    ]
+                    [ i [ class "icono-play" ] []
+                    , if listing.searchOpen then
+                        text "Hide"
+
+                      else
+                        text "Show"
+                    , text " Filters"
+                    ]
+                , button [ onClick ApplyFilters ] [ text "Apply Filters" ]
+                ]
+            , Html.map SearchChanged <| Search.view listing.searchOpen listing.search
             ]
         ]
 
