@@ -8,7 +8,7 @@ import Form exposing (Form(..))
 import Html exposing (Html, a, aside, div, li, text, ul)
 import Html.Attributes exposing (class, href)
 import Inflect as String
-import Listing exposing (Listing, SortOrder(..))
+import Listing exposing (Listing)
 import Message
 import Postgrest.Client as PG
 import Postgrest.Resource.Client exposing (Client)
@@ -18,7 +18,7 @@ import Postgrest.Value exposing (Value(..))
 import String.Extra as String
 import Url exposing (Url)
 import Url.Builder as Url
-import Url.Parser as Parser exposing ((</>), (<?>), Parser)
+import Url.Parser as Parser exposing ((</>), Parser)
 import Url.Parser.Query as Query
 import Utils.Task exposing (Error(..), attemptWithError, fail)
 
@@ -236,41 +236,22 @@ subscriptions _ =
 
 getRoute : Url -> Model -> Route
 getRoute url model =
-    Parser.parse (routeParser model) url |> Maybe.withDefault NotFound
+    Parser.parse (routeParser url model) url |> Maybe.withDefault NotFound
 
 
-routeParser : Model -> Parser (Route -> a) a
-routeParser model =
+routeParser : Url -> Model -> Parser (Route -> a) a
+routeParser url model =
     Parser.oneOf
         [ Parser.map Root Parser.top
-        , listingRouteParser
+        , Parser.map (makeListingRoute url) Parser.string
         , formRouteParser model
         ]
 
 
-listingRouteParser : Parser (Route -> a) a
-listingRouteParser =
-    Parser.map makeListingRoute
-        (Parser.string <?> (Query.map parseOrder <| Query.string "order"))
-
-
-parseOrder : Maybe String -> (Listing -> Listing)
-parseOrder order =
-    case order |> Maybe.map (String.split ".") of
-        Just [ table, "asc" ] ->
-            Listing.ascendingBy table
-
-        Just [ table, "desc" ] ->
-            Listing.descendingBy table
-
-        _ ->
-            identity
-
-
-makeListingRoute : String -> (Listing -> Listing) -> Route
-makeListingRoute resourcesName orderFunc =
+makeListingRoute : Url -> String -> Route
+makeListingRoute url resourcesName =
     LoadingDefinition resourcesName
-        (Listing.init resourcesName >> orderFunc >> Listing)
+        (Listing.init resourcesName url.query >> Listing)
 
 
 formRouteParser : Model -> Parser (Route -> a) a

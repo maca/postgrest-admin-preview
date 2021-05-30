@@ -1,7 +1,6 @@
 module Listing exposing
     ( Listing
     , Msg
-    , SortOrder(..)
     , ascendingBy
     , descendingBy
     , fetch
@@ -56,6 +55,7 @@ import Search exposing (Search)
 import String.Extra as String
 import Task
 import Time.Extra as Time
+import Url
 import Url.Builder as Url exposing (QueryParameter)
 import Utils.Task exposing (Error(..), attemptWithError)
 
@@ -103,14 +103,25 @@ type alias EventConfig =
     }
 
 
-init : String -> Definition -> Listing
-init resourcesName definition =
+init : String -> Maybe String -> Definition -> Listing
+init resourcesName rawQuery definition =
+    let
+        query =
+            Maybe.map parseQuery rawQuery
+
+        order =
+            query
+                |> Maybe.andThen
+                    (List.filter (Tuple.first >> (==) "order") >> List.head)
+                |> Maybe.map (Tuple.second >> parseOrder)
+                |> Maybe.withDefault Unordered
+    in
     { resourcesName = resourcesName
     , page = 0
     , scrollPosition = 0
     , definition = definition
     , pages = []
-    , order = Unordered
+    , order = order
     , search = Search.init definition
     , searchOpen = True
     }
@@ -589,3 +600,31 @@ sortBy resourcesName sort ( name, Column _ value ) =
 recordIdentifiers : List String
 recordIdentifiers =
     [ "title", "name", "full name", "email", "first name", "last name" ]
+
+
+parseQuery : String -> List ( String, String )
+parseQuery queryString =
+    String.split "&" queryString |> List.filterMap parseQueryHelp
+
+
+parseQueryHelp : String -> Maybe ( String, String )
+parseQueryHelp fragment =
+    case String.split "=" fragment of
+        [ key, val ] ->
+            Maybe.map2 Tuple.pair (Url.percentDecode key) (Url.percentDecode val)
+
+        _ ->
+            Nothing
+
+
+parseOrder : String -> SortOrder
+parseOrder fragment =
+    case String.split "." fragment of
+        [ table, "asc" ] ->
+            Asc table
+
+        [ table, "desc" ] ->
+            Desc table
+
+        _ ->
+            Unordered
