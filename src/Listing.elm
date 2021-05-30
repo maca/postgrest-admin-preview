@@ -33,7 +33,15 @@ import Html
         , thead
         , tr
         )
-import Html.Attributes exposing (attribute, class, classList, hidden, href, id, target)
+import Html.Attributes
+    exposing
+        ( attribute
+        , class
+        , classList
+        , href
+        , id
+        , target
+        )
 import Html.Events as Events exposing (onClick)
 import Inflect as String
 import Json.Decode as Decode
@@ -525,11 +533,6 @@ perPage =
 fetchResources : Client a -> Listing -> Cmd Msg
 fetchResources client { search, resourcesName, page, definition, order } =
     let
-        _ =
-            Debug.log "log" <|
-                PG.toQueryString <|
-                    Search.toPGQuery search
-
         pgOrder =
             Dict.toList definition
                 |> List.filterMap (sortBy resourcesName order)

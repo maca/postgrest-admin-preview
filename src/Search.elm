@@ -14,18 +14,7 @@ import Filter.Operator
         , textFilterInputs
         , timeFilterInputs
         )
-import Html
-    exposing
-        ( Html
-        , aside
-        , button
-        , div
-        , h3
-        , i
-        , option
-        , select
-        , text
-        )
+import Html exposing (Html, button, div, i, option, select, text)
 import Html.Attributes exposing (class, hidden, selected, title, value)
 import Html.Events exposing (onClick, onInput)
 import Postgrest.Client as PG
