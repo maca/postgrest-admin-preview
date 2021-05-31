@@ -5,6 +5,7 @@ module Filter.Operator exposing
     , enumInputs
     , floatFilterInputs
     , intFilterInputs
+    , parse
     , textFilterInputs
     , timeFilterInputs
     , toPGQuery
@@ -25,25 +26,37 @@ import Html.Attributes
         , value
         )
 import Html.Events exposing (onInput)
+import Parser
+    exposing
+        ( (|.)
+        , (|=)
+        , Parser
+        , chompUntilEndOr
+        , getChompedString
+        , succeed
+        , symbol
+        , token
+        )
 import Postgrest.Client as PG
 import Set exposing (Set)
 import String.Extra as String
+import Url exposing (percentDecode)
 
 
 type Operator
-    = Equals (Maybe String)
-    | Contains (Maybe String)
-    | StartsWith (Maybe String)
-    | EndsWith (Maybe String)
+    = IsTrue
+    | IsFalse
+    | IsNull
+    | Equals (Maybe String)
     | LesserThan (Maybe String)
     | GreaterThan (Maybe String)
     | Between (Maybe String) (Maybe String)
+    | Contains (Maybe String)
+    | StartsWith (Maybe String)
+    | EndsWith (Maybe String)
     | InDate (Maybe String)
     | OneOf (Set String)
     | NoneOf (Set String)
-    | IsTrue
-    | IsFalse
-    | IsNull
 
 
 type alias OperatorC =
@@ -404,6 +417,15 @@ toPGQuery name op =
             Just <| PG.param name q
     in
     case op of
+        IsTrue ->
+            param PG.true
+
+        IsFalse ->
+            param PG.false
+
+        IsNull ->
+            param PG.null
+
         Equals (Just a) ->
             param <| PG.eq <| PG.string a
 
@@ -434,14 +456,33 @@ toPGQuery name op =
         NoneOf chosen ->
             param <| PG.not <| PG.inList PG.string <| Set.toList chosen
 
-        IsTrue ->
-            param PG.true
-
-        IsFalse ->
-            param PG.false
-
-        IsNull ->
-            param PG.null
-
         _ ->
             Nothing
+
+
+parse : String -> Operator
+parse fragment =
+    fragment
+        |> Parser.run
+            (succeed identity
+                |= Parser.oneOf
+                    [ succeed identity
+                        |. token "is"
+                        |. symbol "."
+                        |= Parser.oneOf
+                            [ succeed IsTrue |. token "true"
+                            , succeed IsFalse |. token "false"
+                            , succeed IsNull |. token "null"
+                            ]
+                    , succeed Equals |. token "eq" |. symbol "." |= string
+                    , succeed LesserThan |. token "lt" |. symbol "." |= string
+                    , succeed GreaterThan |. token "gt" |. symbol "." |= string
+                    ]
+            )
+        |> Result.withDefault IsNull
+
+
+string : Parser (Maybe String)
+string =
+    succeed percentDecode
+        |= (getChompedString <| succeed () |. chompUntilEndOr "\n")

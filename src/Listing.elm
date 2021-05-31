@@ -107,12 +107,11 @@ init : String -> Maybe String -> Definition -> Listing
 init resourcesName rawQuery definition =
     let
         query =
-            Maybe.map parseQuery rawQuery
+            Maybe.map parseQuery rawQuery |> Maybe.withDefault []
 
         order =
             query
-                |> Maybe.andThen
-                    (List.filter (Tuple.first >> (==) "order") >> List.head)
+                |> (List.filter (Tuple.first >> (==) "order") >> List.head)
                 |> Maybe.map (Tuple.second >> parseOrder)
                 |> Maybe.withDefault Unordered
     in
@@ -122,7 +121,7 @@ init resourcesName rawQuery definition =
     , definition = definition
     , pages = []
     , order = order
-    , search = Search.init definition
+    , search = Search.init definition query
     , searchOpen = True
     }
 

@@ -1,14 +1,16 @@
 module Filter exposing
     ( Filter(..)
     , fromColumn
+    , parse
     , reassign
     , toPGQuery
     , toString
     )
 
 import Filter.Operator as Operator exposing (Operator(..))
+import Parser
 import Postgrest.Client as PG
-import Postgrest.Schema.Definition exposing (Column(..))
+import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value exposing (Value(..))
 import Set
 
@@ -143,3 +145,8 @@ fromColumn name (Column _ value) =
 
         BadValue _ ->
             Blank
+
+
+parse : Definition -> ( String, String ) -> Filter
+parse definition ( name, value ) =
+    Blank
