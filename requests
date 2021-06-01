@@ -12,7 +12,7 @@ Content-Type: application/json
 
 
 
-GET http://localhost:3000/songs?title=eq.Bossa%20Jazz&title=ilike.*Bossas*
+GET http://localhost:3000/songs?order=rating.asc&rating=cs.{4,6}
 
 #
 

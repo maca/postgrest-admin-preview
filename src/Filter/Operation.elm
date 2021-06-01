@@ -1,11 +1,10 @@
-module Filter.Operator exposing
-    ( Operator(..)
+module Filter.Operation exposing
+    ( Operation(..)
     , boolFilterInputs
     , dateFilterInputs
     , enumInputs
     , floatFilterInputs
     , intFilterInputs
-    , parse
     , textFilterInputs
     , timeFilterInputs
     , toPGQuery
@@ -26,24 +25,12 @@ import Html.Attributes
         , value
         )
 import Html.Events exposing (onInput)
-import Parser
-    exposing
-        ( (|.)
-        , (|=)
-        , Parser
-        , chompUntilEndOr
-        , getChompedString
-        , succeed
-        , symbol
-        , token
-        )
 import Postgrest.Client as PG
 import Set exposing (Set)
 import String.Extra as String
-import Url exposing (percentDecode)
 
 
-type Operator
+type Operation
     = IsTrue
     | IsFalse
     | IsNull
@@ -59,59 +46,59 @@ type Operator
     | NoneOf (Set String)
 
 
-type alias OperatorC =
-    Maybe String -> Maybe String -> Operator
+type alias OperationC =
+    Maybe String -> Maybe String -> Operation
 
 
 type alias Options =
-    List ( String, OperatorC )
+    List ( String, OperationC )
 
 
-textFilterInputs : Bool -> Operator -> List (Html Operator)
+textFilterInputs : Bool -> Operation -> List (Html Operation)
 textFilterInputs required op =
     let
         options =
-            [ ( "equals", equals )
-            , ( "contains", contains )
-            , ( "starts with", startsWith )
-            , ( "ends with", endsWith )
+            [ ( "equals", dropLast Equals )
+            , ( "contains", dropLast Contains )
+            , ( "starts with", dropLast StartsWith )
+            , ( "ends with", dropLast EndsWith )
             ]
     in
     inputs [ type_ "text" ] (options ++ nullOption required) op
 
 
-intFilterInputs : Bool -> Operator -> List (Html Operator)
+intFilterInputs : Bool -> Operation -> List (Html Operation)
 intFilterInputs required op =
     inputs [ type_ "number", step "1" ]
         (numberOptions ++ nullOption required)
         op
 
 
-floatFilterInputs : Bool -> Operator -> List (Html Operator)
+floatFilterInputs : Bool -> Operation -> List (Html Operation)
 floatFilterInputs required op =
     inputs [ type_ "number", step "0.01" ]
         (numberOptions ++ nullOption required)
         op
 
 
-dateFilterInputs : Bool -> Operator -> List (Html Operator)
+dateFilterInputs : Bool -> Operation -> List (Html Operation)
 dateFilterInputs required op =
     inputs [ type_ "date" ] (timeOptions ++ nullOption required) op
 
 
-timeFilterInputs : Bool -> Operator -> List (Html Operator)
+timeFilterInputs : Bool -> Operation -> List (Html Operation)
 timeFilterInputs required op =
     inputs [ type_ "datetime-local" ] (timeOptions ++ nullOption required) op
 
 
-enumInputs : Bool -> List String -> Int -> Operator -> List (Html Operator)
+enumInputs : Bool -> List String -> Int -> Operation -> List (Html Operation)
 enumInputs required choices idx op =
     let
         select_ chosen =
             let
                 options =
-                    [ ( "is one of", oneOf chosen )
-                    , ( "is none of", noneOf chosen )
+                    [ ( "is one of", dropLast <| enum OneOf chosen )
+                    , ( "is none of", dropLast <| enum NoneOf chosen )
                     ]
             in
             select (options ++ nullOption required) op
@@ -125,70 +112,30 @@ enumInputs required choices idx op =
     in
     case op of
         OneOf chosen ->
-            inputs_ (oneOf chosen) chosen
+            inputs_ (dropLast <| enum OneOf chosen) chosen
 
         NoneOf chosen ->
-            inputs_ (noneOf chosen) chosen
+            inputs_ (dropLast <| enum NoneOf chosen) chosen
 
         _ ->
             [ select_ Set.empty ]
 
 
-boolFilterInputs : Bool -> Operator -> List (Html Operator)
+boolFilterInputs : Bool -> Operation -> List (Html Operation)
 boolFilterInputs required op =
     inputs [] (boolOptions ++ nullOption required) op
 
 
 inputs :
-    List (Attribute Operator)
+    List (Attribute Operation)
     -> Options
-    -> Operator
-    -> List (Html Operator)
+    -> Operation
+    -> List (Html Operation)
 inputs attributes options op =
     [ select options op, input attributes op ]
 
 
-equals : OperatorC
-equals a _ =
-    Equals a
-
-
-contains : OperatorC
-contains a _ =
-    Contains a
-
-
-startsWith : OperatorC
-startsWith a _ =
-    StartsWith a
-
-
-endsWith : OperatorC
-endsWith a _ =
-    EndsWith a
-
-
-isTrue : OperatorC
-isTrue _ _ =
-    IsTrue
-
-
-isFalse : OperatorC
-isFalse _ _ =
-    IsFalse
-
-
-oneOf : Set String -> OperatorC
-oneOf chosen mstring _ =
-    enum OneOf chosen mstring
-
-
-noneOf : Set String -> OperatorC
-noneOf chosen mstring _ =
-    enum NoneOf chosen mstring
-
-
-enum : (Set String -> Operator) -> Set String -> Maybe String -> Operator
+enum : (Set String -> Operation) -> Set String -> Maybe String -> Operation
 enum makeEnum chosen mstring =
     case mstring of
         Just choice ->
@@ -202,32 +149,7 @@ enum makeEnum chosen mstring =
             makeEnum chosen
 
 
-lesserThan : OperatorC
-lesserThan a _ =
-    LesserThan a
-
-
-greaterThan : OperatorC
-greaterThan a _ =
-    GreaterThan a
-
-
-between : OperatorC
-between a b =
-    Between a b
-
-
-inDate : OperatorC
-inDate a _ =
-    InDate a
-
-
-isNull : OperatorC
-isNull _ _ =
-    IsNull
-
-
-select : Options -> Operator -> Html Operator
+select : Options -> Operation -> Html Operation
 select options op =
     let
         opSelect makeOp a b =
@@ -243,46 +165,46 @@ select options op =
     in
     case op of
         Equals a ->
-            opSelect equals a Nothing
+            opSelect (dropLast Equals) a Nothing
 
         Contains a ->
-            opSelect contains a Nothing
+            opSelect (dropLast Contains) a Nothing
 
         StartsWith a ->
-            opSelect startsWith a Nothing
+            opSelect (dropLast StartsWith) a Nothing
 
         EndsWith a ->
-            opSelect endsWith a Nothing
+            opSelect (dropLast EndsWith) a Nothing
 
         LesserThan a ->
-            opSelect lesserThan a Nothing
+            opSelect (dropLast LesserThan) a Nothing
 
         GreaterThan a ->
-            opSelect greaterThan a Nothing
+            opSelect (dropLast GreaterThan) a Nothing
 
         Between a b ->
-            opSelect between a b
+            opSelect Between a b
 
         InDate a ->
-            opSelect inDate a Nothing
+            opSelect (dropLast InDate) a Nothing
 
         OneOf chosen ->
-            opSelect (oneOf chosen) Nothing Nothing
+            opSelect (dropLast <| enum OneOf chosen) Nothing Nothing
 
         NoneOf chosen ->
-            opSelect (noneOf chosen) Nothing Nothing
+            opSelect (dropLast <| enum NoneOf chosen) Nothing Nothing
 
         IsTrue ->
-            opSelect isTrue Nothing Nothing
+            opSelect (dropBoth IsTrue) Nothing Nothing
 
         IsFalse ->
-            opSelect isFalse Nothing Nothing
+            opSelect (dropBoth IsFalse) Nothing Nothing
 
         IsNull ->
-            opSelect isNull Nothing Nothing
+            opSelect (dropBoth IsNull) Nothing Nothing
 
 
-optionSelected : Options -> Maybe String -> Maybe String -> String -> Operator
+optionSelected : Options -> Maybe String -> Maybe String -> String -> Operation
 optionSelected options a b selection =
     let
         makeOp =
@@ -293,7 +215,7 @@ optionSelected options a b selection =
     makeOp a b
 
 
-input : List (Attribute Operator) -> Operator -> Html Operator
+input : List (Attribute Operation) -> Operation -> Html Operation
 input attributes op =
     case op of
         Equals a ->
@@ -341,10 +263,10 @@ input attributes op =
 
 
 textInput :
-    List (Attribute Operator)
-    -> (Maybe String -> Operator)
+    List (Attribute Operation)
+    -> (Maybe String -> Operation)
     -> Maybe String
-    -> Html Operator
+    -> Html Operation
 textInput attributes makeOp a =
     Html.input
         ([ onInput (Just >> makeOp), value <| Maybe.withDefault "" a ]
@@ -353,7 +275,7 @@ textInput attributes makeOp a =
         []
 
 
-checkbox : OperatorC -> Int -> Set String -> String -> Html Operator
+checkbox : OperationC -> Int -> Set String -> String -> Html Operation
 checkbox makeOp idx chosen choice =
     let
         inputId =
@@ -376,41 +298,41 @@ checkbox makeOp idx chosen choice =
         ]
 
 
-nullOption : Bool -> List ( String, OperatorC )
+nullOption : Bool -> List ( String, OperationC )
 nullOption required =
     if required then
         []
 
     else
-        [ ( "is not set", isNull ) ]
+        [ ( "is not set", dropBoth IsNull ) ]
 
 
-numberOptions : List ( String, OperatorC )
+numberOptions : List ( String, OperationC )
 numberOptions =
-    [ ( "equals", equals )
-    , ( "is lesser than", lesserThan )
-    , ( "is greater than", greaterThan )
-    , ( "is between", between )
+    [ ( "equals", dropLast Equals )
+    , ( "is lesser than", dropLast LesserThan )
+    , ( "is greater than", dropLast GreaterThan )
+    , ( "is between", Between )
     ]
 
 
-boolOptions : List ( String, OperatorC )
+boolOptions : List ( String, OperationC )
 boolOptions =
-    [ ( "is true", isTrue )
-    , ( "is false", isFalse )
+    [ ( "is true", dropBoth IsTrue )
+    , ( "is false", dropBoth IsFalse )
     ]
 
 
-timeOptions : List ( String, OperatorC )
+timeOptions : List ( String, OperationC )
 timeOptions =
-    [ ( "is on date", inDate )
-    , ( "is lesser than", lesserThan )
-    , ( "is greater than", greaterThan )
-    , ( "is between", between )
+    [ ( "is on date", dropLast InDate )
+    , ( "is lesser than", dropLast LesserThan )
+    , ( "is greater than", dropLast GreaterThan )
+    , ( "is between", Between )
     ]
 
 
-toPGQuery : String -> Operator -> Maybe PG.Param
+toPGQuery : String -> Operation -> Maybe PG.Param
 toPGQuery name op =
     let
         param q =
@@ -429,23 +351,36 @@ toPGQuery name op =
         Equals (Just a) ->
             param <| PG.eq <| PG.string a
 
-        Contains (Just a) ->
-            param <| PG.ilike <| "*" ++ a ++ "*"
-
-        StartsWith (Just a) ->
-            param <| PG.ilike <| a ++ "*"
-
-        EndsWith (Just a) ->
-            param <| PG.ilike <| "*" ++ a
-
         LesserThan (Just a) ->
             param <| PG.lt <| PG.string a
 
         GreaterThan (Just a) ->
             param <| PG.gt <| PG.string a
 
+        Contains (Just a) ->
+            param <| PG.ilike <| "*" ++ a ++ "*"
+
+        StartsWith (Just a) ->
+            param <| PG.ilike <| "*" ++ a
+
+        EndsWith (Just a) ->
+            param <| PG.ilike <| a ++ "*"
+
         Between (Just a) (Just b) ->
-            param <| PG.contains [ PG.string a, PG.string b ]
+            let
+                ( a_, b_ ) =
+                    case compare a b of
+                        LT ->
+                            ( a, b )
+
+                        _ ->
+                            ( b, a )
+            in
+            Just <|
+                PG.and
+                    [ PG.param name <| PG.gte <| PG.string a_
+                    , PG.param name <| PG.lte <| PG.string b_
+                    ]
 
         InDate (Just a) ->
             param <| PG.eq <| PG.string a
@@ -460,29 +395,11 @@ toPGQuery name op =
             Nothing
 
 
-parse : String -> Operator
-parse fragment =
-    fragment
-        |> Parser.run
-            (succeed identity
-                |= Parser.oneOf
-                    [ succeed identity
-                        |. token "is"
-                        |. symbol "."
-                        |= Parser.oneOf
-                            [ succeed IsTrue |. token "true"
-                            , succeed IsFalse |. token "false"
-                            , succeed IsNull |. token "null"
-                            ]
-                    , succeed Equals |. token "eq" |. symbol "." |= string
-                    , succeed LesserThan |. token "lt" |. symbol "." |= string
-                    , succeed GreaterThan |. token "gt" |. symbol "." |= string
-                    ]
-            )
-        |> Result.withDefault IsNull
+dropLast : (a -> c) -> a -> b -> c
+dropLast fun a _ =
+    fun a
 
 
-string : Parser (Maybe String)
-string =
-    succeed percentDecode
-        |= (getChompedString <| succeed () |. chompUntilEndOr "\n")
+dropBoth : c -> a -> b -> c
+dropBoth c _ _ =
+    c

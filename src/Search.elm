@@ -4,7 +4,7 @@ import Array exposing (Array)
 import Array.Extra as Array
 import Dict
 import Filter as Filter exposing (Filter(..))
-import Filter.Operator
+import Filter.Operation
     exposing
         ( boolFilterInputs
         , dateFilterInputs
