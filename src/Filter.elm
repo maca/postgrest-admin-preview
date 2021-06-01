@@ -194,15 +194,19 @@ parse definition ( name, fragment ) =
     in
     fragment
         |> Parser.run
-            (succeed makeFilter
+            (succeed
+                identity
                 |= Parser.oneOf
-                    [ contains
-                    , startsWith
-                    , endsWith
-                    , is
-                    , equals
-                    , lesserThan
-                    , greaterThan
+                    [ succeed makeFilter
+                        |= Parser.oneOf
+                            [ contains
+                            , endsWith
+                            , startsWith
+                            , is
+                            , equals
+                            , lesserThan
+                            , greaterThan
+                            ]
                     ]
             )
         |> Result.mapError (Debug.log "error")
@@ -218,18 +222,18 @@ contains =
         |> backtrackable
 
 
-startsWith : Parser Operation
-startsWith =
-    succeed StartsWith
+endsWith : Parser Operation
+endsWith =
+    succeed EndsWith
         |. token "ilike"
         |. symbol ".*"
         |= string
         |> backtrackable
 
 
-endsWith : Parser Operation
-endsWith =
-    succeed EndsWith |. token "ilike" |. symbol "." |= getUntil "*"
+startsWith : Parser Operation
+startsWith =
+    succeed StartsWith |. token "ilike" |. symbol "." |= getUntil "*"
 
 
 is : Parser Operation

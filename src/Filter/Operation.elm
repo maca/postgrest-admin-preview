@@ -361,10 +361,10 @@ toPGQuery name op =
             param <| PG.ilike <| "*" ++ a ++ "*"
 
         StartsWith (Just a) ->
-            param <| PG.ilike <| "*" ++ a
+            param <| PG.ilike <| a ++ "*"
 
         EndsWith (Just a) ->
-            param <| PG.ilike <| a ++ "*"
+            param <| PG.ilike <| "*" ++ a
 
         Between (Just a) (Just b) ->
             let
