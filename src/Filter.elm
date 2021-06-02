@@ -21,6 +21,7 @@ import Parser
         , succeed
         , symbol
         , token
+        , variable
         )
 import Postgrest.Client as PG
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
@@ -184,33 +185,44 @@ init name (Column _ value) =
             always Blank
 
 
-parse : Definition -> ( String, String ) -> Filter
-parse definition ( name, fragment ) =
+parse : Definition -> String -> Maybe Filter
+parse definition fragment =
     let
-        makeFilter =
+        makeFilter name =
             Dict.get name definition
                 |> Maybe.map (init name)
                 |> Maybe.withDefault (always Blank)
     in
     fragment
         |> Parser.run
-            (succeed
-                identity
+            (succeed identity
                 |= Parser.oneOf
-                    [ succeed makeFilter
-                        |= Parser.oneOf
-                            [ contains
-                            , endsWith
-                            , startsWith
-                            , is
-                            , equals
-                            , lesserThan
-                            , greaterThan
-                            ]
-                    ]
+                    [ succeed makeFilter |= colName |. symbol "=" |= operation ]
             )
         |> Result.mapError (Debug.log "error")
-        |> Result.withDefault Blank
+        |> Result.toMaybe
+
+
+colName : Parser String
+colName =
+    variable
+        { start = Char.isAlphaNum
+        , inner = \c -> Char.isAlphaNum c || c == '_'
+        , reserved = Set.fromList [ "and", "or", "order" ]
+        }
+
+
+operation : Parser Operation
+operation =
+    Parser.oneOf
+        [ contains
+        , endsWith
+        , startsWith
+        , is
+        , equals
+        , lesserThan
+        , greaterThan
+        ]
 
 
 contains : Parser Operation

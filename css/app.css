@@ -357,3 +357,6 @@ i.icono-cross {
 }
 /* Message      */
 /* ------------ */
+a:hover {
+    text-decoration: underline;
+}

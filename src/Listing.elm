@@ -121,7 +121,7 @@ init resourcesName rawQuery definition =
     , definition = definition
     , pages = []
     , order = order
-    , search = Search.init definition query
+    , search = Search.init definition (rawQuery |> Maybe.withDefault "")
     , searchOpen = True
     }
 

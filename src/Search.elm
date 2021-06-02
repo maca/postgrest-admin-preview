@@ -35,10 +35,13 @@ type alias Search =
     }
 
 
-init : Definition -> List ( String, String ) -> Search
+init : Definition -> String -> Search
 init definition query =
     { definition = definition
-    , filters = Array.fromList <| List.map (Filter.parse definition) query
+    , filters =
+        String.split "&" query
+            |> List.filterMap (Filter.parse definition)
+            |> Array.fromList
     }
 
 
