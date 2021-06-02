@@ -38,7 +38,6 @@ type Filter
     | DateFilter String Operation
     | TimeFilter String Operation
     | EnumFilter String (List String) Operation
-    | Blank
 
 
 toString : Filter -> String
@@ -65,9 +64,6 @@ toString filter =
         EnumFilter _ _ _ ->
             "enum"
 
-        Blank ->
-            ""
-
 
 toPGQuery : Filter -> Maybe PG.Param
 toPGQuery filter =
@@ -92,9 +88,6 @@ toPGQuery filter =
 
         EnumFilter name _ op ->
             Operation.toPGQuery name op
-
-        Blank ->
-            Nothing
 
 
 reassign : String -> Filter -> Filter
@@ -121,11 +114,8 @@ reassign name filter =
         EnumFilter _ choices op ->
             EnumFilter name choices op
 
-        Blank ->
-            Blank
 
-
-fromColumn : String -> Column -> Filter
+fromColumn : String -> Column -> Maybe Filter
 fromColumn name ((Column _ value) as column) =
     let
         defaultOp =
@@ -148,50 +138,53 @@ fromColumn name ((Column _ value) as column) =
     init name column defaultOp
 
 
-init : String -> Column -> Operation -> Filter
+init : String -> Column -> Operation -> Maybe Filter
 init name (Column _ value) =
     case value of
         PString _ ->
-            TextFilter name
+            Just << TextFilter name
 
         PText _ ->
-            TextFilter name
+            Just << TextFilter name
 
         PInt _ ->
-            IntFilter name
+            Just << IntFilter name
 
         PFloat _ ->
-            FloatFilter name
+            Just << FloatFilter name
 
         PBool _ ->
-            BoolFilter name
+            Just << BoolFilter name
 
         PEnum _ choices ->
-            EnumFilter name choices
+            Just << EnumFilter name choices
 
         PTime _ ->
-            TimeFilter name
+            Just << TimeFilter name
 
         PDate _ ->
-            TimeFilter name
+            Just << TimeFilter name
 
         PPrimaryKey mprimaryKey ->
-            always Blank
+            always Nothing
 
         PForeignKey mprimaryKey { label } ->
-            always Blank
+            always Nothing
 
         BadValue _ ->
-            always Blank
+            always Nothing
 
 
 parse : Definition -> String -> Maybe Filter
 parse definition fragment =
     let
         makeFilter name =
-            Dict.get name definition
-                |> Maybe.map (init name)
-                |> Maybe.withDefault (always Blank)
+            case Dict.get name definition of
+                Just column ->
+                    init name column
+
+                Nothing ->
+                    always Nothing
     in
     fragment
         |> Parser.run
@@ -201,6 +194,7 @@ parse definition fragment =
             )
         |> Result.mapError (Debug.log "error")
         |> Result.toMaybe
+        |> Maybe.andThen identity
 
 
 colName : Parser String

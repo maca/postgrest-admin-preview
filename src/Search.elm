@@ -60,14 +60,21 @@ update msg search =
 
         AddFilter ->
             let
-                filter =
+                mfilter =
                     search.definition
                         |> Dict.toList
                         |> List.head
-                        |> Maybe.map (\( n, c ) -> Filter.fromColumn n c)
-                        |> Maybe.withDefault Blank
+                        |> Maybe.andThen (\( n, c ) -> Filter.fromColumn n c)
             in
-            ( { search | filters = Array.push filter search.filters }
+            ( { search
+                | filters =
+                    case mfilter of
+                        Just filter ->
+                            Array.push filter search.filters
+
+                        Nothing ->
+                            search.filters
+              }
             , Cmd.none
             )
 
@@ -158,42 +165,35 @@ viewFilter definition idx filter =
                     (Html.map (EnumFilter name choices >> UpdateFilter idx))
                 |> inputs name
 
-        Blank ->
-            text ""
-
 
 fieldSelect : Definition -> Int -> String -> Filter -> Html Msg
 fieldSelect definition idx name filter =
     let
         makeFilter selection =
-            let
-                filter_ =
-                    defaultFilter selection definition
-            in
-            if Filter.toString filter_ == Filter.toString filter then
-                Filter.reassign selection filter
+            case defaultFilter selection definition of
+                Just filter_ ->
+                    if Filter.toString filter_ == Filter.toString filter then
+                        Filter.reassign selection filter
 
-            else
-                filter_
+                    else
+                        filter_
+
+                Nothing ->
+                    filter
     in
     select
         [ onInput (makeFilter >> UpdateFilter idx) ]
         (Dict.keys definition
             |> List.map
                 (\s ->
-                    if makeFilter s == Blank then
-                        text ""
-
-                    else
-                        option
-                            [ selected (s == name), value s ]
-                            [ text <| String.humanize s ]
+                    option
+                        [ selected (s == name), value s ]
+                        [ text <| String.humanize s ]
                 )
         )
 
 
-defaultFilter : String -> Definition -> Filter
+defaultFilter : String -> Definition -> Maybe Filter
 defaultFilter colName definition =
     Dict.get colName definition
-        |> Maybe.map (Filter.fromColumn colName)
-        |> Maybe.withDefault Blank
+        |> Maybe.andThen (Filter.fromColumn colName)
