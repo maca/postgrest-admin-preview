@@ -27,6 +27,7 @@ import Postgrest.Client as PG
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value exposing (Value(..))
 import Set
+import String.Extra as String
 import Url exposing (percentDecode)
 
 
@@ -267,17 +268,22 @@ null =
 
 equals : Parser Operation
 equals =
-    succeed Equals |. token "eq" |. symbol "." |= string
+    succeed (unquoteMaybe >> Equals) |. token "eq" |. symbol "." |= string
 
 
 lesserThan : Parser Operation
 lesserThan =
-    succeed LesserThan |. token "lt" |. symbol "." |= string
+    succeed (unquoteMaybe >> LesserThan) |. token "lt" |. symbol "." |= string
 
 
 greaterThan : Parser Operation
 greaterThan =
-    succeed GreaterThan |. token "gt" |. symbol "." |= string
+    succeed (unquoteMaybe >> GreaterThan) |. token "gt" |. symbol "." |= string
+
+
+unquoteMaybe : Maybe String -> Maybe String
+unquoteMaybe =
+    Maybe.map String.unquote
 
 
 string : Parser (Maybe String)

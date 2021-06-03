@@ -100,12 +100,12 @@ suite =
                             )
             , test "lt.1.1" <|
                 \_ ->
-                    Filter.parse definition "float=lt.1.1"
+                    Filter.parse definition "float=lt.\"1.1\""
                         |> toQueryString
                         |> Expect.equal "float=lt.\"1.1\""
             , test "LesserThan" <|
                 \_ ->
-                    Filter.parse definition "float=lt.1.1"
+                    Filter.parse definition "float=lt.\"1.1\""
                         |> Expect.equal
                             (Just "1.1"
                                 |> LesserThan
@@ -114,12 +114,12 @@ suite =
                             )
             , test "gt.1.1" <|
                 \_ ->
-                    Filter.parse definition "float=gt.1.1"
+                    Filter.parse definition "float=gt.\"1.1\""
                         |> toQueryString
                         |> Expect.equal "float=gt.\"1.1\""
             , test "GreaterThan" <|
                 \_ ->
-                    Filter.parse definition "float=gt.1.1"
+                    Filter.parse definition "float=gt.\"1.1\""
                         |> Expect.equal
                             (Just "1.1"
                                 |> GreaterThan
