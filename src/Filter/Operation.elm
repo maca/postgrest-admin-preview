@@ -58,11 +58,8 @@ textFilterInputs : Bool -> Operation -> List (Html Operation)
 textFilterInputs required op =
     let
         options =
-            [ ( "equals", dropLast Equals )
-            , ( "contains", dropLast Contains )
-            , ( "starts with", dropLast StartsWith )
-            , ( "ends with", dropLast EndsWith )
-            ]
+            List.map (dropLast >> operationOption)
+                [ Equals, Contains, StartsWith, EndsWith ]
     in
     inputs [ type_ "text" ] (options ++ nullOption required) op
 
@@ -97,9 +94,8 @@ enumInputs required choices idx op =
         select_ chosen =
             let
                 options =
-                    [ ( "is one of", dropLast <| enum OneOf chosen )
-                    , ( "is none of", dropLast <| enum NoneOf chosen )
-                    ]
+                    List.map (dropLast >> operationOption)
+                        [ enum OneOf chosen, enum NoneOf chosen ]
             in
             select (options ++ nullOption required) op
 
@@ -152,67 +148,63 @@ enum makeEnum chosen mstring =
 select : Options -> Operation -> Html Operation
 select options op =
     let
-        opSelect makeOp a b =
+        opSelect a b =
             let
-                makeOption ( s, f_ ) =
-                    option
-                        [ selected (makeOp a b == f_ a b) ]
-                        [ text s ]
+                makeOption ( s, _ ) =
+                    option [ selected (toString op == s) ] [ text s ]
+
+                optionSelected selection =
+                    let
+                        makeOp =
+                            Dict.fromList options
+                                |> Dict.get selection
+                                |> Maybe.withDefault (dropBoth IsNull)
+                    in
+                    makeOp a b
             in
             Html.select
-                [ onInput (optionSelected options a b) ]
+                [ onInput optionSelected ]
                 (List.map makeOption options)
     in
     case op of
         Equals a ->
-            opSelect (dropLast Equals) a Nothing
+            opSelect a Nothing
 
         Contains a ->
-            opSelect (dropLast Contains) a Nothing
+            opSelect a Nothing
 
         StartsWith a ->
-            opSelect (dropLast StartsWith) a Nothing
+            opSelect a Nothing
 
         EndsWith a ->
-            opSelect (dropLast EndsWith) a Nothing
+            opSelect a Nothing
 
         LesserThan a ->
-            opSelect (dropLast LesserThan) a Nothing
+            opSelect a Nothing
 
         GreaterThan a ->
-            opSelect (dropLast GreaterThan) a Nothing
+            opSelect a Nothing
 
         Between a b ->
-            opSelect Between a b
+            opSelect a b
 
         InDate a ->
-            opSelect (dropLast InDate) a Nothing
+            opSelect a Nothing
 
         OneOf chosen ->
-            opSelect (dropLast <| enum OneOf chosen) Nothing Nothing
+            opSelect Nothing Nothing
 
         NoneOf chosen ->
-            opSelect (dropLast <| enum NoneOf chosen) Nothing Nothing
+            opSelect Nothing Nothing
 
         IsTrue ->
-            opSelect (dropBoth IsTrue) Nothing Nothing
+            opSelect Nothing Nothing
 
         IsFalse ->
-            opSelect (dropBoth IsFalse) Nothing Nothing
+            opSelect Nothing Nothing
 
         IsNull ->
-            opSelect (dropBoth IsNull) Nothing Nothing
-
-
-optionSelected : Options -> Maybe String -> Maybe String -> String -> Operation
-optionSelected options a b selection =
-    let
-        makeOp =
-            Dict.fromList options
-                |> Dict.get selection
-                |> Maybe.withDefault (\_ _ -> IsNull)
-    in
-    makeOp a b
+            opSelect Nothing Nothing
 
 
 input : List (Attribute Operation) -> Operation -> Html Operation
@@ -304,32 +296,32 @@ nullOption required =
         []
 
     else
-        [ ( "is not set", dropBoth IsNull ) ]
+        [ operationOption <| dropBoth IsNull ]
 
 
 numberOptions : List ( String, OperationC )
 numberOptions =
-    [ ( "equals", dropLast Equals )
-    , ( "is lesser than", dropLast LesserThan )
-    , ( "is greater than", dropLast GreaterThan )
-    , ( "is between", Between )
-    ]
+    List.map operationOption
+        [ dropLast Equals
+        , dropLast LesserThan
+        , dropLast GreaterThan
+        , Between
+        ]
 
 
 boolOptions : List ( String, OperationC )
 boolOptions =
-    [ ( "is true", dropBoth IsTrue )
-    , ( "is false", dropBoth IsFalse )
-    ]
+    List.map (dropBoth >> operationOption) [ IsTrue, IsFalse ]
 
 
 timeOptions : List ( String, OperationC )
 timeOptions =
-    [ ( "is on date", dropLast InDate )
-    , ( "is lesser than", dropLast LesserThan )
-    , ( "is greater than", dropLast GreaterThan )
-    , ( "is between", Between )
-    ]
+    List.map operationOption
+        [ dropLast InDate
+        , dropLast LesserThan
+        , dropLast GreaterThan
+        , Between
+        ]
 
 
 toPGQuery : String -> Operation -> Maybe PG.Param
@@ -403,3 +395,51 @@ dropLast fun a _ =
 dropBoth : c -> a -> b -> c
 dropBoth c _ _ =
     c
+
+
+operationOption : OperationC -> ( String, OperationC )
+operationOption cons =
+    ( toString (cons Nothing Nothing), cons )
+
+
+toString : Operation -> String
+toString operation =
+    case operation of
+        IsTrue ->
+            "is true"
+
+        IsFalse ->
+            "is false"
+
+        IsNull ->
+            "is not set"
+
+        Equals _ ->
+            "is equal to"
+
+        LesserThan _ ->
+            "is lesser than"
+
+        GreaterThan _ ->
+            "is greater than"
+
+        Between _ _ ->
+            "is between"
+
+        Contains _ ->
+            "contains"
+
+        StartsWith _ ->
+            "starts with"
+
+        EndsWith _ ->
+            "ends with"
+
+        InDate _ ->
+            "is in date"
+
+        OneOf _ ->
+            "is one of"
+
+        NoneOf _ ->
+            "is none of"
