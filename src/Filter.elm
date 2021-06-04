@@ -1,13 +1,13 @@
 module Filter exposing
     ( Filter(..)
+    , Kind(..)
     , fromColumn
     , parse
-    , reassign
     , toPGQuery
-    , toString
     )
 
 import Dict
+import Filter.Operand as Operand exposing (Operand(..))
 import Filter.Operation as Operation exposing (Operation(..))
 import Parser
     exposing
@@ -31,167 +31,77 @@ import String.Extra as String
 import Url exposing (percentDecode)
 
 
+type Kind
+    = IText
+    | IInt
+    | IFloat
+    | IDate
+    | ITime
+    | IBool
+    | IEnum
+
+
 type Filter
-    = TextFilter String Operation
-    | IntFilter String Operation
-    | FloatFilter String Operation
-    | BoolFilter String Operation
-    | DateFilter String Operation
-    | TimeFilter String Operation
-    | EnumFilter String (List String) Operation
+    = Filter Kind String Operation
 
 
-toString : Filter -> String
-toString filter =
-    case filter of
-        TextFilter _ _ ->
-            "text"
-
-        IntFilter _ _ ->
-            "integer"
-
-        FloatFilter _ _ ->
-            "float"
-
-        BoolFilter _ _ ->
-            "bool"
-
-        DateFilter _ _ ->
-            "date"
-
-        TimeFilter _ _ ->
-            "time"
-
-        EnumFilter _ _ _ ->
-            "enum"
+type alias OperandConst =
+    Maybe String -> Operand
 
 
 toPGQuery : Filter -> Maybe PG.Param
-toPGQuery filter =
-    case filter of
-        TextFilter name op ->
-            Operation.toPGQuery name op
-
-        IntFilter name op ->
-            Operation.toPGQuery name op
-
-        FloatFilter name op ->
-            Operation.toPGQuery name op
-
-        BoolFilter name op ->
-            Operation.toPGQuery name op
-
-        DateFilter name op ->
-            Operation.toPGQuery name op
-
-        TimeFilter name op ->
-            Operation.toPGQuery name op
-
-        EnumFilter name _ op ->
-            Operation.toPGQuery name op
-
-
-reassign : String -> Filter -> Filter
-reassign name filter =
-    case filter of
-        TextFilter _ op ->
-            TextFilter name op
-
-        IntFilter _ op ->
-            IntFilter name op
-
-        FloatFilter _ op ->
-            FloatFilter name op
-
-        BoolFilter _ op ->
-            BoolFilter name op
-
-        DateFilter _ op ->
-            TimeFilter name op
-
-        TimeFilter _ op ->
-            TimeFilter name op
-
-        EnumFilter _ choices op ->
-            EnumFilter name choices op
+toPGQuery (Filter _ name op) =
+    Operation.toPGQuery name op
 
 
 fromColumn : String -> Column -> Maybe Filter
-fromColumn name ((Column _ value) as column) =
-    let
-        defaultOp =
-            case value of
-                PBool _ ->
-                    IsTrue
-
-                PEnum _ choices ->
-                    OneOf Set.empty
-
-                PTime _ ->
-                    InDate Nothing
-
-                PDate _ ->
-                    InDate Nothing
-
-                _ ->
-                    Equals Nothing
-    in
-    init name column defaultOp
-
-
-init : String -> Column -> Operation -> Maybe Filter
-init name (Column _ value) =
+fromColumn name (Column _ value) =
     case value of
         PString _ ->
-            Just << TextFilter name
+            Just <| Filter IText name <| Equals <| Operand.text Nothing
 
         PText _ ->
-            Just << TextFilter name
+            Just <| Filter IText name <| Equals <| Operand.text Nothing
 
         PInt _ ->
-            Just << IntFilter name
+            Just <| Filter IInt name <| Equals <| Operand.int Nothing
 
         PFloat _ ->
-            Just << FloatFilter name
+            Just <| Filter IFloat name <| Equals <| Operand.float Nothing
 
         PBool _ ->
-            Just << BoolFilter name
+            Just <| Filter IBool name <| IsTrue
 
         PEnum _ choices ->
-            Just << EnumFilter name choices
+            Just <| Filter IEnum name <| OneOf <| Operand.enum choices Set.empty
 
         PTime _ ->
-            Just << TimeFilter name
+            Just <| Filter ITime name <| InDate <| Operand.time Nothing
 
         PDate _ ->
-            Just << TimeFilter name
+            Just <| Filter IDate name <| InDate <| Operand.date Nothing
 
         PPrimaryKey mprimaryKey ->
-            always Nothing
+            Nothing
 
         PForeignKey mprimaryKey { label } ->
-            always Nothing
+            Nothing
 
         BadValue _ ->
-            always Nothing
+            Nothing
 
 
 parse : Definition -> String -> Maybe Filter
 parse definition fragment =
-    let
-        makeFilter name =
-            case Dict.get name definition of
-                Just column ->
-                    init name column
-
-                Nothing ->
-                    always Nothing
-    in
     fragment
         |> Parser.run
             (succeed identity
                 |= Parser.oneOf
-                    [ succeed makeFilter |= colName |. symbol "=" |= operation ]
+                    [ succeed (filterCons definition)
+                        |= colName
+                        |. symbol "="
+                        |= operation
+                    ]
             )
         |> Result.mapError (Debug.log "error")
         |> Result.toMaybe
@@ -207,7 +117,7 @@ colName =
         }
 
 
-operation : Parser Operation
+operation : Parser (OperandConst -> Operation)
 operation =
     Parser.oneOf
         [ contains
@@ -220,30 +130,33 @@ operation =
         ]
 
 
-contains : Parser Operation
+contains : Parser (OperandConst -> Operation)
 contains =
-    succeed Contains
+    succeed (operationCons Contains)
         |. token "ilike"
         |. symbol ".*"
         |= getUntil "*"
         |> backtrackable
 
 
-endsWith : Parser Operation
+endsWith : Parser (OperandConst -> Operation)
 endsWith =
-    succeed EndsWith
+    succeed (operationCons EndsWith)
         |. token "ilike"
         |. symbol ".*"
         |= string
         |> backtrackable
 
 
-startsWith : Parser Operation
+startsWith : Parser (OperandConst -> Operation)
 startsWith =
-    succeed StartsWith |. token "ilike" |. symbol "." |= getUntil "*"
+    succeed (operationCons StartsWith)
+        |. token "ilike"
+        |. symbol "."
+        |= getUntil "*"
 
 
-is : Parser Operation
+is : Parser (OperandConst -> Operation)
 is =
     succeed identity
         |. token "is"
@@ -251,34 +164,43 @@ is =
         |= Parser.oneOf [ true, false, null ]
 
 
-true : Parser Operation
+true : Parser (OperandConst -> Operation)
 true =
-    succeed IsTrue |. token "true"
+    succeed (always IsTrue) |. token "true"
 
 
-false : Parser Operation
+false : Parser (OperandConst -> Operation)
 false =
-    succeed IsFalse |. token "false"
+    succeed (always IsFalse) |. token "false"
 
 
-null : Parser Operation
+null : Parser (OperandConst -> Operation)
 null =
-    succeed IsNull |. token "null"
+    succeed (always IsNull) |. token "null"
 
 
-equals : Parser Operation
+equals : Parser (OperandConst -> Operation)
 equals =
-    succeed (unquoteMaybe >> Equals) |. token "eq" |. symbol "." |= string
+    succeed (unquoteMaybe >> operationCons Equals)
+        |. token "eq"
+        |. symbol "."
+        |= string
 
 
-lesserThan : Parser Operation
+lesserThan : Parser (OperandConst -> Operation)
 lesserThan =
-    succeed (unquoteMaybe >> LesserThan) |. token "lt" |. symbol "." |= string
+    succeed (unquoteMaybe >> operationCons LesserThan)
+        |. token "lt"
+        |. symbol "."
+        |= string
 
 
-greaterThan : Parser Operation
+greaterThan : Parser (OperandConst -> Operation)
 greaterThan =
-    succeed (unquoteMaybe >> GreaterThan) |. token "gt" |. symbol "." |= string
+    succeed (unquoteMaybe >> operationCons GreaterThan)
+        |. token "gt"
+        |. symbol "."
+        |= string
 
 
 unquoteMaybe : Maybe String -> Maybe String
@@ -296,3 +218,55 @@ getUntil : String -> Parser (Maybe String)
 getUntil terminator =
     succeed percentDecode
         |= (getChompedString <| succeed () |. chompUntil terminator)
+
+
+operationCons :
+    (Operand -> Operation)
+    -> Maybe String
+    -> OperandConst
+    -> Operation
+operationCons makeOperation mstring makeOperator =
+    makeOperation <| makeOperator mstring
+
+
+filterCons : Definition -> String -> (OperandConst -> Operation) -> Maybe Filter
+filterCons definition name makeOperation =
+    case Dict.get name definition of
+        Just (Column _ value) ->
+            case value of
+                PString _ ->
+                    Just <| Filter IText name <| makeOperation Operand.text
+
+                PText _ ->
+                    Just <| Filter IText name <| makeOperation Operand.text
+
+                PInt _ ->
+                    Just <| Filter IInt name <| makeOperation Operand.int
+
+                PFloat _ ->
+                    Just <| Filter IFloat name <| makeOperation Operand.float
+
+                PBool _ ->
+                    Just <| Filter IBool name <| makeOperation Operand.text
+
+                PTime _ ->
+                    Just <| Filter ITime name <| makeOperation Operand.time
+
+                PDate _ ->
+                    Just <| Filter IDate name <| makeOperation Operand.date
+
+                PEnum _ choices ->
+                    Nothing
+
+                -- Just <| Filter IEnum name <| OneOf <| Operand.enum choices Set.empty
+                PPrimaryKey mprimaryKey ->
+                    Nothing
+
+                PForeignKey mprimaryKey { label } ->
+                    Nothing
+
+                BadValue _ ->
+                    Nothing
+
+        Nothing ->
+            Nothing

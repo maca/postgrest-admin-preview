@@ -5,6 +5,8 @@ module Filter.Operation exposing
     , enumInputs
     , floatFilterInputs
     , intFilterInputs
+    , map
+    , map2
     , textFilterInputs
     , timeFilterInputs
     , toPGQuery
@@ -12,7 +14,17 @@ module Filter.Operation exposing
 
 import Basics.Extra exposing (flip)
 import Dict
-import Html exposing (Attribute, Html, div, label, option, span, text)
+import Filter.Operand as Operand
+    exposing
+        ( Enum(..)
+        , Operand(..)
+        , date
+        , float
+        , int
+        , text
+        , time
+        )
+import Html exposing (Attribute, Html, div, label, option, span)
 import Html.Attributes
     exposing
         ( checked
@@ -34,115 +46,144 @@ type Operation
     = IsTrue
     | IsFalse
     | IsNull
-    | Equals (Maybe String)
-    | LesserThan (Maybe String)
-    | GreaterThan (Maybe String)
-    | Between (Maybe String) (Maybe String)
-    | Contains (Maybe String)
-    | StartsWith (Maybe String)
-    | EndsWith (Maybe String)
-    | InDate (Maybe String)
-    | OneOf (Set String)
-    | NoneOf (Set String)
+    | Equals Operand
+    | LesserThan Operand
+    | GreaterThan Operand
+    | Between Operand Operand
+    | Contains Operand
+    | StartsWith Operand
+    | EndsWith Operand
+    | InDate Operand
+    | OneOf Enum
+    | NoneOf Enum
 
 
-type alias OperationC =
+type alias OperationConst =
     Maybe String -> Maybe String -> Operation
 
 
 type alias Options =
-    List ( String, OperationC )
+    List ( String, OperationConst )
 
 
 textFilterInputs : Bool -> Operation -> List (Html Operation)
 textFilterInputs required op =
     let
         options =
-            List.map (dropLast >> operationOption)
-                [ Equals, Contains, StartsWith, EndsWith ]
+            List.map operationOption
+                [ map Equals text
+                , map Contains text
+                , map StartsWith text
+                , map EndsWith text
+                ]
     in
-    inputs [ type_ "text" ] (options ++ nullOption required) op
+    [ select (options ++ nullOption required) op, input op ]
 
 
 intFilterInputs : Bool -> Operation -> List (Html Operation)
 intFilterInputs required op =
-    inputs [ type_ "number", step "1" ]
-        (numberOptions ++ nullOption required)
-        op
+    let
+        options =
+            List.map operationOption
+                [ map Equals int
+                , map LesserThan int
+                , map GreaterThan int
+                , map2 Between int
+                ]
+    in
+    [ select (options ++ nullOption required) op, input op ]
 
 
 floatFilterInputs : Bool -> Operation -> List (Html Operation)
 floatFilterInputs required op =
-    inputs [ type_ "number", step "0.01" ]
-        (numberOptions ++ nullOption required)
-        op
+    let
+        options =
+            List.map operationOption
+                [ map Equals float
+                , map LesserThan float
+                , map GreaterThan float
+                , map2 Between float
+                ]
+    in
+    [ select (options ++ nullOption required) op, input op ]
 
 
 dateFilterInputs : Bool -> Operation -> List (Html Operation)
 dateFilterInputs required op =
-    inputs [ type_ "date" ] (timeOptions ++ nullOption required) op
+    let
+        options =
+            List.map operationOption
+                [ map InDate date
+                , map LesserThan date
+                , map GreaterThan date
+                , map2 Between date
+                ]
+    in
+    [ select (options ++ nullOption required) op, input op ]
 
 
 timeFilterInputs : Bool -> Operation -> List (Html Operation)
 timeFilterInputs required op =
-    inputs [ type_ "datetime-local" ] (timeOptions ++ nullOption required) op
-
-
-enumInputs : Bool -> List String -> Int -> Operation -> List (Html Operation)
-enumInputs required choices idx op =
     let
-        select_ chosen =
-            let
-                options =
-                    List.map (dropLast >> operationOption)
-                        [ enum OneOf chosen, enum NoneOf chosen ]
-            in
-            select (options ++ nullOption required) op
-
-        inputs_ makeOp chosen =
-            [ select_ chosen
-            , choices
-                |> List.map (checkbox makeOp idx chosen)
-                |> div [ class "checkboxes" ]
-            ]
+        options =
+            List.map operationOption
+                [ map InDate time
+                , map LesserThan time
+                , map GreaterThan time
+                , map2 Between time
+                ]
     in
-    case op of
-        OneOf chosen ->
-            inputs_ (dropLast <| enum OneOf chosen) chosen
-
-        NoneOf chosen ->
-            inputs_ (dropLast <| enum NoneOf chosen) chosen
-
-        _ ->
-            [ select_ Set.empty ]
+    [ select (options ++ nullOption required) op, input op ]
 
 
 boolFilterInputs : Bool -> Operation -> List (Html Operation)
 boolFilterInputs required op =
-    inputs [] (boolOptions ++ nullOption required) op
+    let
+        options =
+            List.map (dropBoth >> operationOption) [ IsTrue, IsFalse ]
+    in
+    [ select (options ++ nullOption required) op, input op ]
 
 
-inputs :
-    List (Attribute Operation)
-    -> Options
-    -> Operation
-    -> List (Html Operation)
-inputs attributes options op =
-    [ select options op, input attributes op ]
+enumInputs : Bool -> Int -> Operation -> List (Html Operation)
+enumInputs required idx op =
+    let
+        options enum =
+            List.map operationOption
+                [ map OneOf (flip choose enum)
+                , map NoneOf (flip choose enum)
+                ]
+
+        inputs makeOp ((Enum choices _) as enum) =
+            [ select (options enum ++ nullOption required) op
+            , choices
+                |> List.map (checkbox makeOp idx enum)
+                |> div [ class "checkboxes" ]
+            ]
+    in
+    case op of
+        OneOf ((Enum _ chosen) as enum) ->
+            inputs (map OneOf (flip choose enum)) enum
+
+        NoneOf ((Enum _ chosen) as enum) ->
+            inputs (map NoneOf (flip choose enum)) enum
+
+        _ ->
+            [ Html.text "" ]
 
 
-enum : (Set String -> Operation) -> Set String -> Maybe String -> Operation
-enum makeEnum chosen mstring =
-    case mstring of
+choose : Maybe String -> Enum -> Enum
+choose mchoice (Enum choices chosen) =
+    case mchoice of
         Just choice ->
             if Set.member choice chosen then
-                makeEnum (Set.remove choice chosen)
+                Enum choices (Set.remove choice chosen)
 
             else
-                makeEnum (Set.insert choice chosen)
+                Enum choices (Set.insert choice chosen)
 
         Nothing ->
-            makeEnum chosen
+            Enum choices chosen
 
 
 select : Options -> Operation -> Html Operation
@@ -151,16 +192,16 @@ select options op =
         opSelect a b =
             let
                 makeOption ( s, _ ) =
-                    option [ selected (toString op == s) ] [ text s ]
+                    option [ selected (toString op == s) ] [ Html.text s ]
 
                 optionSelected selection =
                     let
-                        makeOp =
+                        makeOperation =
                             Dict.fromList options
                                 |> Dict.get selection
                                 |> Maybe.withDefault (dropBoth IsNull)
                     in
-                    makeOp a b
+                    makeOperation a b
             in
             Html.select
                 [ onInput optionSelected ]
@@ -168,28 +209,28 @@ select options op =
     in
     case op of
         Equals a ->
-            opSelect a Nothing
+            opSelect (Operand.value a) Nothing
 
         Contains a ->
-            opSelect a Nothing
+            opSelect (Operand.value a) Nothing
 
         StartsWith a ->
-            opSelect a Nothing
+            opSelect (Operand.value a) Nothing
 
         EndsWith a ->
-            opSelect a Nothing
+            opSelect (Operand.value a) Nothing
 
         LesserThan a ->
-            opSelect a Nothing
+            opSelect (Operand.value a) Nothing
 
         GreaterThan a ->
-            opSelect a Nothing
+            opSelect (Operand.value a) Nothing
 
         Between a b ->
-            opSelect a b
+            opSelect (Operand.value a) (Operand.value b)
 
         InDate a ->
-            opSelect a Nothing
+            opSelect (Operand.value a) Nothing
 
         OneOf chosen ->
             opSelect Nothing Nothing
@@ -207,68 +248,91 @@ select options op =
             opSelect Nothing Nothing
 
 
-input : List (Attribute Operation) -> Operation -> Html Operation
-input attributes op =
+input : Operation -> Html Operation
+input op =
+    let
+        attributes operand =
+            case operand of
+                OText val ->
+                    [ type_ "text" ]
+
+                OInt val ->
+                    [ type_ "number", step "1" ]
+
+                OFloat val ->
+                    [ type_ "number", step "0.01" ]
+
+                ODate val ->
+                    [ type_ "date" ]
+
+                OTime val ->
+                    [ type_ "datetime-local" ]
+
+                NullOperand ->
+                    []
+    in
     case op of
         Equals a ->
-            textInput attributes Equals a
+            textInput (attributes a) Equals a
 
         Contains a ->
-            textInput attributes Contains a
+            textInput (attributes a) Contains a
 
         StartsWith a ->
-            textInput attributes StartsWith a
+            textInput (attributes a) StartsWith a
 
         EndsWith a ->
-            textInput attributes EndsWith a
+            textInput (attributes a) EndsWith a
 
         LesserThan a ->
-            textInput attributes LesserThan a
+            textInput (attributes a) LesserThan a
 
         GreaterThan a ->
-            textInput attributes GreaterThan a
+            textInput (attributes a) GreaterThan a
 
         Between a b ->
             div []
-                [ textInput attributes (flip Between b) a
-                , span [] [ text "and" ]
-                , textInput attributes (Between a) b
+                [ textInput (attributes a) (flip Between b) a
+                , span [] [ Html.text "and" ]
+                , textInput (attributes a) (Between a) b
                 ]
 
         InDate a ->
             textInput [ type_ "date" ] InDate a
 
         OneOf _ ->
-            text ""
+            Html.text ""
 
         NoneOf _ ->
-            text ""
+            Html.text ""
 
         IsTrue ->
-            text ""
+            Html.text ""
 
         IsFalse ->
-            text ""
+            Html.text ""
 
         IsNull ->
-            text ""
+            Html.text ""
 
 
 textInput :
     List (Attribute Operation)
-    -> (Maybe String -> Operation)
-    -> Maybe String
+    -> (Operand -> Operation)
+    -> Operand
     -> Html Operation
-textInput attributes makeOp a =
+textInput attributes makeOperation operand =
     Html.input
-        ([ onInput (Just >> makeOp), value <| Maybe.withDefault "" a ]
+        ([ onInput (makeOperation << Operand.constructor operand << Just)
+         , value <| Maybe.withDefault "" <| Operand.rawValue operand
+         ]
             ++ attributes
         )
         []
 
 
-checkbox : OperationC -> Int -> Set String -> String -> Html Operation
-checkbox makeOp idx chosen choice =
+checkbox : OperationConst -> Int -> Enum -> String -> Html Operation
+checkbox makeOp idx (Enum _ chosen) choice =
     let
         inputId =
             String.fromInt idx |> (++) choice
@@ -285,12 +349,12 @@ checkbox makeOp idx chosen choice =
                 , checked <| Set.member choice chosen
                 ]
                 []
-            , text <| String.humanize choice
+            , Html.text <| String.humanize choice
             ]
         ]
 
 
-nullOption : Bool -> List ( String, OperationC )
+nullOption : Bool -> List ( String, OperationConst )
 nullOption required =
     if required then
         []
@@ -299,97 +363,76 @@ nullOption required =
         [ operationOption <| dropBoth IsNull ]
 
 
-numberOptions : List ( String, OperationC )
-numberOptions =
-    List.map operationOption
-        [ dropLast Equals
-        , dropLast LesserThan
-        , dropLast GreaterThan
-        , Between
-        ]
-
-
-boolOptions : List ( String, OperationC )
-boolOptions =
-    List.map (dropBoth >> operationOption) [ IsTrue, IsFalse ]
-
-
-timeOptions : List ( String, OperationC )
-timeOptions =
-    List.map operationOption
-        [ dropLast InDate
-        , dropLast LesserThan
-        , dropLast GreaterThan
-        , Between
-        ]
-
-
 toPGQuery : String -> Operation -> Maybe PG.Param
 toPGQuery name op =
     let
-        param q =
-            Just <| PG.param name q
+        param =
+            PG.param name
     in
     case op of
         IsTrue ->
-            param PG.true
+            Just <| param PG.true
 
         IsFalse ->
-            param PG.false
+            Just <| param PG.false
 
         IsNull ->
-            param PG.null
+            Just <| param PG.null
 
-        Equals (Just a) ->
-            param <| PG.eq <| PG.string a
+        Equals operand ->
+            Operand.value operand
+                |> Maybe.map (param << PG.eq << PG.string)
 
-        LesserThan (Just a) ->
-            param <| PG.lt <| PG.string a
+        LesserThan operand ->
+            Operand.value operand
+                |> Maybe.map (param << PG.lt << PG.string)
 
-        GreaterThan (Just a) ->
-            param <| PG.gt <| PG.string a
+        GreaterThan operand ->
+            Operand.value operand
+                |> Maybe.map (param << PG.gt << PG.string)
 
-        Contains (Just a) ->
-            param <| PG.ilike <| "*" ++ a ++ "*"
+        Contains operand ->
+            Operand.value operand
+                |> Maybe.map (\a -> param <| PG.ilike <| "*" ++ a ++ "*")
 
-        StartsWith (Just a) ->
-            param <| PG.ilike <| a ++ "*"
+        StartsWith operand ->
+            Operand.value operand
+                |> Maybe.map (\a -> param <| PG.ilike <| a ++ "*")
 
-        EndsWith (Just a) ->
-            param <| PG.ilike <| "*" ++ a
+        EndsWith operand ->
+            Operand.value operand
+                |> Maybe.map (\a -> param <| PG.ilike <| "*" ++ a)
 
-        Between (Just a) (Just b) ->
+        Between operandA operandB ->
             let
-                ( a_, b_ ) =
-                    case compare a b of
-                        LT ->
-                            ( a, b )
+                makeOperation a b =
+                    let
+                        ( valA, valB ) =
+                            case compare a b of
+                                LT ->
+                                    ( a, b )
 
-                        _ ->
-                            ( b, a )
+                                _ ->
+                                    ( b, a )
+                    in
+                    PG.and
+                        [ PG.param name <| PG.gte <| PG.string valA
+                        , PG.param name <| PG.lte <| PG.string valB
+                        ]
             in
-            Just <|
-                PG.and
-                    [ PG.param name <| PG.gte <| PG.string a_
-                    , PG.param name <| PG.lte <| PG.string b_
-                    ]
+            Maybe.map2 makeOperation
+                (Operand.value operandA)
+                (Operand.value operandB)
 
-        InDate (Just a) ->
-            param <| PG.eq <| PG.string a
+        InDate operand ->
+            Operand.value operand
+                |> Maybe.map (param << PG.eq << PG.string)
 
-        OneOf chosen ->
-            param <| PG.inList PG.string <| Set.toList chosen
+        OneOf (Enum _ chosen) ->
+            Just <| param <| PG.inList PG.string <| Set.toList chosen
 
-        NoneOf chosen ->
-            param <| PG.not <| PG.inList PG.string <| Set.toList chosen
-
-        _ ->
-            Nothing
-
-
-dropLast : (a -> c) -> a -> b -> c
-dropLast fun a _ =
-    fun a
+        NoneOf (Enum _ chosen) ->
+            Just <| param <| PG.not <| PG.inList PG.string <| Set.toList chosen
 
 
 dropBoth : c -> a -> b -> c
@@ -397,7 +440,17 @@ dropBoth c _ _ =
     c
 
 
-operationOption : OperationC -> ( String, OperationC )
+map : (op -> c) -> (ms -> op) -> ms -> ms -> c
+map cons mfun a _ =
+    cons (mfun a)
+
+
+map2 : (op -> op -> c) -> (ms -> op) -> ms -> ms -> c
+map2 cons mfun a b =
+    cons (mfun a) (mfun b)
+
+
+operationOption : OperationConst -> ( String, OperationConst )
 operationOption cons =
     ( toString (cons Nothing Nothing), cons )
 

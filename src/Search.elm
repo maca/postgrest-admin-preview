@@ -3,7 +3,7 @@ module Search exposing (Msg, Search, init, toPGQuery, update, view)
 import Array exposing (Array)
 import Array.Extra as Array
 import Dict
-import Filter as Filter exposing (Filter(..))
+import Filter as Filter exposing (Filter(..), Kind(..))
 import Filter.Operation
     exposing
         ( boolFilterInputs
@@ -105,20 +105,20 @@ view open { definition, filters } =
 
 
 viewFilter : Definition -> Int -> Filter -> Html Msg
-viewFilter definition idx filter =
+viewFilter definition idx ((Filter kind name op) as filter) =
     let
-        required name =
+        isRequired =
             Dict.get name definition
                 |> Maybe.map (\(Column req _) -> req)
                 |> Maybe.withDefault False
 
-        inputs name content =
+        inputs sKind content =
             div
                 [ class "filter"
-                , class <| Filter.toString filter
+                , class sKind
                 ]
                 [ div [ class "filter-inputs" ]
-                    (fieldSelect definition idx name filter :: content)
+                    (fieldSelect definition idx filter :: content)
                 , button
                     [ class "button-clear"
                     , onClick <| RemoveFilter idx
@@ -128,67 +128,70 @@ viewFilter definition idx filter =
                     [ i [ class "icono-cross" ] [] ]
                 ]
     in
-    case filter of
-        TextFilter name op ->
-            textFilterInputs (required name) op
-                |> List.map (Html.map (TextFilter name >> UpdateFilter idx))
-                |> inputs name
+    case kind of
+        IText ->
+            textFilterInputs isRequired op
+                |> List.map (Html.map (Filter IText name >> UpdateFilter idx))
+                |> inputs "text"
 
-        IntFilter name op ->
-            intFilterInputs (required name) op
-                |> List.map (Html.map (IntFilter name >> UpdateFilter idx))
-                |> inputs name
+        IInt ->
+            intFilterInputs isRequired op
+                |> List.map (Html.map (Filter IInt name >> UpdateFilter idx))
+                |> inputs "number"
 
-        FloatFilter name op ->
-            floatFilterInputs (required name) op
-                |> List.map (Html.map (FloatFilter name >> UpdateFilter idx))
-                |> inputs name
+        IFloat ->
+            floatFilterInputs isRequired op
+                |> List.map (Html.map (Filter IFloat name >> UpdateFilter idx))
+                |> inputs "number"
 
-        DateFilter name op ->
-            dateFilterInputs (required name) op
-                |> List.map (Html.map (DateFilter name >> UpdateFilter idx))
-                |> inputs name
+        IDate ->
+            dateFilterInputs isRequired op
+                |> List.map (Html.map (Filter IDate name >> UpdateFilter idx))
+                |> inputs "date"
 
-        TimeFilter name op ->
-            timeFilterInputs (required name) op
-                |> List.map (Html.map (TimeFilter name >> UpdateFilter idx))
-                |> inputs name
+        ITime ->
+            timeFilterInputs isRequired op
+                |> List.map (Html.map (Filter ITime name >> UpdateFilter idx))
+                |> inputs "time"
 
-        BoolFilter name op ->
-            boolFilterInputs (required name) op
-                |> List.map (Html.map (BoolFilter name >> UpdateFilter idx))
-                |> inputs name
+        IBool ->
+            boolFilterInputs isRequired op
+                |> List.map (Html.map (Filter IBool name >> UpdateFilter idx))
+                |> inputs "bool"
 
-        EnumFilter name choices op ->
-            enumInputs (required name) choices idx op
-                |> List.map
-                    (Html.map (EnumFilter name choices >> UpdateFilter idx))
-                |> inputs name
+        IEnum ->
+            enumInputs isRequired idx op
+                |> List.map (Html.map (Filter IEnum name >> UpdateFilter idx))
+                |> inputs "enum"
 
 
-fieldSelect : Definition -> Int -> String -> Filter -> Html Msg
-fieldSelect definition idx name filter =
+fieldSelect : Definition -> Int -> Filter -> Html Msg
+fieldSelect definition idx ((Filter kind name op) as filter) =
     let
         makeFilter selection =
             case defaultFilter selection definition of
-                Just filter_ ->
-                    if Filter.toString filter_ == Filter.toString filter then
-                        Filter.reassign selection filter
+                Just ((Filter kind_ name_ _) as filter_) ->
+                    if kind_ == kind then
+                        Filter kind name_ op
 
                     else
                         filter_
 
                 Nothing ->
                     filter
+
+        makeOption s =
+            option
+                [ value s, selected (s == name) ]
+                [ text <| String.humanize s ]
     in
     select
         [ onInput (makeFilter >> UpdateFilter idx) ]
-        (Dict.keys definition
-            |> List.map
-                (\s ->
-                    option
-                        [ selected (s == name), value s ]
-                        [ text <| String.humanize s ]
+        (Dict.toList definition
+            |> List.filterMap
+                (\( s, column ) ->
+                    Filter.fromColumn s column
+                        |> Maybe.map (always <| makeOption s)
                 )
         )
 
