@@ -95,13 +95,12 @@ parse : Definition -> String -> Maybe Filter
 parse definition fragment =
     fragment
         |> Parser.run
-            (succeed identity
-                |= Parser.oneOf
-                    [ succeed (filterCons definition)
-                        |= colName
-                        |. symbol "="
-                        |= operation
-                    ]
+            (Parser.oneOf
+                [ succeed (\name f -> f name)
+                    |= colName
+                    |. symbol "="
+                    |= (succeed (filterCons definition) |= operation)
+                ]
             )
         |> Result.mapError (Debug.log "error")
         |> Result.toMaybe
@@ -229,8 +228,8 @@ operationCons makeOperation mstring makeOperator =
     makeOperation <| makeOperator mstring
 
 
-filterCons : Definition -> String -> (OperandConst -> Operation) -> Maybe Filter
-filterCons definition name makeOperation =
+filterCons : Definition -> (OperandConst -> Operation) -> String -> Maybe Filter
+filterCons definition makeOperation name =
     case Dict.get name definition of
         Just (Column _ value) ->
             case value of
