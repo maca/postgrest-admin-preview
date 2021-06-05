@@ -1,7 +1,5 @@
-module Filter.Parser exposing (parse)
+module Filter.Parser exposing (OperandConst, enum, operation)
 
-import Dict
-import Filter exposing (Filter(..), Kind(..))
 import Filter.Operand as Operand exposing (Enum, Operand(..))
 import Filter.Operation exposing (Operation(..))
 import Parser
@@ -21,43 +19,14 @@ import Parser
         , token
         , variable
         )
-import Postgrest.Schema.Definition exposing (Column(..), Definition)
+import Postgrest.Schema.Definition exposing (Column(..))
 import Postgrest.Value exposing (Value(..))
 import Set exposing (Set)
 import String.Extra as String
-import Url exposing (percentDecode)
 
 
 type alias OperandConst =
     Maybe String -> Operand
-
-
-parse : Definition -> String -> Maybe Filter
-parse definition fragment =
-    fragment
-        |> Parser.run
-            (Parser.oneOf
-                [ succeed (\name f -> f name)
-                    |= colName
-                    |. symbol "="
-                    |= Parser.oneOf
-                        [ succeed (enumCons definition) |= enum
-                        , succeed (filterCons definition) |= operation
-                        ]
-                ]
-            )
-        |> Result.mapError (Debug.log "error")
-        |> Result.toMaybe
-        |> Maybe.andThen identity
-
-
-colName : Parser String
-colName =
-    variable
-        { start = Char.isAlphaNum
-        , inner = \c -> Char.isAlphaNum c || c == '_'
-        , reserved = Set.fromList [ "and", "or", "order" ]
-        }
 
 
 operation : Parser (OperandConst -> Operation)
@@ -240,51 +209,3 @@ enumOperationCons :
     -> Operation
 enumOperationCons makeOperation chosen choices =
     makeOperation <| Operand.enum choices chosen
-
-
-filterCons : Definition -> (OperandConst -> Operation) -> String -> Maybe Filter
-filterCons definition makeOperation name =
-    case Dict.get name definition of
-        Just (Column _ value) ->
-            case value of
-                PString _ ->
-                    Just <| Filter IText name <| makeOperation Operand.text
-
-                PText _ ->
-                    Just <| Filter IText name <| makeOperation Operand.text
-
-                PInt _ ->
-                    Just <| Filter IInt name <| makeOperation Operand.int
-
-                PFloat _ ->
-                    Just <| Filter IFloat name <| makeOperation Operand.float
-
-                PBool _ ->
-                    Just <| Filter IBool name <| makeOperation Operand.text
-
-                PTime _ ->
-                    Just <| Filter ITime name <| makeOperation Operand.time
-
-                PDate _ ->
-                    Just <| Filter IDate name <| makeOperation Operand.date
-
-                _ ->
-                    Nothing
-
-        Nothing ->
-            Nothing
-
-
-enumCons : Definition -> (List String -> Operation) -> String -> Maybe Filter
-enumCons definition makeOperation name =
-    case Dict.get name definition of
-        Just (Column _ value) ->
-            case value of
-                PEnum _ choices ->
-                    Just <| Filter IEnum name <| makeOperation choices
-
-                _ ->
-                    Nothing
-
-        Nothing ->
-            Nothing

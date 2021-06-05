@@ -16,16 +16,29 @@ module Filter exposing
     , lesserThan
     , noneOf
     , oneOf
+    , parse
     , startsWith
     , text
     , time
     , toPGQuery
     )
 
-import Filter.Operand as Operand exposing (Enum, Operand)
+import Dict
+import Filter.Operand as Operand exposing (Enum, Operand(..))
 import Filter.Operation as Operation exposing (Operation(..))
+import Filter.Parser exposing (OperandConst)
+import Parser
+    exposing
+        ( (|.)
+        , (|=)
+        , Parser
+        , Trailing(..)
+        , succeed
+        , symbol
+        , variable
+        )
 import Postgrest.Client as PG
-import Postgrest.Schema.Definition exposing (Column(..))
+import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value exposing (Value(..))
 import Set exposing (Set)
 
@@ -173,3 +186,83 @@ oneOf =
 noneOf : Enum -> Operation
 noneOf =
     NoneOf
+
+
+parse : Definition -> String -> Maybe Filter
+parse definition fragment =
+    fragment
+        |> Parser.run
+            (Parser.oneOf
+                [ succeed (\name f -> f name)
+                    |= colName
+                    |. symbol "="
+                    |= Parser.oneOf
+                        [ succeed (enumCons definition)
+                            |= Filter.Parser.enum
+                        , succeed (filterCons definition)
+                            |= Filter.Parser.operation
+                        ]
+                ]
+            )
+        |> Result.mapError (Debug.log "error")
+        |> Result.toMaybe
+        |> Maybe.andThen identity
+
+
+colName : Parser String
+colName =
+    variable
+        { start = Char.isAlphaNum
+        , inner = \c -> Char.isAlphaNum c || c == '_'
+        , reserved = Set.fromList [ "and", "or", "order" ]
+        }
+
+
+filterCons : Definition -> (OperandConst -> Operation) -> String -> Maybe Filter
+filterCons definition makeOperation name =
+    Dict.get name definition
+        |> Maybe.andThen (filterConsHelp makeOperation name)
+
+
+filterConsHelp : (OperandConst -> Operation) -> String -> Column -> Maybe Filter
+filterConsHelp makeOperation name (Column _ value) =
+    case value of
+        PString _ ->
+            Just <| Filter IText name <| makeOperation Operand.text
+
+        PText _ ->
+            Just <| Filter IText name <| makeOperation Operand.text
+
+        PInt _ ->
+            Just <| Filter IInt name <| makeOperation Operand.int
+
+        PFloat _ ->
+            Just <| Filter IFloat name <| makeOperation Operand.float
+
+        PBool _ ->
+            Just <| Filter IBool name <| makeOperation Operand.text
+
+        PTime _ ->
+            Just <| Filter ITime name <| makeOperation Operand.time
+
+        PDate _ ->
+            Just <| Filter IDate name <| makeOperation Operand.date
+
+        _ ->
+            Nothing
+
+
+enumCons : Definition -> (List String -> Operation) -> String -> Maybe Filter
+enumCons definition makeOperation name =
+    Dict.get name definition
+        |> Maybe.andThen (enumConsHelp makeOperation name)
+
+
+enumConsHelp : (List String -> Operation) -> String -> Column -> Maybe Filter
+enumConsHelp makeOperation name (Column _ value) =
+    case value of
+        PEnum _ choices ->
+            Just <| Filter IEnum name <| makeOperation choices
+
+        _ ->
+            Nothing
