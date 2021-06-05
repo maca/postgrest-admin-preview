@@ -22,6 +22,7 @@ import Postgrest.Client as PG
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value exposing (Value(..))
 import String.Extra as String
+import Url exposing (percentDecode)
 
 
 type Msg
@@ -41,7 +42,8 @@ init definition query =
     { definition = definition
     , filters =
         String.split "&" query
-            |> List.filterMap (Filter.parse definition)
+            |> List.filterMap
+                (percentDecode >> Maybe.andThen (Filter.parse definition))
             |> Array.fromList
     }
 
