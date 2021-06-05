@@ -15,6 +15,7 @@ module Filter exposing
     , int
     , lesserThan
     , noneOf
+    , nullBool
     , oneOf
     , parse
     , startsWith
@@ -62,32 +63,36 @@ toPGQuery (Filter _ name op) =
     Operation.toPGQuery name op
 
 
+
+-- Constructors
+
+
 fromColumn : String -> Column -> Maybe Filter
 fromColumn name (Column _ value) =
     case value of
         PString _ ->
-            Just <| text name Equals Nothing
+            Just <| text name equals Nothing
 
         PText _ ->
-            Just <| text name Equals Nothing
+            Just <| text name equals Nothing
 
         PInt _ ->
-            Just <| int name Equals Nothing
+            Just <| int name equals Nothing
 
         PFloat _ ->
-            Just <| float name <| Equals <| Operand.float Nothing
+            Just <| float name <| equals <| Operand.float Nothing
 
         PBool _ ->
             Just <| bool name True
 
         PTime _ ->
-            Just <| time name <| InDate <| Operand.time Nothing
+            Just <| time name <| inDate <| Operand.time Nothing
 
         PDate _ ->
-            Just <| date name <| InDate <| Operand.date Nothing
+            Just <| date name <| inDate <| Operand.date Nothing
 
         PEnum _ choices ->
-            Just <| enum name OneOf choices Set.empty
+            Just <| enum name oneOf choices Set.empty
 
         PPrimaryKey mprimaryKey ->
             Nothing
@@ -121,6 +126,11 @@ bool name value =
 
     else
         Filter IBool name IsFalse
+
+
+nullBool : String -> Filter
+nullBool name =
+    Filter IBool name IsNull
 
 
 time : String -> Operation -> Filter
@@ -188,6 +198,10 @@ noneOf =
     NoneOf
 
 
+
+-- Parsing
+
+
 parse : Definition -> String -> Maybe Filter
 parse definition fragment =
     fragment
@@ -216,6 +230,10 @@ colName =
         , inner = \c -> Char.isAlphaNum c || c == '_'
         , reserved = Set.fromList [ "and", "or", "order" ]
         }
+
+
+
+-- Parse helpers
 
 
 filterCons : Definition -> (OperandConst -> Operation) -> String -> Maybe Filter

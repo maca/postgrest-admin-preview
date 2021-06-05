@@ -23,6 +23,7 @@ import Postgrest.Schema.Definition exposing (Column(..))
 import Postgrest.Value exposing (Value(..))
 import Set exposing (Set)
 import String.Extra as String
+import Url exposing (percentDecode)
 
 
 type alias OperandConst =
@@ -183,13 +184,13 @@ unquoteMaybe =
 
 getRest : Parser (Maybe String)
 getRest =
-    succeed Just
+    succeed percentDecode
         |= (getChompedString <| succeed () |. chompUntilEndOr "\n")
 
 
 getUntil : String -> Parser (Maybe String)
 getUntil terminator =
-    succeed Just
+    succeed percentDecode
         |= (getChompedString <| succeed () |. chompUntil terminator)
 
 
