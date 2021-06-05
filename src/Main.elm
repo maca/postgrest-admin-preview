@@ -19,7 +19,6 @@ import String.Extra as String
 import Url exposing (Url)
 import Url.Builder as Url
 import Url.Parser as Parser exposing ((</>), Parser)
-import Url.Parser.Query as Query
 import Utils.Task exposing (Error(..), attemptWithError, fail)
 
 

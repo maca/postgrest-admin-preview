@@ -14,6 +14,7 @@ import Filter.Operation
         , textFilterInputs
         , timeFilterInputs
         )
+import Filter.Parser as Filter
 import Html exposing (Html, button, div, i, option, select, text)
 import Html.Attributes exposing (class, hidden, selected, title, value)
 import Html.Events exposing (onClick, onInput)

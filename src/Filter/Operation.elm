@@ -38,7 +38,7 @@ import Html.Attributes
         )
 import Html.Events exposing (onInput)
 import Postgrest.Client as PG
-import Set exposing (Set)
+import Set
 import String.Extra as String
 
 
@@ -162,10 +162,10 @@ enumInputs required idx op =
             ]
     in
     case op of
-        OneOf ((Enum _ chosen) as enum) ->
+        OneOf enum ->
             inputs (map OneOf (flip choose enum)) enum
 
-        NoneOf ((Enum _ chosen) as enum) ->
+        NoneOf enum ->
             inputs (map NoneOf (flip choose enum)) enum
 
         _ ->
@@ -232,10 +232,10 @@ select options op =
         InDate a ->
             opSelect (Operand.value a) Nothing
 
-        OneOf chosen ->
+        OneOf _ ->
             opSelect Nothing Nothing
 
-        NoneOf chosen ->
+        NoneOf _ ->
             opSelect Nothing Nothing
 
         IsTrue ->
@@ -253,19 +253,19 @@ input op =
     let
         attributes operand =
             case operand of
-                OText val ->
+                OText _ ->
                     [ type_ "text" ]
 
-                OInt val ->
+                OInt _ ->
                     [ type_ "number", step "1" ]
 
-                OFloat val ->
+                OFloat _ ->
                     [ type_ "number", step "0.01" ]
 
-                ODate val ->
+                ODate _ ->
                     [ type_ "date" ]
 
-                OTime val ->
+                OTime _ ->
                     [ type_ "datetime-local" ]
 
                 NullOperand ->
