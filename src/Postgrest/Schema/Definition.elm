@@ -1,6 +1,7 @@
 module Postgrest.Schema.Definition exposing
     ( Column(..)
     , Definition
+    , columnValue
     , primaryKeyName
     , toResource
     )
@@ -37,3 +38,8 @@ primaryKeyName : Definition -> Maybe String
 primaryKeyName definition =
     Dict.find (\_ (Column _ value) -> Value.isPrimaryKey value) definition
         |> Maybe.map Tuple.first
+
+
+columnValue : Column -> Value
+columnValue (Column _ value) =
+    value

@@ -59,7 +59,7 @@ type Operation
 
 
 type alias OperationConst =
-    Maybe String -> Maybe String -> Operation
+    String -> String -> Operation
 
 
 type alias Options =
@@ -172,18 +172,13 @@ enumInputs required idx op =
             [ Html.text "" ]
 
 
-choose : Maybe String -> Enum -> Enum
-choose mchoice (Enum choices chosen) =
-    case mchoice of
-        Just choice ->
-            if Set.member choice chosen then
-                Enum choices (Set.remove choice chosen)
+choose : String -> Enum -> Enum
+choose choice (Enum choices chosen) =
+    if Set.member choice chosen then
+        Enum choices (Set.remove choice chosen)
 
-            else
-                Enum choices (Set.insert choice chosen)
-
-        Nothing ->
-            Enum choices chosen
+    else
+        Enum choices (Set.insert choice chosen)
 
 
 select : Options -> Operation -> Html Operation
@@ -209,43 +204,43 @@ select options op =
     in
     case op of
         Equals a ->
-            opSelect (Operand.value a) Nothing
+            opSelect (Operand.value a) ""
 
         Contains a ->
-            opSelect (Operand.value a) Nothing
+            opSelect (Operand.value a) ""
 
         StartsWith a ->
-            opSelect (Operand.value a) Nothing
+            opSelect (Operand.value a) ""
 
         EndsWith a ->
-            opSelect (Operand.value a) Nothing
+            opSelect (Operand.value a) ""
 
         LesserThan a ->
-            opSelect (Operand.value a) Nothing
+            opSelect (Operand.value a) ""
 
         GreaterThan a ->
-            opSelect (Operand.value a) Nothing
+            opSelect (Operand.value a) ""
 
         Between a b ->
             opSelect (Operand.value a) (Operand.value b)
 
         InDate a ->
-            opSelect (Operand.value a) Nothing
+            opSelect (Operand.value a) ""
 
         OneOf _ ->
-            opSelect Nothing Nothing
+            opSelect "" ""
 
         NoneOf _ ->
-            opSelect Nothing Nothing
+            opSelect "" ""
 
         IsTrue ->
-            opSelect Nothing Nothing
+            opSelect "" ""
 
         IsFalse ->
-            opSelect Nothing Nothing
+            opSelect "" ""
 
         IsNull ->
-            opSelect Nothing Nothing
+            opSelect "" ""
 
 
 input : Operation -> Html Operation
@@ -267,9 +262,6 @@ input op =
 
                 OTime _ ->
                     [ type_ "datetime-local" ]
-
-                NullOperand ->
-                    []
     in
     case op of
         Equals a ->
@@ -323,8 +315,8 @@ textInput :
     -> Html Operation
 textInput attributes makeOperation operand =
     Html.input
-        ([ onInput (makeOperation << Operand.constructor operand << Just)
-         , value <| Maybe.withDefault "" <| Operand.rawValue operand
+        ([ onInput (makeOperation << Operand.constructor operand)
+         , value <| Operand.rawValue operand
          ]
             ++ attributes
         )
@@ -344,7 +336,7 @@ checkbox makeOp idx (Enum _ chosen) choice =
             [ Html.input
                 [ id inputId
                 , value choice
-                , onInput (\s -> (makeOp <| Just s) Nothing)
+                , onInput (\s -> makeOp s "")
                 , Html.Attributes.type_ "checkbox"
                 , checked <| Set.member choice chosen
                 ]
@@ -381,26 +373,32 @@ toPGQuery name op =
 
         Equals operand ->
             Operand.value operand
+                |> String.nonEmpty
                 |> Maybe.map (param << PG.eq << PG.string)
 
         LesserThan operand ->
             Operand.value operand
+                |> String.nonEmpty
                 |> Maybe.map (param << PG.lt << PG.string)
 
         GreaterThan operand ->
             Operand.value operand
+                |> String.nonEmpty
                 |> Maybe.map (param << PG.gt << PG.string)
 
         Contains operand ->
             Operand.value operand
+                |> String.nonEmpty
                 |> Maybe.map (\a -> param <| PG.ilike <| "*" ++ a ++ "*")
 
         StartsWith operand ->
             Operand.value operand
+                |> String.nonEmpty
                 |> Maybe.map (\a -> param <| PG.ilike <| a ++ "*")
 
         EndsWith operand ->
             Operand.value operand
+                |> String.nonEmpty
                 |> Maybe.map (\a -> param <| PG.ilike <| "*" ++ a)
 
         Between operandA operandB ->
@@ -421,11 +419,12 @@ toPGQuery name op =
                         ]
             in
             Maybe.map2 makeOperation
-                (Operand.value operandA)
-                (Operand.value operandB)
+                (String.nonEmpty <| Operand.value operandA)
+                (String.nonEmpty <| Operand.value operandB)
 
         InDate operand ->
             Operand.value operand
+                |> String.nonEmpty
                 |> Maybe.map (param << PG.eq << PG.string)
 
         OneOf (Enum _ chosen) ->
@@ -440,19 +439,19 @@ dropBoth c _ _ =
     c
 
 
-map : (op -> c) -> (ms -> op) -> ms -> ms -> c
+map : (op -> c) -> (s -> op) -> s -> s -> c
 map cons mfun a _ =
     cons (mfun a)
 
 
-map2 : (op -> op -> c) -> (ms -> op) -> ms -> ms -> c
+map2 : (op -> op -> c) -> (s -> op) -> s -> s -> c
 map2 cons mfun a b =
     cons (mfun a) (mfun b)
 
 
 operationOption : OperationConst -> ( String, OperationConst )
 operationOption cons =
-    ( toString (cons Nothing Nothing), cons )
+    ( toString (cons "" ""), cons )
 
 
 toString : Operation -> String

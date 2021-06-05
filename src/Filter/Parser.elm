@@ -22,12 +22,12 @@ import Parser
 import Postgrest.Schema.Definition exposing (Column(..))
 import Postgrest.Value exposing (Value(..))
 import Set exposing (Set)
-import String.Extra as String
+import String.Extra exposing (unquote)
 import Url exposing (percentDecode)
 
 
 type alias OperandConst =
-    Maybe String -> Operand
+    String -> Operand
 
 
 operation : Parser (OperandConst -> Operation)
@@ -94,7 +94,7 @@ null =
 
 equals : Parser (OperandConst -> Operation)
 equals =
-    succeed (unquoteMaybe >> operationCons Equals)
+    succeed (unquote >> operationCons Equals)
         |. token "eq"
         |. symbol "."
         |= getRest
@@ -102,7 +102,7 @@ equals =
 
 lesserThan : Parser (OperandConst -> Operation)
 lesserThan =
-    succeed (unquoteMaybe >> operationCons LesserThan)
+    succeed (unquote >> operationCons LesserThan)
         |. token "lt"
         |. symbol "."
         |= getRest
@@ -110,7 +110,7 @@ lesserThan =
 
 greaterThan : Parser (OperandConst -> Operation)
 greaterThan =
-    succeed (unquoteMaybe >> operationCons GreaterThan)
+    succeed (unquote >> operationCons GreaterThan)
         |. token "gt"
         |. symbol "."
         |= getRest
@@ -177,30 +177,21 @@ stringHelp delimiter =
         ]
 
 
-unquoteMaybe : Maybe String -> Maybe String
-unquoteMaybe =
-    Maybe.map String.unquote
-
-
-getRest : Parser (Maybe String)
+getRest : Parser String
 getRest =
-    succeed percentDecode
+    succeed (percentDecode >> Maybe.withDefault "")
         |= (getChompedString <| succeed () |. chompUntilEndOr "\n")
 
 
-getUntil : String -> Parser (Maybe String)
+getUntil : String -> Parser String
 getUntil terminator =
-    succeed percentDecode
+    succeed (percentDecode >> Maybe.withDefault "")
         |= (getChompedString <| succeed () |. chompUntil terminator)
 
 
-operationCons :
-    (Operand -> Operation)
-    -> Maybe String
-    -> OperandConst
-    -> Operation
-operationCons makeOperation mstring makeOperator =
-    makeOperation <| makeOperator mstring
+operationCons : (Operand -> Operation) -> String -> OperandConst -> Operation
+operationCons makeOperation val makeOperator =
+    makeOperation <| makeOperator val
 
 
 enumOperationCons :
