@@ -35,6 +35,7 @@ import Parser
         , Trailing(..)
         , succeed
         , symbol
+        , token
         , variable
         )
 import Postgrest.Client as PG
@@ -230,24 +231,33 @@ noneOf =
 
 
 parse : Definition -> String -> Maybe Filter
-parse definition fragment =
-    fragment
-        |> Parser.run
-            (Parser.oneOf
-                [ succeed (\name f -> f name)
-                    |= colName
-                    |. symbol "="
-                    |= Parser.oneOf
-                        [ succeed (enumCons definition)
-                            |= Filter.Parser.enum
-                        , succeed (filterCons definition)
-                            |= Filter.Parser.operation
-                        ]
-                ]
-            )
+parse definition query =
+    query
+        |> Parser.run (parseFilter definition)
         |> Result.mapError (Debug.log "error")
         |> Result.toMaybe
         |> Maybe.andThen identity
+
+
+parseFilter : Definition -> Parser (Maybe Filter)
+parseFilter definition =
+    let
+        colNames =
+            Dict.keys definition
+                |> List.map (\s -> succeed (always s) |= token s)
+    in
+    Parser.oneOf
+        [ succeed (\name f -> f name)
+            |= Parser.oneOf colNames
+            |. symbol "="
+            |= Parser.oneOf
+                [ succeed (enumCons definition)
+                    |= Filter.Parser.enum
+                , succeed (filterCons definition)
+                    |= Filter.Parser.operation
+                ]
+        , succeed Nothing
+        ]
 
 
 colName : Parser String

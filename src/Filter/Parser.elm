@@ -130,15 +130,14 @@ enum =
 
 items : Parser (List String)
 items =
-    Parser.succeed identity
-        |= Parser.sequence
-            { start = "("
-            , separator = ","
-            , end = ")"
-            , spaces = Parser.spaces
-            , item = item
-            , trailing = Forbidden
-            }
+    Parser.sequence
+        { start = "("
+        , separator = ","
+        , end = ")"
+        , spaces = Parser.spaces
+        , item = item
+        , trailing = Forbidden
+        }
 
 
 item : Parser String
