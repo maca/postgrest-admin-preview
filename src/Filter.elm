@@ -1,17 +1,19 @@
 module Filter exposing
     ( Filter(..)
     , between
-    , bool
     , contains
     , date
     , endsWith
-    , enum
     , equals
+    , filter
     , float
     , fromColumn
     , greaterThan
     , inDate
     , int
+    , isFalse
+    , isNull
+    , isTrue
     , lesserThan
     , noneOf
     , oneOf
@@ -73,28 +75,28 @@ fromColumn : String -> Column -> Maybe Filter
 fromColumn name column =
     case columnValue column of
         PString _ ->
-            Just <| text name equals (Just "")
+            Just <| filter name equals <| text ""
 
         PText _ ->
-            Just <| text name equals (Just "")
+            Just <| filter name equals <| text ""
 
         PInt _ ->
-            Just <| int name equals (Just "")
+            Just <| filter name equals <| int ""
 
         PFloat _ ->
-            Just <| float name equals (Just "")
+            Just <| filter name equals <| float ""
 
         PBool _ ->
-            Just <| bool name (Just True)
+            Just <| isTrue name
 
         PTime _ ->
-            Just <| time name inDate (Just "")
+            Just <| filter name inDate <| date ""
 
         PDate _ ->
-            Just <| date name inDate (Just "")
+            Just <| filter name inDate <| date ""
 
         PEnum _ choices ->
-            Just <| enum name oneOf choices Set.empty
+            Just <| oneOf name choices Set.empty
 
         PPrimaryKey mprimaryKey ->
             Nothing
@@ -106,57 +108,19 @@ fromColumn name column =
             Nothing
 
 
-filter : String -> OperandConst -> OperationConst -> Maybe String -> Filter
-filter name operandConst operationCons mstring =
-    case mstring of
-        Just string ->
-            Filter name (operationCons <| operandConst string)
-
-        Nothing ->
-            Filter name <| IsNull <| Just (operationCons <| operandConst "")
+filter : String -> (Operand -> Operation) -> Operand -> Filter
+filter name operationCons operand =
+    Filter name (operationCons operand)
 
 
-text : String -> (Operand -> Operation) -> Maybe String -> Filter
-text name operationCons mstring =
-    filter name Operand.text operationCons mstring
+oneOf : String -> List String -> Set String -> Filter
+oneOf name choices chosen =
+    Filter name <| OneOf <| Operand.enum choices chosen
 
 
-int : String -> (Operand -> Operation) -> Maybe String -> Filter
-int name operationCons mstring =
-    filter name Operand.int operationCons mstring
-
-
-float : String -> (Operand -> Operation) -> Maybe String -> Filter
-float name operationCons mstring =
-    filter name Operand.float operationCons mstring
-
-
-time : String -> (Operand -> Operation) -> Maybe String -> Filter
-time name operationCons mstring =
-    filter name Operand.time operationCons mstring
-
-
-date : String -> (Operand -> Operation) -> Maybe String -> Filter
-date name operationCons mstring =
-    filter name Operand.date operationCons mstring
-
-
-enum : String -> (Enum -> Operation) -> List String -> Set String -> Filter
-enum name operationCons choices chosen =
-    Filter name <| operationCons <| Operand.enum choices chosen
-
-
-bool : String -> Maybe Bool -> Filter
-bool name value =
-    case value of
-        Just True ->
-            Filter name IsTrue
-
-        Just False ->
-            Filter name IsFalse
-
-        Nothing ->
-            Filter name (IsNull <| Just IsTrue)
+noneOf : String -> List String -> Set String -> Filter
+noneOf name choices chosen =
+    Filter name <| NoneOf <| Operand.enum choices chosen
 
 
 
@@ -203,14 +167,53 @@ inDate =
     InDate
 
 
-oneOf : Enum -> Operation
-oneOf =
-    OneOf
+
+-- Operand constructors
 
 
-noneOf : Enum -> Operation
-noneOf =
-    NoneOf
+date : String -> Operand
+date =
+    Operand.date
+
+
+float : String -> Operand
+float =
+    Operand.float
+
+
+int : String -> Operand
+int =
+    Operand.int
+
+
+text : String -> Operand
+text =
+    Operand.text
+
+
+time : String -> Operand
+time =
+    Operand.time
+
+
+value : Operand -> String
+value =
+    Operand.value
+
+
+isTrue : String -> Filter
+isTrue name =
+    Filter name IsTrue
+
+
+isFalse : String -> Filter
+isFalse name =
+    Filter name IsFalse
+
+
+isNull : String -> Filter
+isNull name =
+    Filter name (IsNull Nothing)
 
 
 
