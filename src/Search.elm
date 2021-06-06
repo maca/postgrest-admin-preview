@@ -162,11 +162,11 @@ viewFilter definition idx ((Filter name op) as filter) =
                 |> inputs "text"
 
         Just (Column isRequired (PInt _)) ->
-            floatFilterInputs isRequired name idx op
+            intFilterInputs isRequired name idx op
                 |> inputs "number"
 
         Just (Column isRequired (PFloat _)) ->
-            dateFilterInputs isRequired name idx op
+            floatFilterInputs isRequired name idx op
                 |> inputs "date"
 
         Just (Column isRequired (PBool _)) ->
@@ -181,7 +181,7 @@ viewFilter definition idx ((Filter name op) as filter) =
             dateFilterInputs isRequired name idx op
                 |> inputs "time"
 
-        Just (Column isRequired (PEnum _ choices)) ->
+        Just (Column isRequired (PEnum _ _)) ->
             enumInputs isRequired name idx op
                 |> inputs "enum"
 
@@ -225,10 +225,10 @@ textFilterInputs required name idx op =
     let
         options =
             List.map operationOption
-                [ map Equals text
-                , map Contains text
-                , map StartsWith text
-                , map EndsWith text
+                [ map Filter.equals text
+                , map Filter.contains text
+                , map Filter.startsWith text
+                , map Filter.endsWith text
                 ]
     in
     [ select (options ++ nullOption required op) op
@@ -242,10 +242,10 @@ intFilterInputs required name idx op =
     let
         options =
             List.map operationOption
-                [ map Equals int
-                , map LesserThan int
-                , map GreaterThan int
-                , map2 Between int
+                [ map Filter.equals int
+                , map Filter.lesserThan int
+                , map Filter.greaterThan int
+                , map2 Filter.between int
                 ]
     in
     [ select (options ++ nullOption required op) op
@@ -259,10 +259,10 @@ floatFilterInputs required name idx op =
     let
         options =
             List.map operationOption
-                [ map Equals float
-                , map LesserThan float
-                , map GreaterThan float
-                , map2 Between float
+                [ map Filter.equals float
+                , map Filter.lesserThan float
+                , map Filter.greaterThan float
+                , map2 Filter.between float
                 ]
     in
     [ select (options ++ nullOption required op) op
@@ -276,10 +276,10 @@ dateFilterInputs required name idx op =
     let
         options =
             List.map operationOption
-                [ map InDate date
-                , map LesserThan date
-                , map GreaterThan date
-                , map2 Between date
+                [ map Filter.inDate date
+                , map Filter.lesserThan date
+                , map Filter.greaterThan date
+                , map2 Filter.between date
                 ]
     in
     [ select (options ++ nullOption required op) op
@@ -293,10 +293,10 @@ timeFilterInputs required name idx op =
     let
         options =
             List.map operationOption
-                [ map InDate time
-                , map LesserThan time
-                , map GreaterThan time
-                , map2 Between time
+                [ map Filter.inDate time
+                , map Filter.lesserThan time
+                , map Filter.greaterThan time
+                , map2 Filter.between time
                 ]
     in
     [ select (options ++ nullOption required op) op
@@ -396,105 +396,75 @@ select options op =
                 [ onInput optionSelected ]
                 (List.map makeOption options)
     in
-    case op of
-        Equals a ->
-            opSelect (Operand.value a) ""
+    case Operation.values op of
+        [ a, b ] ->
+            opSelect a b
 
-        Contains a ->
-            opSelect (Operand.value a) ""
+        [ a ] ->
+            opSelect a ""
 
-        StartsWith a ->
-            opSelect (Operand.value a) ""
-
-        EndsWith a ->
-            opSelect (Operand.value a) ""
-
-        LesserThan a ->
-            opSelect (Operand.value a) ""
-
-        GreaterThan a ->
-            opSelect (Operand.value a) ""
-
-        Between a b ->
-            opSelect (Operand.value a) (Operand.value b)
-
-        InDate a ->
-            opSelect (Operand.value a) ""
-
-        OneOf _ ->
-            opSelect "" ""
-
-        NoneOf _ ->
-            opSelect "" ""
-
-        IsTrue ->
-            opSelect "" ""
-
-        IsFalse ->
-            opSelect "" ""
-
-        IsNull _ ->
+        _ ->
             opSelect "" ""
 
 
 input : String -> Int -> Operation -> Html Msg
 input name idx op =
     let
-        input_ operationCons operand =
+        input_ operationCons operand attrs =
             case operand of
                 OText _ ->
-                    textInput [ type_ "text" ]
+                    textInput ([ type_ "text" ] ++ attrs)
                         (operationCons >> Filter name >> UpdateFilter idx)
                         operand
 
                 OInt _ ->
-                    textInput [ type_ "number", step "1" ]
+                    textInput ([ type_ "number", step "1" ] ++ attrs)
                         (operationCons >> Filter name >> UpdateFilter idx)
                         operand
 
                 OFloat _ ->
-                    textInput [ type_ "number", step "0.01" ]
+                    textInput ([ type_ "number", step "0.01" ] ++ attrs)
                         (operationCons >> Filter name >> UpdateFilter idx)
                         operand
 
                 ODate _ ->
-                    textInput [ type_ "date" ]
+                    textInput ([ type_ "date" ] ++ attrs)
                         (operationCons >> Filter name >> UpdateFilter idx)
                         operand
 
                 OTime _ ->
-                    textInput [ type_ "datetime-local" ]
+                    textInput ([ type_ "datetime-local" ] ++ attrs)
                         (operationCons >> Filter name >> UpdateFilter idx)
                         operand
     in
     case op of
         Equals a ->
-            input_ Equals a
+            input_ Equals a []
 
         Contains a ->
-            input_ Contains a
+            input_ Contains a []
 
         StartsWith a ->
-            input_ StartsWith a
+            input_ StartsWith a []
 
         EndsWith a ->
-            input_ EndsWith a
+            input_ EndsWith a []
 
         LesserThan a ->
-            input_ LesserThan a
+            input_ LesserThan a []
 
         GreaterThan a ->
-            input_ GreaterThan a
+            input_ GreaterThan a []
 
         Between a b ->
             div []
-                [ input_ (flip Between b) a
+                [ input_ (flip Between b) a []
                 , span [] [ Html.text "and" ]
-                , input_ (flip Between a) b
+                , input_ (flip Between a) b []
                 ]
 
         InDate a ->
-            input_ InDate a
+            input_ InDate a [ type_ "date" ]
 
         OneOf _ ->
             Html.text ""

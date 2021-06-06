@@ -1,6 +1,7 @@
 module Filter exposing
     ( Filter(..)
     , between
+    , column
     , contains
     , date
     , endsWith
@@ -17,6 +18,7 @@ module Filter exposing
     , lesserThan
     , noneOf
     , oneOf
+    , operation
     , parse
     , startsWith
     , text
@@ -25,7 +27,7 @@ module Filter exposing
     )
 
 import Dict
-import Filter.Operand as Operand exposing (Enum, Operand(..))
+import Filter.Operand as Operand exposing (Enum(..), Operand(..))
 import Filter.Operation as Operation exposing (Operation(..))
 import Filter.Parser
 import Parser
@@ -37,7 +39,6 @@ import Parser
         , succeed
         , symbol
         , token
-        , variable
         )
 import Postgrest.Client as PG
 import Postgrest.Schema.Definition
@@ -58,13 +59,19 @@ type alias OperandConst =
     String -> Operand
 
 
-type alias OperationConst =
-    Operand -> Operation
-
-
 toPGQuery : Filter -> Maybe PG.Param
 toPGQuery (Filter name op) =
     Operation.toPGQuery name op
+
+
+column : Filter -> String
+column (Filter name _) =
+    name
+
+
+operation : Filter -> Operation
+operation (Filter _ op) =
+    op
 
 
 
@@ -72,8 +79,8 @@ toPGQuery (Filter name op) =
 
 
 fromColumn : String -> Column -> Maybe Filter
-fromColumn name column =
-    case columnValue column of
+fromColumn name col =
+    case columnValue col of
         PString _ ->
             Just <| filter name equals <| text ""
 
@@ -194,11 +201,6 @@ text =
 time : String -> Operand
 time =
     Operand.time
-
-
-value : Operand -> String
-value =
-    Operand.value
 
 
 isTrue : String -> Filter

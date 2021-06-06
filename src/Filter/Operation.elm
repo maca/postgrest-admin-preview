@@ -1,4 +1,4 @@
-module Filter.Operation exposing (Operation(..), toPGQuery, toString)
+module Filter.Operation exposing (Operation(..), toPGQuery, toString, values)
 
 import Filter.Operand as Operand exposing (Enum(..), Operand(..))
 import Postgrest.Client as PG
@@ -20,10 +20,6 @@ type Operation
     | InDate Operand
     | OneOf Enum
     | NoneOf Enum
-
-
-type alias OperationConst =
-    String -> String -> Operation
 
 
 toPGQuery : String -> Operation -> Maybe PG.Param
@@ -154,3 +150,46 @@ toString operation =
 
         NoneOf _ ->
             "is none of"
+
+
+values : Operation -> List String
+values operation =
+    case operation of
+        Equals a ->
+            [ Operand.value a ]
+
+        Contains a ->
+            [ Operand.value a ]
+
+        StartsWith a ->
+            [ Operand.value a ]
+
+        EndsWith a ->
+            [ Operand.value a ]
+
+        LesserThan a ->
+            [ Operand.value a ]
+
+        GreaterThan a ->
+            [ Operand.value a ]
+
+        Between a b ->
+            [ Operand.value a, Operand.value b ]
+
+        InDate a ->
+            [ Operand.value a ]
+
+        OneOf (Enum _ chosen) ->
+            Set.toList chosen
+
+        NoneOf (Enum choices chosen) ->
+            Set.diff (Set.fromList choices) chosen |> Set.toList
+
+        IsTrue ->
+            []
+
+        IsFalse ->
+            []
+
+        IsNull _ ->
+            []
