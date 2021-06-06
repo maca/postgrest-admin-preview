@@ -1,6 +1,5 @@
 module Filter exposing
     ( Filter(..)
-    , Kind(..)
     , between
     , bool
     , contains
@@ -49,18 +48,8 @@ import Postgrest.Value exposing (Value(..))
 import Set exposing (Set)
 
 
-type Kind
-    = IText
-    | IInt
-    | IFloat
-    | IDate
-    | ITime
-    | IBool
-    | IEnum
-
-
 type Filter
-    = Filter Kind String Operation
+    = Filter String Operation
 
 
 type alias OperandConst =
@@ -72,7 +61,7 @@ type alias OperationConst =
 
 
 toPGQuery : Filter -> Maybe PG.Param
-toPGQuery (Filter _ name op) =
+toPGQuery (Filter name op) =
     Operation.toPGQuery name op
 
 
@@ -117,59 +106,57 @@ fromColumn name column =
             Nothing
 
 
-filter : String -> Kind -> OperationConst -> Maybe String -> Filter
-filter name kind operationCons mstring =
-    let
-        fcons =
-            Filter kind name
-    in
-    Maybe.map2 (\oc s -> fcons <| operationCons <| oc s)
-        (operandConst kind)
-        mstring
-        |> Maybe.withDefault (fcons (IsNull Nothing))
+filter : String -> OperandConst -> OperationConst -> Maybe String -> Filter
+filter name operandConst operationCons mstring =
+    case mstring of
+        Just string ->
+            Filter name (operationCons <| operandConst string)
+
+        Nothing ->
+            Filter name <| IsNull <| Just (operationCons <| operandConst "")
 
 
 text : String -> (Operand -> Operation) -> Maybe String -> Filter
 text name operationCons mstring =
-    filter name IText operationCons mstring
+    filter name Operand.text operationCons mstring
 
 
 int : String -> (Operand -> Operation) -> Maybe String -> Filter
 int name operationCons mstring =
-    filter name IInt operationCons mstring
+    filter name Operand.int operationCons mstring
 
 
 float : String -> (Operand -> Operation) -> Maybe String -> Filter
 float name operationCons mstring =
-    filter name IFloat operationCons mstring
+    filter name Operand.float operationCons mstring
 
 
 time : String -> (Operand -> Operation) -> Maybe String -> Filter
 time name operationCons mstring =
-    filter name ITime operationCons mstring
+    filter name Operand.time operationCons mstring
 
 
 date : String -> (Operand -> Operation) -> Maybe String -> Filter
 date name operationCons mstring =
-    filter name IDate operationCons mstring
+    filter name Operand.date operationCons mstring
 
 
 enum : String -> (Enum -> Operation) -> List String -> Set String -> Filter
 enum name operationCons choices chosen =
-    Filter IEnum name <| operationCons <| Operand.enum choices chosen
+    Filter name <| operationCons <| Operand.enum choices chosen
 
 
 bool : String -> Maybe Bool -> Filter
 bool name value =
     case value of
         Just True ->
-            Filter IBool name IsTrue
+            Filter name IsTrue
 
         Just False ->
-            Filter IBool name IsFalse
+            Filter name IsFalse
 
         Nothing ->
-            Filter IBool name (IsNull Nothing)
+            Filter name (IsNull <| Just IsTrue)
 
 
 
@@ -267,28 +254,28 @@ filterCons : Definition -> (OperandConst -> Operation) -> String -> Maybe Filter
 filterCons definition operationCons name =
     case Dict.get name definition |> Maybe.map columnValue of
         Just (PString _) ->
-            Just <| Filter IText name <| operationCons Operand.text
+            Just <| Filter name <| operationCons Operand.text
 
         Just (PText _) ->
-            Just <| Filter IText name <| operationCons Operand.text
+            Just <| Filter name <| operationCons Operand.text
 
         Just (PInt _) ->
-            Just <| Filter IInt name <| operationCons Operand.int
+            Just <| Filter name <| operationCons Operand.int
 
         Just (PFloat _) ->
-            Just <| Filter IFloat name <| operationCons Operand.float
+            Just <| Filter name <| operationCons Operand.float
 
         Just (PBool _) ->
-            Just <| Filter IBool name <| operationCons Operand.text
+            Just <| Filter name <| operationCons Operand.text
 
         Just (PTime _) ->
-            Just <| Filter ITime name <| operationCons Operand.time
+            Just <| Filter name <| operationCons Operand.time
 
         Just (PDate _) ->
-            Just <| Filter IDate name <| operationCons Operand.date
+            Just <| Filter name <| operationCons Operand.date
 
         Just (PEnum _ choices) ->
-            Just <| Filter IEnum name <| IsNull <| Just <| NoneOf <| Operand.enum choices Set.empty
+            Just <| Filter name <| IsNull <| Just <| NoneOf <| Operand.enum choices Set.empty
 
         _ ->
             Nothing
@@ -299,39 +286,10 @@ enumCons definition operationCons name =
     case Dict.get name definition |> Maybe.map columnValue of
         Just (PEnum _ choices) ->
             if operationCons choices == IsNull Nothing then
-                Just <| Filter IEnum name <| OneOf <| Operand.enum choices Set.empty
+                Just <| Filter name <| OneOf <| Operand.enum choices Set.empty
 
             else
-                Just <| Filter IEnum name <| operationCons choices
+                Just <| Filter name <| operationCons choices
 
         _ ->
-            Nothing
-
-
-
--- Helpers
-
-
-operandConst : Kind -> Maybe (String -> Operand)
-operandConst kind =
-    case kind of
-        IText ->
-            Just Operand.text
-
-        IInt ->
-            Just Operand.int
-
-        IFloat ->
-            Just Operand.float
-
-        IDate ->
-            Just Operand.date
-
-        ITime ->
-            Just Operand.time
-
-        IBool ->
-            Nothing
-
-        IEnum ->
             Nothing

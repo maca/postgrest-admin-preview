@@ -4,7 +4,7 @@ import Array exposing (Array)
 import Array.Extra as Array
 import Basics.Extra exposing (flip)
 import Dict
-import Filter as Filter exposing (Filter(..), Kind(..))
+import Filter as Filter exposing (Filter(..))
 import Filter.Operand as Operand
     exposing
         ( Enum(..)
@@ -134,17 +134,12 @@ view open { definition, filters } =
 
 
 viewFilter : Definition -> Int -> Filter -> Html Msg
-viewFilter definition idx ((Filter kind name op) as filter) =
+viewFilter definition idx ((Filter name op) as filter) =
     let
-        isRequired =
-            Dict.get name definition
-                |> Maybe.map (\(Column req _) -> req)
-                |> Maybe.withDefault False
-
-        inputs sKind content =
+        inputs kind content =
             div
                 [ class "filter"
-                , class sKind
+                , class kind
                 ]
                 [ div [ class "filter-inputs" ]
                     (fieldSelect definition idx filter :: content)
@@ -157,44 +152,51 @@ viewFilter definition idx ((Filter kind name op) as filter) =
                     [ i [ class "icono-cross" ] [] ]
                 ]
     in
-    case kind of
-        IText ->
+    case Dict.get name definition of
+        Just (Column isRequired (PString _)) ->
             textFilterInputs isRequired name idx op
                 |> inputs "text"
 
-        IInt ->
-            intFilterInputs isRequired name idx op
-                |> inputs "number"
+        Just (Column isRequired (PText _)) ->
+            textFilterInputs isRequired name idx op
+                |> inputs "text"
 
-        IFloat ->
+        Just (Column isRequired (PInt _)) ->
             floatFilterInputs isRequired name idx op
                 |> inputs "number"
 
-        IDate ->
+        Just (Column isRequired (PFloat _)) ->
             dateFilterInputs isRequired name idx op
                 |> inputs "date"
 
-        ITime ->
-            timeFilterInputs isRequired name idx op
-                |> inputs "time"
-
-        IBool ->
+        Just (Column isRequired (PBool _)) ->
             boolFilterInputs isRequired name idx op
                 |> inputs "bool"
 
-        IEnum ->
+        Just (Column isRequired (PTime _)) ->
+            timeFilterInputs isRequired name idx op
+                |> inputs "time"
+
+        Just (Column isRequired (PDate _)) ->
+            dateFilterInputs isRequired name idx op
+                |> inputs "time"
+
+        Just (Column isRequired (PEnum _ choices)) ->
             enumInputs isRequired name idx op
                 |> inputs "enum"
 
+        _ ->
+            Html.text ""
+
 
 fieldSelect : Definition -> Int -> Filter -> Html Msg
-fieldSelect definition idx ((Filter kind name op) as filter) =
+fieldSelect definition idx ((Filter name op) as filter) =
     let
         makeFilter selection =
             case defaultFilter selection definition of
-                Just ((Filter kind_ name_ _) as filter_) ->
-                    if kind_ == kind then
-                        Filter kind name_ op
+                Just ((Filter name_ op_) as filter_) ->
+                    if Operation.toString op_ == Operation.toString op then
+                        Filter name_ op
 
                     else
                         filter_
@@ -230,7 +232,7 @@ textFilterInputs required name idx op =
                 ]
     in
     [ select (options ++ nullOption required op) op
-        |> Html.map (Filter IText name >> UpdateFilter idx)
+        |> Html.map (Filter name >> UpdateFilter idx)
     , input name idx op
     ]
 
@@ -247,7 +249,7 @@ intFilterInputs required name idx op =
                 ]
     in
     [ select (options ++ nullOption required op) op
-        |> Html.map (Filter IInt name >> UpdateFilter idx)
+        |> Html.map (Filter name >> UpdateFilter idx)
     , input name idx op
     ]
 
@@ -264,7 +266,7 @@ floatFilterInputs required name idx op =
                 ]
     in
     [ select (options ++ nullOption required op) op
-        |> Html.map (Filter IFloat name >> UpdateFilter idx)
+        |> Html.map (Filter name >> UpdateFilter idx)
     , input name idx op
     ]
 
@@ -281,7 +283,7 @@ dateFilterInputs required name idx op =
                 ]
     in
     [ select (options ++ nullOption required op) op
-        |> Html.map (Filter IDate name >> UpdateFilter idx)
+        |> Html.map (Filter name >> UpdateFilter idx)
     , input name idx op
     ]
 
@@ -298,7 +300,7 @@ timeFilterInputs required name idx op =
                 ]
     in
     [ select (options ++ nullOption required op) op
-        |> Html.map (Filter ITime name >> UpdateFilter idx)
+        |> Html.map (Filter name >> UpdateFilter idx)
     , input name idx op
     ]
 
@@ -310,7 +312,7 @@ boolFilterInputs required name idx op =
             List.map (dropBoth >> operationOption) [ IsTrue, IsFalse ]
     in
     [ select (options ++ nullOption required op) op
-        |> Html.map (Filter IBool name >> UpdateFilter idx)
+        |> Html.map (Filter name >> UpdateFilter idx)
     , input name idx op
     ]
 
@@ -326,7 +328,7 @@ enumInputs required name idx op =
 
         inputs makeOp ((Enum choices _) as enum) =
             [ select (options enum ++ nullOption required op) op
-                |> Html.map (Filter IText name >> UpdateFilter idx)
+                |> Html.map (Filter name >> UpdateFilter idx)
             , choices
                 |> List.map (checkbox makeOp name idx enum)
                 |> div [ class "checkboxes" ]
@@ -343,12 +345,12 @@ enumInputs required name idx op =
             case op_ of
                 OneOf enum ->
                     [ select (options enum ++ nullOption required op_) op
-                        |> Html.map (Filter IEnum name >> UpdateFilter idx)
+                        |> Html.map (Filter name >> UpdateFilter idx)
                     ]
 
                 NoneOf enum ->
                     [ select (options enum ++ nullOption required op_) op
-                        |> Html.map (Filter IEnum name >> UpdateFilter idx)
+                        |> Html.map (Filter name >> UpdateFilter idx)
                     ]
 
                 _ ->
@@ -442,27 +444,27 @@ input name idx op =
             case operand of
                 OText _ ->
                     textInput [ type_ "text" ]
-                        (operationCons >> Filter IText name >> UpdateFilter idx)
+                        (operationCons >> Filter name >> UpdateFilter idx)
                         operand
 
                 OInt _ ->
                     textInput [ type_ "number", step "1" ]
-                        (operationCons >> Filter IInt name >> UpdateFilter idx)
+                        (operationCons >> Filter name >> UpdateFilter idx)
                         operand
 
                 OFloat _ ->
                     textInput [ type_ "number", step "0.01" ]
-                        (operationCons >> Filter IFloat name >> UpdateFilter idx)
+                        (operationCons >> Filter name >> UpdateFilter idx)
                         operand
 
                 ODate _ ->
                     textInput [ type_ "date" ]
-                        (operationCons >> Filter IDate name >> UpdateFilter idx)
+                        (operationCons >> Filter name >> UpdateFilter idx)
                         operand
 
                 OTime _ ->
                     textInput [ type_ "datetime-local" ]
-                        (operationCons >> Filter ITime name >> UpdateFilter idx)
+                        (operationCons >> Filter name >> UpdateFilter idx)
                         operand
     in
     case op of
@@ -532,7 +534,7 @@ checkbox makeOp name idx (Enum _ chosen) choice =
         [ Html.input
             [ id inputId
             , value choice
-            , onInput (\s -> makeOp s "" |> Filter IEnum name |> UpdateFilter idx)
+            , onInput (\s -> makeOp s "" |> Filter name |> UpdateFilter idx)
             , Html.Attributes.type_ "checkbox"
             , checked <| Set.member choice chosen
             ]
