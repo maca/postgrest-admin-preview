@@ -89,7 +89,7 @@ false =
 
 null : Parser (OperandConst -> Operation)
 null =
-    succeed (always IsNull) |. token "null"
+    succeed (always (IsNull Nothing)) |. token "null"
 
 
 equals : Parser (OperandConst -> Operation)

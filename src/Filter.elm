@@ -126,7 +126,7 @@ filter name kind operationCons mstring =
     Maybe.map2 (\oc s -> fcons <| operationCons <| oc s)
         (operandConst kind)
         mstring
-        |> Maybe.withDefault (fcons IsNull)
+        |> Maybe.withDefault (fcons (IsNull Nothing))
 
 
 text : String -> (Operand -> Operation) -> Maybe String -> Filter
@@ -169,7 +169,7 @@ bool name value =
             Filter IBool name IsFalse
 
         Nothing ->
-            Filter IBool name IsNull
+            Filter IBool name (IsNull Nothing)
 
 
 
@@ -256,17 +256,7 @@ parseFilter definition =
                 , succeed (filterCons definition)
                     |= Filter.Parser.operation
                 ]
-        , succeed Nothing
         ]
-
-
-colName : Parser String
-colName =
-    variable
-        { start = Char.isAlphaNum
-        , inner = \c -> Char.isAlphaNum c || c == '_'
-        , reserved = Set.fromList [ "and", "or", "order" ]
-        }
 
 
 
@@ -297,21 +287,22 @@ filterCons definition operationCons name =
         Just (PDate _) ->
             Just <| Filter IDate name <| operationCons Operand.date
 
+        Just (PEnum _ choices) ->
+            Just <| Filter IEnum name <| IsNull <| Just <| NoneOf <| Operand.enum choices Set.empty
+
         _ ->
             Nothing
 
 
 enumCons : Definition -> (List String -> Operation) -> String -> Maybe Filter
 enumCons definition operationCons name =
-    Dict.get name definition
-        |> Maybe.andThen (enumConsHelp operationCons name)
+    case Dict.get name definition |> Maybe.map columnValue of
+        Just (PEnum _ choices) ->
+            if operationCons choices == IsNull Nothing then
+                Just <| Filter IEnum name <| OneOf <| Operand.enum choices Set.empty
 
-
-enumConsHelp : (List String -> Operation) -> String -> Column -> Maybe Filter
-enumConsHelp operationCons name column =
-    case columnValue column of
-        PEnum _ choices ->
-            Just <| Filter IEnum name <| operationCons choices
+            else
+                Just <| Filter IEnum name <| operationCons choices
 
         _ ->
             Nothing

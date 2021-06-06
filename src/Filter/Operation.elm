@@ -45,7 +45,7 @@ import String.Extra as String
 type Operation
     = IsTrue
     | IsFalse
-    | IsNull
+    | IsNull (Maybe Operation)
     | Equals Operand
     | LesserThan Operand
     | GreaterThan Operand
@@ -77,7 +77,7 @@ textFilterInputs required op =
                 , map EndsWith text
                 ]
     in
-    [ select (options ++ nullOption required) op, input op ]
+    [ select (options ++ nullOption required op) op, input op ]
 
 
 intFilterInputs : Bool -> Operation -> List (Html Operation)
@@ -91,7 +91,7 @@ intFilterInputs required op =
                 , map2 Between int
                 ]
     in
-    [ select (options ++ nullOption required) op, input op ]
+    [ select (options ++ nullOption required op) op, input op ]
 
 
 floatFilterInputs : Bool -> Operation -> List (Html Operation)
@@ -105,7 +105,7 @@ floatFilterInputs required op =
                 , map2 Between float
                 ]
     in
-    [ select (options ++ nullOption required) op, input op ]
+    [ select (options ++ nullOption required op) op, input op ]
 
 
 dateFilterInputs : Bool -> Operation -> List (Html Operation)
@@ -119,7 +119,7 @@ dateFilterInputs required op =
                 , map2 Between date
                 ]
     in
-    [ select (options ++ nullOption required) op, input op ]
+    [ select (options ++ nullOption required op) op, input op ]
 
 
 timeFilterInputs : Bool -> Operation -> List (Html Operation)
@@ -133,7 +133,7 @@ timeFilterInputs required op =
                 , map2 Between time
                 ]
     in
-    [ select (options ++ nullOption required) op, input op ]
+    [ select (options ++ nullOption required op) op, input op ]
 
 
 boolFilterInputs : Bool -> Operation -> List (Html Operation)
@@ -142,7 +142,7 @@ boolFilterInputs required op =
         options =
             List.map (dropBoth >> operationOption) [ IsTrue, IsFalse ]
     in
-    [ select (options ++ nullOption required) op, input op ]
+    [ select (options ++ nullOption required op) op, input op ]
 
 
 enumInputs : Bool -> Int -> Operation -> List (Html Operation)
@@ -155,7 +155,7 @@ enumInputs required idx op =
                 ]
 
         inputs makeOp ((Enum choices _) as enum) =
-            [ select (options enum ++ nullOption required) op
+            [ select (options enum ++ nullOption required op) op
             , choices
                 |> List.map (checkbox makeOp idx enum)
                 |> div [ class "checkboxes" ]
@@ -168,14 +168,28 @@ enumInputs required idx op =
         NoneOf enum ->
             inputs (map NoneOf (flip choose enum)) enum
 
+        IsNull (Just op_) ->
+            case op_ of
+                OneOf enum ->
+                    [ select (options enum ++ nullOption required op_) op ]
+
+                NoneOf enum ->
+                    [ select (options enum ++ nullOption required op_) op ]
+
+                _ ->
+                    []
+
         _ ->
-            [ Html.text "" ]
+            []
 
 
 choose : String -> Enum -> Enum
 choose choice (Enum choices chosen) =
     if Set.member choice chosen then
         Enum choices (Set.remove choice chosen)
+
+    else if String.isEmpty choice then
+        Enum choices chosen
 
     else
         Enum choices (Set.insert choice chosen)
@@ -194,7 +208,7 @@ select options op =
                         makeOperation =
                             Dict.fromList options
                                 |> Dict.get selection
-                                |> Maybe.withDefault (dropBoth IsNull)
+                                |> Maybe.withDefault (dropBoth <| IsNull <| Just op)
                     in
                     makeOperation a b
             in
@@ -239,7 +253,7 @@ select options op =
         IsFalse ->
             opSelect "" ""
 
-        IsNull ->
+        IsNull _ ->
             opSelect "" ""
 
 
@@ -304,7 +318,7 @@ input op =
         IsFalse ->
             Html.text ""
 
-        IsNull ->
+        IsNull _ ->
             Html.text ""
 
 
@@ -346,13 +360,13 @@ checkbox makeOp idx (Enum _ chosen) choice =
         ]
 
 
-nullOption : Bool -> List ( String, OperationConst )
-nullOption required =
+nullOption : Bool -> Operation -> List ( String, OperationConst )
+nullOption required op =
     if required then
         []
 
     else
-        [ operationOption <| dropBoth IsNull ]
+        [ operationOption <| dropBoth (IsNull <| Just op) ]
 
 
 toPGQuery : String -> Operation -> Maybe PG.Param
@@ -368,7 +382,7 @@ toPGQuery name op =
         IsFalse ->
             Just <| param PG.false
 
-        IsNull ->
+        IsNull _ ->
             Just <| param PG.null
 
         Equals operand ->
@@ -428,10 +442,18 @@ toPGQuery name op =
                 |> Maybe.map (param << PG.eq << PG.string)
 
         OneOf (Enum _ chosen) ->
-            Just <| param <| PG.inList PG.string <| Set.toList chosen
+            if Set.isEmpty chosen then
+                Just <| param PG.null
 
-        NoneOf (Enum _ chosen) ->
-            Just <| param <| PG.not <| PG.inList PG.string <| Set.toList chosen
+            else
+                Just <| param <| PG.inList PG.string <| Set.toList chosen
+
+        NoneOf (Enum choices chosen) ->
+            if Set.isEmpty chosen then
+                Just <| param <| PG.inList PG.string choices
+
+            else
+                Just <| param <| PG.not <| PG.inList PG.string <| Set.toList chosen
 
 
 dropBoth : c -> a -> b -> c
@@ -463,7 +485,7 @@ toString operation =
         IsFalse ->
             "is false"
 
-        IsNull ->
+        IsNull _ ->
             "is not set"
 
         Equals _ ->
