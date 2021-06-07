@@ -242,15 +242,28 @@ routeParser : Url -> Model -> Parser (Route -> a) a
 routeParser url model =
     Parser.oneOf
         [ Parser.map Root Parser.top
-        , Parser.map (makeListingRoute url) Parser.string
+        , Parser.map (makeListingRoute model url) Parser.string
         , formRouteParser model
         ]
 
 
-makeListingRoute : Url -> String -> Route
-makeListingRoute url resourcesName =
+makeListingRoute : Model -> Url -> String -> Route
+makeListingRoute model url resourcesName =
+    let
+        modify =
+            case model.route of
+                Listing listing ->
+                    if Listing.isSearchVisible listing then
+                        Listing.showSearch
+
+                    else
+                        identity
+
+                _ ->
+                    identity
+    in
     LoadingDefinition resourcesName
-        (Listing.init resourcesName url.query >> Listing)
+        (Listing.init resourcesName url.query >> modify >> Listing)
 
 
 formRouteParser : Model -> Parser (Route -> a) a

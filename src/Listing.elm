@@ -4,7 +4,10 @@ module Listing exposing
     , ascendingBy
     , descendingBy
     , fetch
+    , hideSearch
     , init
+    , isSearchVisible
+    , showSearch
     , update
     , view
     )
@@ -133,9 +136,24 @@ init resourcesName rawQuery definition =
     , pages = []
     , order = order
     , search = Search.init definition (rawQuery |> Maybe.withDefault "")
-    , searchOpen = True
+    , searchOpen = False
     , textSelect = Off
     }
+
+
+isSearchVisible : Listing -> Bool
+isSearchVisible { searchOpen } =
+    searchOpen
+
+
+showSearch : Listing -> Listing
+showSearch listing =
+    { listing | searchOpen = True }
+
+
+hideSearch : Listing -> Listing
+hideSearch listing =
+    { listing | searchOpen = False }
 
 
 ascendingBy : String -> Listing -> Listing
