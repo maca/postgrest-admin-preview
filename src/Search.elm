@@ -16,7 +16,7 @@ import Filter.Operand as Operand
         , time
         )
 import Filter.Operation as Operation exposing (Operation(..))
-import Html exposing (Attribute, Html, a, button, div, i, label, option, span)
+import Html exposing (Attribute, Html, button, div, i, label, option, span)
 import Html.Attributes
     exposing
         ( checked
@@ -163,6 +163,7 @@ view open { definition, filters } =
         ]
 
 
+buttonAdd : AddPosition -> Html Msg
 buttonAdd tagger =
     button
         [ onClick (AddFilter tagger)
@@ -470,27 +471,27 @@ input name idx op =
     let
         input_ operationCons operand attrs =
             if text (Operand.value operand) == operand then
-                textInput ([ type_ "text" ] ++ attrs)
+                textInput (type_ "text" :: attrs)
                     (operationCons >> Filter.init name >> UpdateFilter idx)
                     operand
 
             else if int (Operand.value operand) == operand then
-                textInput ([ type_ "number", step "1" ] ++ attrs)
+                textInput (type_ "number" :: step "1" :: attrs)
                     (operationCons >> Filter.init name >> UpdateFilter idx)
                     operand
 
             else if float (Operand.value operand) == operand then
-                textInput ([ type_ "number", step "0.01" ] ++ attrs)
+                textInput (type_ "number" :: step "0.01" :: attrs)
                     (operationCons >> Filter.init name >> UpdateFilter idx)
                     operand
 
             else if date (Operand.value operand) == operand then
-                textInput ([ type_ "date" ] ++ attrs)
+                textInput (type_ "date" :: attrs)
                     (operationCons >> Filter.init name >> UpdateFilter idx)
                     operand
 
             else if date (Operand.value operand) == operand then
-                textInput ([ type_ "datetime-local" ] ++ attrs)
+                textInput (type_ "datetime-local" :: attrs)
                     (operationCons >> Filter.init name >> UpdateFilter idx)
                     operand
 
