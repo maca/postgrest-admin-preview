@@ -107,6 +107,10 @@
     cursor: pointer;
 }
 
+.resources-listing td, .resources-listing th {
+    padding-left: 1rem;
+}
+
 .resources-listing .listing-row:hover {
     background-color: #eee;
     transition: all 0.1s ease-out;

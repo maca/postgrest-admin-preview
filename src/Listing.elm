@@ -369,7 +369,9 @@ tableHeader { order } name =
                 , attribute "aria-sort" "other"
                 , onClick <| Sort <| Asc name
                 ]
-                [ i [ class "icono-play" ] [], text <| String.humanize name ]
+                [ text <| String.humanize name
+                , i [ class "icono-play" ] []
+                ]
     in
     th []
         [ case order of
@@ -380,8 +382,8 @@ tableHeader { order } name =
                         , attribute "aria-sort" "ascending"
                         , onClick <| Sort <| Desc name
                         ]
-                        [ i [ class "asc icono-play" ] []
-                        , text <| String.humanize name
+                        [ text <| String.humanize name
+                        , i [ class "asc icono-play" ] []
                         ]
 
                 else
@@ -394,8 +396,8 @@ tableHeader { order } name =
                         , attribute "aria-sort" "descending"
                         , onClick <| Sort <| Asc name
                         ]
-                        [ i [ class "desc icono-play" ] []
-                        , text <| String.humanize name
+                        [ text <| String.humanize name
+                        , i [ class "desc icono-play" ] []
                         ]
 
                 else
