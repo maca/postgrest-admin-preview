@@ -24,6 +24,7 @@ module Filter exposing
     , text
     , time
     , toPGQuery
+    , toQueryString
     )
 
 import Dict
@@ -62,6 +63,14 @@ type alias OperandConst =
 toPGQuery : Filter -> Maybe PG.Param
 toPGQuery (Filter name op) =
     Operation.toPGQuery name op
+
+
+toQueryString : Filter -> String
+toQueryString (Filter name op) =
+    Operation.toPGQuery name op
+        |> List.singleton
+        |> List.filterMap identity
+        |> PG.toQueryString
 
 
 column : Filter -> String

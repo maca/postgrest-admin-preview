@@ -54,6 +54,7 @@ import Postgrest.Value exposing (Value(..))
 import Search exposing (Search)
 import String.Extra as String
 import Task
+import Time
 import Time.Extra as Time
 import Url
 import Url.Builder as Url exposing (QueryParameter)
@@ -235,7 +236,7 @@ update client msg listing =
         SearchChanged searchMsg ->
             Search.update searchMsg listing.search
                 |> Tuple.mapFirst (\search -> { listing | search = search })
-                |> Tuple.mapSecond (Cmd.map SearchChanged)
+                |> Tuple.mapSecond (searchChanged searchMsg)
 
         ToggleSearchOpen ->
             ( { listing | searchOpen = not listing.searchOpen }, Cmd.none )
@@ -254,17 +255,18 @@ closeToBottom { scene, viewport } =
     scene.height - viewport.y < (viewport.height * 2)
 
 
-orderToQueryParams : SortOrder -> List QueryParameter
-orderToQueryParams order =
-    case order of
-        Asc column ->
-            [ Url.string "order" <| column ++ "." ++ "asc" ]
+searchChanged : Search.Msg -> Cmd Search.Msg -> Cmd Msg
+searchChanged msg cmd =
+    if Search.isApplyMsg msg then
+        Time.now |> Task.perform (always ApplyFilters)
 
-        Desc column ->
-            [ Url.string "order" <| column ++ "." ++ "desc" ]
+    else
+        Cmd.map SearchChanged cmd
 
-        Unordered ->
-            []
+
+
+-- Cmd.map SearchChanged cmd
+-- View
 
 
 view : Listing -> Html Msg
@@ -494,36 +496,8 @@ clickResource resourcesName id =
         Decode.map (EventConfig True True) (Decode.succeed msg)
 
 
-sortColumns : ( String, Column ) -> ( String, Column ) -> Order
-sortColumns ( name, Column _ val ) ( name_, Column _ val_ ) =
-    sortValues ( name, val ) ( name_, val_ )
 
-
-sortValues : ( String, Value ) -> ( String, Value ) -> Order
-sortValues ( name, a ) ( _, b ) =
-    case ( a, b ) of
-        ( PPrimaryKey _, _ ) ->
-            LT
-
-        ( _, PPrimaryKey _ ) ->
-            GT
-
-        ( PForeignKey _ _, _ ) ->
-            LT
-
-        ( _, PForeignKey _ _ ) ->
-            GT
-
-        ( PString _, _ ) ->
-            recordIdentifiers
-                |> List.indexedMap (flip Tuple.pair)
-                |> Dict.fromList
-                |> Dict.get name
-                |> Maybe.map (toFloat >> flip compare (1 / 0))
-                |> Maybe.withDefault GT
-
-        _ ->
-            EQ
+-- Http interactions
 
 
 pageId : Int -> String
@@ -534,10 +508,6 @@ pageId pageNum =
 perPage : Int
 perPage =
     50
-
-
-
--- Http interactions
 
 
 fetchResources : Client a -> Listing -> Cmd Msg
@@ -596,9 +566,8 @@ sortBy resourcesName sort ( name, Column _ value ) =
             Nothing
 
 
-recordIdentifiers : List String
-recordIdentifiers =
-    [ "title", "name", "full name", "email", "first name", "last name" ]
+
+-- Url parsing
 
 
 parseQuery : String -> List ( String, String )
@@ -627,3 +596,61 @@ parseOrder fragment =
 
         _ ->
             Unordered
+
+
+orderToQueryParams : SortOrder -> List QueryParameter
+orderToQueryParams order =
+    case order of
+        Asc column ->
+            [ Url.string "order" <| column ++ "." ++ "asc" ]
+
+        Desc column ->
+            [ Url.string "order" <| column ++ "." ++ "desc" ]
+
+        Unordered ->
+            []
+
+
+
+-- Sort
+
+
+sortColumns : ( String, Column ) -> ( String, Column ) -> Order
+sortColumns ( name, Column _ val ) ( name_, Column _ val_ ) =
+    sortValues ( name, val ) ( name_, val_ )
+
+
+sortValues : ( String, Value ) -> ( String, Value ) -> Order
+sortValues ( name, a ) ( _, b ) =
+    case ( a, b ) of
+        ( PPrimaryKey _, _ ) ->
+            LT
+
+        ( _, PPrimaryKey _ ) ->
+            GT
+
+        ( PForeignKey _ _, _ ) ->
+            LT
+
+        ( _, PForeignKey _ _ ) ->
+            GT
+
+        ( PString _, _ ) ->
+            recordIdentifiers
+                |> List.indexedMap (flip Tuple.pair)
+                |> Dict.fromList
+                |> Dict.get name
+                |> Maybe.map (toFloat >> flip compare (1 / 0))
+                |> Maybe.withDefault GT
+
+        _ ->
+            EQ
+
+
+
+-- Utils
+
+
+recordIdentifiers : List String
+recordIdentifiers =
+    [ "title", "name", "full name", "email", "first name", "last name" ]

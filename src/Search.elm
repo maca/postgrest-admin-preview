@@ -1,4 +1,4 @@
-module Search exposing (Msg, Search, init, toPGQuery, update, view)
+module Search exposing (Msg, Search, init, isApplyMsg, toPGQuery, update, view)
 
 import Array exposing (Array)
 import Array.Extra as Array
@@ -30,7 +30,10 @@ import Html.Attributes
         , type_
         , value
         )
-import Html.Events exposing (onClick, onInput)
+import Html.Events exposing (keyCode, on, onClick, onInput)
+import Html.Keyed as Keyed
+import Html.Lazy as Lazy
+import Json.Decode as Decode
 import Postgrest.Client as PG
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value exposing (Value(..))
@@ -41,8 +44,14 @@ import Url exposing (percentDecode)
 
 type Msg
     = UpdateFilter Int Filter
-    | AddFilter
+    | AddFilter AddPosition
     | RemoveFilter Int
+    | Apply
+
+
+type AddPosition
+    = Prepend
+    | Append
 
 
 type alias OperationConst =
@@ -70,6 +79,16 @@ init definition query =
     }
 
 
+isApplyMsg : Msg -> Bool
+isApplyMsg msg =
+    case msg of
+        Apply ->
+            True
+
+        _ ->
+            False
+
+
 toPGQuery : Search -> List PG.Param
 toPGQuery { filters } =
     Array.toList filters |> List.filterMap Filter.toPGQuery
@@ -83,7 +102,7 @@ update msg search =
             , Cmd.none
             )
 
-        AddFilter ->
+        AddFilter position ->
             let
                 mfilter =
                     search.definition
@@ -95,7 +114,12 @@ update msg search =
                 | filters =
                     case mfilter of
                         Just filter ->
-                            Array.push filter search.filters
+                            if position == Prepend then
+                                search.filters
+                                    |> Array.append (Array.fromList [ filter ])
+
+                            else
+                                Array.push filter search.filters
 
                         Nothing ->
                             search.filters
@@ -108,6 +132,9 @@ update msg search =
             , Cmd.none
             )
 
+        Apply ->
+            ( search, Cmd.none )
+
 
 
 -- View
@@ -116,21 +143,33 @@ update msg search =
 view : Bool -> Search -> Html Msg
 view open { definition, filters } =
     div [ class "search", hidden <| not open ]
-        [ div [ class "actions" ]
-            [ button
-                [ onClick AddFilter
-                , class "button-clear"
-                , class "add-filter"
-                ]
-                [ Html.text "Add filter", i [ class "icono-plus" ] [] ]
-            ]
-        , div
+        [ div [ class "actions" ] [ buttonAdd Prepend ]
+        , Keyed.node "div"
             [ class "filters" ]
-            (Array.indexedMap (viewFilter definition) filters
+            (Array.indexedMap
+                (\idx filter ->
+                    ( String.fromInt idx
+                    , Lazy.lazy3 viewFilter definition idx filter
+                    )
+                )
+                filters
                 |> Array.toList
-                |> List.reverse
             )
+        , if Array.isEmpty filters then
+            Html.text ""
+
+          else
+            div [ class "actions" ] [ buttonAdd Append ]
         ]
+
+
+buttonAdd tagger =
+    button
+        [ onClick (AddFilter tagger)
+        , class "button-clear"
+        , class "add-filter"
+        ]
+        [ Html.text "Add filter", i [ class "icono-plus" ] [] ]
 
 
 viewFilter : Definition -> Int -> Filter -> Html Msg
@@ -486,6 +525,7 @@ textInput : List (Attribute Msg) -> (Operand -> Msg) -> Operand -> Html Msg
 textInput attributes makeOperation operand =
     Html.input
         ([ onInput (makeOperation << Operand.constructor operand)
+         , onEnter Apply
          , value <| Operand.rawValue operand
          ]
             ++ attributes
@@ -550,3 +590,16 @@ map cons mfun a _ =
 map2 : (op -> op -> c) -> (s -> op) -> s -> s -> c
 map2 cons mfun a b =
     cons (mfun a) (mfun b)
+
+
+onEnter : msg -> Attribute msg
+onEnter msg =
+    let
+        isEnter code =
+            if code == 13 then
+                Decode.succeed msg
+
+            else
+                Decode.fail "not ENTER"
+    in
+    on "keydown" (Decode.andThen isEnter keyCode)
