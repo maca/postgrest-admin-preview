@@ -41,7 +41,7 @@ import Html.Attributes
         , id
         , target
         )
-import Html.Events as Events exposing (onClick)
+import Html.Events as Events exposing (on, onClick, onMouseDown, onMouseUp)
 import Inflect as String
 import Json.Decode as Decode
 import Postgrest.Client as PG
@@ -81,8 +81,17 @@ type Msg
     | Scrolled
     | ScrollInfo Viewport
     | SearchChanged Search.Msg
+    | SelectEnter
+    | SelectOn
+    | SelectOff
     | ToggleSearchOpen
     | Failed Error
+
+
+type TextSelect
+    = Enter
+    | On
+    | Off
 
 
 type alias Listing =
@@ -94,6 +103,7 @@ type alias Listing =
     , order : SortOrder
     , search : Search
     , searchOpen : Bool
+    , textSelect : TextSelect
     }
 
 
@@ -124,6 +134,7 @@ init resourcesName rawQuery definition =
     , order = order
     , search = Search.init definition (rawQuery |> Maybe.withDefault "")
     , searchOpen = True
+    , textSelect = Off
     }
 
 
@@ -244,6 +255,15 @@ update client msg listing =
         Failed _ ->
             ( listing, Cmd.none )
 
+        SelectEnter ->
+            ( { listing | textSelect = Enter }, Cmd.none )
+
+        SelectOff ->
+            ( { listing | textSelect = Off }, Cmd.none )
+
+        SelectOn ->
+            ( { listing | textSelect = On }, Cmd.none )
+
 
 scrollingDown : Viewport -> Listing -> Bool
 scrollingDown { viewport } { scrollPosition } =
@@ -279,7 +299,7 @@ view listing =
 
         body =
             tableHeading listing fields
-                :: pagesFold listing.resourcesName fields [] 0 listing.pages
+                :: pagesFold listing fields [] 0 listing.pages
     in
     section
         [ class "resources-listing" ]
@@ -314,7 +334,8 @@ view listing =
                     ]
                 , button [ onClick ApplyFilters ] [ text "Apply Filters" ]
                 ]
-            , Html.map SearchChanged <| Search.view listing.searchOpen listing.search
+            , Html.map SearchChanged <|
+                Search.view listing.searchOpen listing.search
             ]
         ]
 
@@ -386,13 +407,13 @@ tableHeader { order } name =
 
 
 pagesFold :
-    String
+    Listing
     -> List String
     -> List (Html Msg)
     -> Int
     -> List Page
     -> List (Html Msg)
-pagesFold rname fields acc pageNum pages =
+pagesFold listing fields acc pageNum pages =
     case pages of
         [] ->
             acc
@@ -402,25 +423,25 @@ pagesFold rname fields acc pageNum pages =
                 elem =
                     case page of
                         Page resources ->
-                            viewPage rname fields pageNum resources
+                            viewPage listing fields pageNum resources
 
                         Blank ->
                             text ""
             in
-            pagesFold rname fields (elem :: acc) (pageNum + 1) rest
+            pagesFold listing fields (elem :: acc) (pageNum + 1) rest
 
 
-viewPage : String -> List String -> Int -> List Resource -> Html Msg
-viewPage rname fields pageNum records =
+viewPage : Listing -> List String -> Int -> List Resource -> Html Msg
+viewPage listing fields pageNum records =
     tbody [ id <| pageId pageNum ] <|
-        List.map (row rname fields) records
+        List.map (row listing fields) records
 
 
-row : String -> List String -> Resource -> Html Msg
-row resourcesName names record =
+row : Listing -> List String -> Resource -> Html Msg
+row ({ resourcesName, textSelect } as listing) names record =
     let
         toTd =
-            viewValue resourcesName >> List.singleton >> td []
+            viewValue listing >> List.singleton >> td []
 
         id =
             Resource.id record |> Maybe.withDefault ""
@@ -428,12 +449,19 @@ row resourcesName names record =
     List.filterMap (flip Dict.get record >> Maybe.map toTd) names
         |> tr
             [ class "listing-row"
-            , clickResource resourcesName id
+            , onMouseDown SelectEnter
+            , if textSelect == Enter then
+                on "mousemove" (Decode.succeed SelectOn)
+
+              else
+                class ""
+            , onMouseUp SelectOff
+            , clickResource resourcesName textSelect id
             ]
 
 
-viewValue : String -> Field -> Html Msg
-viewValue resourcesName { value } =
+viewValue : Listing -> Field -> Html Msg
+viewValue { resourcesName, textSelect } { value } =
     case value of
         PFloat (Just float) ->
             text <| String.fromFloat float
@@ -460,10 +488,10 @@ viewValue resourcesName { value } =
             text <| Time.toDateString time
 
         PForeignKey (Just primaryKey) { table, label } ->
-            recordLink table primaryKey label
+            recordLink table textSelect primaryKey label
 
         PPrimaryKey (Just primaryKey) ->
-            recordLink resourcesName primaryKey Nothing
+            recordLink resourcesName textSelect primaryKey Nothing
 
         BadValue _ ->
             text "?"
@@ -472,8 +500,8 @@ viewValue resourcesName { value } =
             text ""
 
 
-recordLink : String -> PrimaryKey -> Maybe String -> Html Msg
-recordLink resourcesName primaryKey mtext =
+recordLink : String -> TextSelect -> PrimaryKey -> Maybe String -> Html Msg
+recordLink resourcesName textSelect primaryKey mtext =
     let
         id =
             PrimaryKey.toString primaryKey
@@ -481,19 +509,24 @@ recordLink resourcesName primaryKey mtext =
     a
         [ href <| Url.absolute [ resourcesName, id ] []
         , target "_self"
-        , clickResource resourcesName id
+        , clickResource resourcesName textSelect id
         ]
         [ text <| Maybe.withDefault id mtext ]
 
 
-clickResource : String -> String -> Html.Attribute Msg
-clickResource resourcesName id =
+clickResource : String -> TextSelect -> String -> Html.Attribute Msg
+clickResource resourcesName textSelect id =
     let
         msg =
-            ResourceLinkClicked resourcesName id
+            if textSelect == On then
+                SelectOff
+
+            else
+                ResourceLinkClicked resourcesName id
     in
     Events.custom "click" <|
-        Decode.map (EventConfig True True) (Decode.succeed msg)
+        Decode.map (EventConfig True True)
+            (Decode.succeed msg)
 
 
 
