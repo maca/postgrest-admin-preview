@@ -26,47 +26,50 @@ toPGQuery : String -> Operation -> Maybe PG.Param
 toPGQuery name op =
     let
         param =
-            PG.param name
+            Just << PG.param name
     in
     case op of
         IsTrue ->
-            Just <| param PG.true
+            param PG.true
 
         IsFalse ->
-            Just <| param PG.false
+            param PG.false
 
         IsNull _ ->
-            Just <| param PG.null
+            param PG.null
 
         Equals operand ->
             Operand.value operand
                 |> String.nonEmpty
-                |> Maybe.map (param << PG.eq << PG.string)
+                |> Maybe.andThen (param << PG.eq << PG.string)
 
         LesserThan operand ->
             Operand.value operand
                 |> String.nonEmpty
-                |> Maybe.map (\s -> param <| PG.value <| PG.string <| "lt." ++ s)
+                |> Maybe.andThen
+                    (\s -> param <| PG.value <| PG.string <| "lt." ++ s)
 
         GreaterThan operand ->
             Operand.value operand
                 |> String.nonEmpty
-                |> Maybe.map (\s -> param <| PG.value <| PG.string <| "gt." ++ s)
+                |> Maybe.andThen
+                    (\s -> param <| PG.value <| PG.string <| "gt." ++ s)
 
         Contains operand ->
             Operand.value operand
                 |> String.nonEmpty
-                |> Maybe.map (\a -> param <| PG.ilike <| "*" ++ a ++ "*")
+                |> Maybe.andThen
+                    (\a -> param <| PG.ilike <| "*" ++ a ++ "*")
 
         StartsWith operand ->
             Operand.value operand
                 |> String.nonEmpty
-                |> Maybe.map (\a -> param <| PG.ilike <| a ++ "*")
+                |> Maybe.andThen (\a -> param <| PG.ilike <| a ++ "*")
 
         EndsWith operand ->
             Operand.value operand
                 |> String.nonEmpty
-                |> Maybe.map (\a -> param <| PG.ilike <| "*" ++ a)
+                |> Maybe.andThen (\a -> param <| PG.ilike <| "*" ++ a)
 
         Between operandA operandB ->
             let
@@ -92,7 +95,7 @@ toPGQuery name op =
         InDate operand ->
             Operand.value operand
                 |> String.nonEmpty
-                |> Maybe.map (param << PG.eq << PG.string)
+                |> Maybe.andThen (param << PG.eq << PG.string)
 
         OneOf enum ->
             let
@@ -100,10 +103,10 @@ toPGQuery name op =
                     Operand.chosen enum
             in
             if Set.isEmpty chosen then
-                Just <| param PG.null
+                param PG.null
 
             else
-                Just <| param <| PG.inList PG.string <| Set.toList chosen
+                param <| PG.inList PG.string <| Set.toList chosen
 
         NoneOf enum ->
             let
@@ -114,10 +117,10 @@ toPGQuery name op =
                     Operand.chosen enum
             in
             if Set.isEmpty chosen then
-                Just <| param <| PG.inList PG.string choices
+                param <| PG.inList PG.string choices
 
             else
-                Just <| param <| PG.not <| PG.inList PG.string <| Set.toList chosen
+                param <| PG.not (PG.inList PG.string <| Set.toList chosen)
 
 
 toString : Operation -> String
