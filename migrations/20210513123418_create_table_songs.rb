@@ -12,6 +12,7 @@ Sequel.migration do
 
       int :rating
       varchar :title, null: false
+      float :duration
       column :categories, 'varchar[]'
 
       date :released
@@ -35,7 +36,7 @@ Sequel.migration do
     100.times do
       DB[api[:songs]].insert(
         user_id: DB[api[:users]].order { Sequel.lit('random()') }.first[:id],
-
+        duration: rand(3..15.5),
         title: Faker::BossaNova.song,
         categories: Sequel.pg_array((0..rand(4)).map { Faker::Adjective.positive }),
         released: Faker::Date.between(from: '1965-09-23', to: '2000-09-25')

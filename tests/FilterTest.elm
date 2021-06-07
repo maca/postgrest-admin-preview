@@ -4,29 +4,30 @@ import Dict
 import Expect exposing (Expectation)
 import Filter
     exposing
-        ( Filter(..)
-        , Kind(..)
+        ( Filter
         , between
-        , bool
+        , columnName
         , contains
         , date
         , endsWith
-        , enum
         , equals
         , float
         , fromColumn
         , greaterThan
         , inDate
+        , init
         , int
+        , isFalse
+        , isNull
+        , isTrue
         , lesserThan
         , noneOf
-        , nullBool
         , oneOf
+        , operation
         , parse
         , startsWith
         , text
         , time
-        , toPGQuery
         )
 import Fuzz exposing (Fuzzer, int, list, string)
 import Postgrest.Client as PG
@@ -37,134 +38,70 @@ import Test exposing (..)
 
 suite : Test
 suite =
-    describe "Filter module"
-        [ describe "Url codec"
-            [ test "query string for is.true" <|
+    describe "Filter"
+        [ test "codec" <|
+            \_ ->
+                Expect.all
+                    ([ "bool=is.true"
+                     , "bool=is.false"
+                     , "bool=is.null"
+                     , "text=eq.bar%20baz"
+                     , "text=ilike.*bar%20baz*"
+                     , "text=ilike.bar%20baz*"
+                     , "text=ilike.*bar%20baz"
+                     , "float=lt.1.1"
+                     , "float=gt.1.1"
+                     ]
+                        |> List.map
+                            (\q ->
+                                parse definition q
+                                    |> Maybe.map Filter.toQueryString
+                                    |> Expect.equal (Just q)
+                                    |> always
+                            )
+                    )
+                    ()
+        , describe "parse and construct"
+            [ test "is.true" <|
                 \_ ->
                     parse definition "bool=is.true"
-                        |> toQueryString
-                        |> Expect.equal "bool=is.true"
-            , test "filter generation for is.true" <|
-                \_ ->
-                    parse definition "bool=is.true"
-                        |> Expect.equal (Just <| bool "bool" True)
-            , test "query string for is.false" <|
+                        |> Expect.equal (Just <| isTrue "bool")
+            , test "is.false" <|
                 \_ ->
                     parse definition "bool=is.false"
-                        |> toQueryString
-                        |> Expect.equal "bool=is.false"
-            , test "filter generation for is.false" <|
-                \_ ->
-                    parse definition "bool=is.false"
-                        |> Expect.equal (Just <| bool "bool" False)
-            , test "query string for is.null" <|
+                        |> Expect.equal (Just <| isFalse "bool")
+            , test "is.null" <|
                 \_ ->
                     parse definition "bool=is.null"
-                        |> toQueryString
-                        |> Expect.equal "bool=is.null"
-            , test "filter generation for is.null" <|
-                \_ ->
-                    parse definition "bool=is.null"
-                        |> Expect.equal (Just <| nullBool "bool")
-            , test "eq.bar%20baz" <|
+                        |> Expect.equal (Just <| isNull "bool")
+            , test "equals" <|
                 \_ ->
                     parse definition "text=eq.bar%20baz"
-                        |> toQueryString
-                        |> Expect.equal "text=eq.bar%20baz"
-            , test "Equals" <|
-                \_ ->
-                    parse definition "text=eq.bar%20baz"
-                        |> Expect.equal
-                            (Just <| text "text" equals (Just "bar baz"))
-            , test "ilike.*bar%20baz*" <|
+                        |> Expect.equal (Just <| text "text" equals "bar baz")
+            , test "contains" <|
                 \_ ->
                     Filter.parse definition "text=ilike.*bar%20baz*"
-                        |> toQueryString
-                        |> Expect.equal "text=ilike.*bar%20baz*"
-
-            -- , test "Contains" <|
-            --     \_ ->
-            --         Filter.parse definition "text=ilike.*bar%20baz*"
-            --             |> Expect.equal
-            --                 (Just "bar baz"
-            --                     |> Contains
-            --                     |> TextFilter "text"
-            --                     |> Just
-            --                 )
-            , test "ilike.bar%20baz*" <|
+                        |> Expect.equal (Just <| text "text" contains "bar baz")
+            , test "starts with" <|
                 \_ ->
                     Filter.parse definition "text=ilike.bar%20baz*"
-                        |> toQueryString
-                        |> Expect.equal "text=ilike.bar%20baz*"
-
-            -- , test "StartsWith" <|
-            --     \_ ->
-            --         Filter.parse definition "text=ilike.bar%20baz*"
-            --             |> Expect.equal
-            --                 (Just "bar baz"
-            --                     |> StartsWith
-            --                     |> TextFilter "text"
-            --                     |> Just
-            --                 )
-            , test "ilike.*bar%20baz" <|
+                        |> Expect.equal
+                            (Just <| text "text" startsWith "bar baz")
+            , test "ends with" <|
                 \_ ->
                     Filter.parse definition "text=ilike.*bar%20baz"
-                        |> toQueryString
-                        |> Expect.equal "text=ilike.*bar%20baz"
-
-            -- , test "EndsWith" <|
-            --     \_ ->
-            --         Filter.parse definition "text=ilike.*bar%20baz"
-            --             |> Expect.equal
-            --                 (Just "bar baz"
-            --                     |> EndsWith
-            --                     |> TextFilter "text"
-            --                     |> Just
-            --                 )
-            , test "lt.1.1" <|
+                        |> Expect.equal (Just <| text "text" endsWith "bar baz")
+            , test "lesser than" <|
                 \_ ->
-                    Filter.parse definition "float=lt.\"1.1\""
-                        |> toQueryString
-                        |> Expect.equal "float=lt.\"1.1\""
-
-            -- , test "LesserThan" <|
-            --     \_ ->
-            --         Filter.parse definition "float=lt.\"1.1\""
-            --             |> Expect.equal
-            --                 (Just "1.1"
-            --                     |> LesserThan
-            --                     |> FloatFilter "float"
-            --                     |> Just
-            --                 )
-            , test "gt.1.1" <|
+                    Filter.parse definition "float=lt.1.1"
+                        |> Expect.equal (Just <| float "float" lesserThan "1.1")
+            , test "greater than" <|
                 \_ ->
-                    Filter.parse definition "float=gt.\"1.1\""
-                        |> toQueryString
-                        |> Expect.equal "float=gt.\"1.1\""
-
-            -- , test "GreaterThan" <|
-            --     \_ ->
-            --         Filter.parse definition "float=gt.\"1.1\""
-            --             |> Expect.equal
-            --                 (Just "1.1"
-            --                     |> GreaterThan
-            --                     |> FloatFilter "float"
-            --                     |> Just
-            --                 )
+                    Filter.parse definition "float=gt.1.1"
+                        |> Expect.equal
+                            (Just <| float "float" greaterThan "1.1")
             ]
         ]
-
-
-toQueryString mfilter =
-    case mfilter of
-        Just filter ->
-            Filter.toPGQuery filter
-                |> List.singleton
-                |> List.filterMap identity
-                |> PG.toQueryString
-
-        Nothing ->
-            ""
 
 
 definition : Definition

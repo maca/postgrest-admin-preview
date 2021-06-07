@@ -4,11 +4,11 @@ import Array exposing (Array)
 import Array.Extra as Array
 import Basics.Extra exposing (flip)
 import Dict
-import Filter as Filter exposing (Filter(..))
+import Filter as Filter exposing (Filter)
 import Filter.Operand as Operand
     exposing
-        ( Enum(..)
-        , Operand(..)
+        ( Enum
+        , Operand
         , date
         , float
         , int
@@ -173,8 +173,14 @@ buttonAdd tagger =
 
 
 viewFilter : Definition -> Int -> Filter -> Html Msg
-viewFilter definition idx ((Filter name op) as filter) =
+viewFilter definition idx filter =
     let
+        name =
+            Filter.columnName filter
+
+        op =
+            Filter.operation filter
+
         inputs kind content =
             div
                 [ class "filter"
@@ -229,13 +235,19 @@ viewFilter definition idx ((Filter name op) as filter) =
 
 
 fieldSelect : Definition -> Int -> Filter -> Html Msg
-fieldSelect definition idx ((Filter name op) as filter) =
+fieldSelect definition idx filter =
     let
+        op =
+            Filter.operation filter
+
         makeFilter selection =
             case defaultFilter selection definition of
-                Just ((Filter name_ op_) as filter_) ->
-                    if Operation.toString op_ == Operation.toString op then
-                        Filter name_ op
+                Just filter_ ->
+                    if
+                        Operation.toString (Filter.operation filter_)
+                            == Operation.toString op
+                    then
+                        Filter.init (Filter.columnName filter_) op
 
                     else
                         filter_
@@ -245,7 +257,7 @@ fieldSelect definition idx ((Filter name op) as filter) =
 
         makeOption s =
             option
-                [ value s, selected (s == name) ]
+                [ value s, selected (s == Filter.columnName filter) ]
                 [ Html.text <| String.humanize s ]
     in
     Html.select
@@ -271,7 +283,7 @@ textFilterInputs required name idx op =
                 ]
     in
     [ select (options ++ nullOption required op) op
-        |> Html.map (Filter name >> UpdateFilter idx)
+        |> Html.map (Filter.init name >> UpdateFilter idx)
     , input name idx op
     ]
 
@@ -288,7 +300,7 @@ intFilterInputs required name idx op =
                 ]
     in
     [ select (options ++ nullOption required op) op
-        |> Html.map (Filter name >> UpdateFilter idx)
+        |> Html.map (Filter.init name >> UpdateFilter idx)
     , input name idx op
     ]
 
@@ -305,7 +317,7 @@ floatFilterInputs required name idx op =
                 ]
     in
     [ select (options ++ nullOption required op) op
-        |> Html.map (Filter name >> UpdateFilter idx)
+        |> Html.map (Filter.init name >> UpdateFilter idx)
     , input name idx op
     ]
 
@@ -322,7 +334,7 @@ dateFilterInputs required name idx op =
                 ]
     in
     [ select (options ++ nullOption required op) op
-        |> Html.map (Filter name >> UpdateFilter idx)
+        |> Html.map (Filter.init name >> UpdateFilter idx)
     , input name idx op
     ]
 
@@ -332,14 +344,14 @@ timeFilterInputs required name idx op =
     let
         options =
             List.map operationOption
-                [ map Filter.inDate time
+                [ map Filter.inDate date
                 , map Filter.lesserThan time
                 , map Filter.greaterThan time
                 , map2 Filter.between time
                 ]
     in
     [ select (options ++ nullOption required op) op
-        |> Html.map (Filter name >> UpdateFilter idx)
+        |> Html.map (Filter.init name >> UpdateFilter idx)
     , input name idx op
     ]
 
@@ -351,7 +363,7 @@ boolFilterInputs required name idx op =
             List.map (dropBoth >> operationOption) [ IsTrue, IsFalse ]
     in
     [ select (options ++ nullOption required op) op
-        |> Html.map (Filter name >> UpdateFilter idx)
+        |> Html.map (Filter.init name >> UpdateFilter idx)
     , input name idx op
     ]
 
@@ -365,10 +377,10 @@ enumInputs required name idx op =
                 , map NoneOf (flip choose enum)
                 ]
 
-        inputs makeOp ((Enum choices _) as enum) =
+        inputs makeOp enum =
             [ select (options enum ++ nullOption required op) op
-                |> Html.map (Filter name >> UpdateFilter idx)
-            , choices
+                |> Html.map (Filter.init name >> UpdateFilter idx)
+            , Operand.choices enum
                 |> List.map (checkbox makeOp name idx enum)
                 |> div [ class "checkboxes" ]
             ]
@@ -384,12 +396,12 @@ enumInputs required name idx op =
             case op_ of
                 OneOf enum ->
                     [ select (options enum ++ nullOption required op_) op
-                        |> Html.map (Filter name >> UpdateFilter idx)
+                        |> Html.map (Filter.init name >> UpdateFilter idx)
                     ]
 
                 NoneOf enum ->
                     [ select (options enum ++ nullOption required op_) op
-                        |> Html.map (Filter name >> UpdateFilter idx)
+                        |> Html.map (Filter.init name >> UpdateFilter idx)
                     ]
 
                 _ ->
@@ -400,15 +412,22 @@ enumInputs required name idx op =
 
 
 choose : String -> Enum -> Enum
-choose choice (Enum choices chosen) =
+choose choice enum =
+    let
+        choices =
+            Operand.choices enum
+
+        chosen =
+            Operand.chosen enum
+    in
     if Set.member choice chosen then
-        Enum choices (Set.remove choice chosen)
+        Operand.enum choices (Set.remove choice chosen)
 
     else if String.isEmpty choice then
-        Enum choices chosen
+        Operand.enum choices chosen
 
     else
-        Enum choices (Set.insert choice chosen)
+        Operand.enum choices (Set.insert choice chosen)
 
 
 select : Options -> Operation -> Html Operation
@@ -450,31 +469,33 @@ input : String -> Int -> Operation -> Html Msg
 input name idx op =
     let
         input_ operationCons operand attrs =
-            case operand of
-                OText _ ->
-                    textInput ([ type_ "text" ] ++ attrs)
-                        (operationCons >> Filter name >> UpdateFilter idx)
-                        operand
+            if text (Operand.value operand) == operand then
+                textInput ([ type_ "text" ] ++ attrs)
+                    (operationCons >> Filter.init name >> UpdateFilter idx)
+                    operand
 
-                OInt _ ->
-                    textInput ([ type_ "number", step "1" ] ++ attrs)
-                        (operationCons >> Filter name >> UpdateFilter idx)
-                        operand
+            else if int (Operand.value operand) == operand then
+                textInput ([ type_ "number", step "1" ] ++ attrs)
+                    (operationCons >> Filter.init name >> UpdateFilter idx)
+                    operand
 
-                OFloat _ ->
-                    textInput ([ type_ "number", step "0.01" ] ++ attrs)
-                        (operationCons >> Filter name >> UpdateFilter idx)
-                        operand
+            else if float (Operand.value operand) == operand then
+                textInput ([ type_ "number", step "0.01" ] ++ attrs)
+                    (operationCons >> Filter.init name >> UpdateFilter idx)
+                    operand
 
-                ODate _ ->
-                    textInput ([ type_ "date" ] ++ attrs)
-                        (operationCons >> Filter name >> UpdateFilter idx)
-                        operand
+            else if date (Operand.value operand) == operand then
+                textInput ([ type_ "date" ] ++ attrs)
+                    (operationCons >> Filter.init name >> UpdateFilter idx)
+                    operand
 
-                OTime _ ->
-                    textInput ([ type_ "datetime-local" ] ++ attrs)
-                        (operationCons >> Filter name >> UpdateFilter idx)
-                        operand
+            else if date (Operand.value operand) == operand then
+                textInput ([ type_ "datetime-local" ] ++ attrs)
+                    (operationCons >> Filter.init name >> UpdateFilter idx)
+                    operand
+
+            else
+                Html.text ""
     in
     case op of
         Equals a ->
@@ -534,7 +555,7 @@ textInput attributes makeOperation operand =
 
 
 checkbox : OperationConst -> String -> Int -> Enum -> String -> Html Msg
-checkbox makeOp name idx (Enum _ chosen) choice =
+checkbox makeOp name idx enum choice =
     let
         inputId =
             String.fromInt idx |> (++) choice
@@ -544,9 +565,9 @@ checkbox makeOp name idx (Enum _ chosen) choice =
         [ Html.input
             [ id inputId
             , value choice
-            , onInput (\s -> makeOp s "" |> Filter name |> UpdateFilter idx)
+            , onInput (\s -> makeOp s "" |> Filter.init name |> UpdateFilter idx)
             , Html.Attributes.type_ "checkbox"
-            , checked <| Set.member choice chosen
+            , checked <| Set.member choice (Operand.chosen enum)
             ]
             []
         , Html.text <| String.humanize choice

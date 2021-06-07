@@ -1,6 +1,8 @@
 module Filter.Operand exposing
-    ( Enum(..)
-    , Operand(..)
+    ( Enum
+    , Operand
+    , choices
+    , chosen
     , constructor
     , date
     , enum
@@ -16,40 +18,44 @@ import Set exposing (Set)
 
 
 type Operand
-    = OText String
-    | OInt String
-    | OFloat String
-    | ODate String
-    | OTime String
+    = Text String
+    | Int String
+    | Float String
+    | Date String
+    | Time String
 
 
 type Enum
     = Enum (List String) (Set String)
 
 
+
+-- Constructors
+
+
 text : String -> Operand
 text =
-    OText
+    Text
 
 
 int : String -> Operand
 int =
-    OInt
+    Int
 
 
 float : String -> Operand
 float =
-    OFloat
+    Float
 
 
 date : String -> Operand
 date =
-    ODate
+    Date
 
 
 time : String -> Operand
 time =
-    OTime
+    Time
 
 
 enum : List String -> Set String -> Enum
@@ -57,58 +63,72 @@ enum =
     Enum
 
 
+
+-- Access
+
+
+choices : Enum -> List String
+choices (Enum list _) =
+    list
+
+
+chosen : Enum -> Set String
+chosen (Enum _ set) =
+    set
+
+
 value : Operand -> String
 value operand =
     case operand of
-        OText val ->
+        Text val ->
             val
 
-        OInt val ->
+        Int val ->
             val
 
-        OFloat val ->
+        Float val ->
             val
 
-        ODate val ->
+        Date val ->
             val
 
-        OTime val ->
+        Time val ->
             val
 
 
 rawValue : Operand -> String
 rawValue operand =
     case operand of
-        OText val ->
+        Text val ->
             val
 
-        OInt val ->
+        Int val ->
             val
 
-        OFloat val ->
+        Float val ->
             val
 
-        ODate val ->
+        Date val ->
             val
 
-        OTime val ->
+        Time val ->
             val
 
 
 constructor : Operand -> (String -> Operand)
 constructor operand =
     case operand of
-        OText _ ->
+        Text _ ->
             text
 
-        OInt _ ->
+        Int _ ->
             int
 
-        OFloat _ ->
+        Float _ ->
             float
 
-        ODate _ ->
+        Date _ ->
             date
 
-        OTime _ ->
+        Time _ ->
             time

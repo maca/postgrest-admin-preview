@@ -1,16 +1,16 @@
 module Filter exposing
-    ( Filter(..)
+    ( Filter
     , between
-    , column
+    , columnName
     , contains
     , date
     , endsWith
     , equals
-    , filter
     , float
     , fromColumn
     , greaterThan
     , inDate
+    , init
     , int
     , isFalse
     , isNull
@@ -73,8 +73,8 @@ toQueryString (Filter name op) =
         |> PG.toQueryString
 
 
-column : Filter -> String
-column (Filter name _) =
+columnName : Filter -> String
+columnName (Filter name _) =
     name
 
 
@@ -91,25 +91,25 @@ fromColumn : String -> Column -> Maybe Filter
 fromColumn name col =
     case columnValue col of
         PString _ ->
-            Just <| filter name equals <| text ""
+            Just <| text name equals ""
 
         PText _ ->
-            Just <| filter name equals <| text ""
+            Just <| text name equals ""
 
         PInt _ ->
-            Just <| filter name equals <| int ""
+            Just <| int name equals ""
 
         PFloat _ ->
-            Just <| filter name equals <| float ""
+            Just <| float name equals ""
 
         PBool _ ->
             Just <| isTrue name
 
         PTime _ ->
-            Just <| filter name inDate <| date ""
+            Just <| time name inDate ""
 
         PDate _ ->
-            Just <| filter name inDate <| date ""
+            Just <| date name inDate ""
 
         PEnum _ choices ->
             Just <| oneOf name choices Set.empty
@@ -124,9 +124,9 @@ fromColumn name col =
             Nothing
 
 
-filter : String -> (Operand -> Operation) -> Operand -> Filter
-filter name operationCons operand =
-    Filter name (operationCons operand)
+init : String -> Operation -> Filter
+init =
+    Filter
 
 
 oneOf : String -> List String -> Set String -> Filter
@@ -187,29 +187,29 @@ inDate =
 -- Operand constructors
 
 
-date : String -> Operand
-date =
-    Operand.date
+float : String -> (Operand -> Operation) -> String -> Filter
+float name operationCons value =
+    init name (operationCons <| Operand.float value)
 
 
-float : String -> Operand
-float =
-    Operand.float
+int : String -> (Operand -> Operation) -> String -> Filter
+int name operationCons value =
+    init name (operationCons <| Operand.int value)
 
 
-int : String -> Operand
-int =
-    Operand.int
+text : String -> (Operand -> Operation) -> String -> Filter
+text name operationCons value =
+    init name (operationCons <| Operand.text value)
 
 
-text : String -> Operand
-text =
-    Operand.text
+date : String -> (Operand -> Operation) -> String -> Filter
+date name operationCons value =
+    init name (operationCons <| Operand.date value)
 
 
-time : String -> Operand
-time =
-    Operand.time
+time : String -> (Operand -> Operation) -> String -> Filter
+time name operationCons value =
+    init name (operationCons <| Operand.time value)
 
 
 isTrue : String -> Filter
@@ -289,7 +289,8 @@ filterCons definition operationCons name =
             Just <| Filter name <| operationCons Operand.date
 
         Just (PEnum _ choices) ->
-            Just <| Filter name <| IsNull <| Just <| NoneOf <| Operand.enum choices Set.empty
+            IsNull (Just <| NoneOf <| Operand.enum choices Set.empty)
+                |> (Just << Filter name)
 
         _ ->
             Nothing

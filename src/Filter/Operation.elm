@@ -1,6 +1,6 @@
 module Filter.Operation exposing (Operation(..), toPGQuery, toString, values)
 
-import Filter.Operand as Operand exposing (Enum(..), Operand(..))
+import Filter.Operand as Operand exposing (Enum, Operand(..))
 import Postgrest.Client as PG
 import Set
 import String.Extra as String
@@ -46,12 +46,12 @@ toPGQuery name op =
         LesserThan operand ->
             Operand.value operand
                 |> String.nonEmpty
-                |> Maybe.map (param << PG.lt << PG.string)
+                |> Maybe.map (\s -> param <| PG.value <| PG.string <| "lt." ++ s)
 
         GreaterThan operand ->
             Operand.value operand
                 |> String.nonEmpty
-                |> Maybe.map (param << PG.gt << PG.string)
+                |> Maybe.map (\s -> param <| PG.value <| PG.string <| "gt." ++ s)
 
         Contains operand ->
             Operand.value operand
@@ -94,14 +94,25 @@ toPGQuery name op =
                 |> String.nonEmpty
                 |> Maybe.map (param << PG.eq << PG.string)
 
-        OneOf (Enum _ chosen) ->
+        OneOf enum ->
+            let
+                chosen =
+                    Operand.chosen enum
+            in
             if Set.isEmpty chosen then
                 Just <| param PG.null
 
             else
                 Just <| param <| PG.inList PG.string <| Set.toList chosen
 
-        NoneOf (Enum choices chosen) ->
+        NoneOf enum ->
+            let
+                choices =
+                    Operand.choices enum
+
+                chosen =
+                    Operand.chosen enum
+            in
             if Set.isEmpty chosen then
                 Just <| param <| PG.inList PG.string choices
 
@@ -179,11 +190,11 @@ values operation =
         InDate a ->
             [ Operand.value a ]
 
-        OneOf (Enum _ chosen) ->
-            Set.toList chosen
+        OneOf enum ->
+            Set.toList (Operand.chosen enum)
 
-        NoneOf (Enum choices chosen) ->
-            Set.diff (Set.fromList choices) chosen |> Set.toList
+        NoneOf enum ->
+            Set.diff (Set.fromList (Operand.choices enum)) (Operand.chosen enum) |> Set.toList
 
         IsTrue ->
             []
