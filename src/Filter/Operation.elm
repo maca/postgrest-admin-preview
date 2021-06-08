@@ -10,6 +10,8 @@ type Operation
     = Equals Operand
     | LesserThan Operand
     | GreaterThan Operand
+    | LesserOrEqual Operand
+    | GreaterOrEqual Operand
     | Between Operand Operand
     | Contains Operand
     | StartsWith Operand
@@ -47,6 +49,18 @@ toPGQuery name op =
                 |> String.nonEmpty
                 |> Maybe.andThen
                     (\s -> param <| PG.value <| PG.string <| "gt." ++ s)
+
+        LesserOrEqual operand ->
+            Operand.value operand
+                |> String.nonEmpty
+                |> Maybe.andThen
+                    (\s -> param <| PG.value <| PG.string <| "lte." ++ s)
+
+        GreaterOrEqual operand ->
+            Operand.value operand
+                |> String.nonEmpty
+                |> Maybe.andThen
+                    (\s -> param <| PG.value <| PG.string <| "gte." ++ s)
 
         Contains operand ->
             Operand.value operand
@@ -143,6 +157,12 @@ toString operation =
         GreaterThan _ ->
             "is greater than"
 
+        LesserOrEqual _ ->
+            "is lesser or equal to"
+
+        GreaterOrEqual _ ->
+            "is greater or equal to"
+
         Between _ _ ->
             "is between"
 
@@ -199,6 +219,12 @@ values operation =
             [ Operand.value a ]
 
         GreaterThan a ->
+            [ Operand.value a ]
+
+        LesserOrEqual a ->
+            [ Operand.value a ]
+
+        GreaterOrEqual a ->
             [ Operand.value a ]
 
         Between a b ->

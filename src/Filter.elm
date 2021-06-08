@@ -8,6 +8,7 @@ module Filter exposing
     , equals
     , float
     , fromColumn
+    , greaterOrEqual
     , greaterThan
     , inDate
     , init
@@ -17,6 +18,7 @@ module Filter exposing
     , isInThePast
     , isNull
     , isTrue
+    , lesserOrEqual
     , lesserThan
     , noneOf
     , oneOf
@@ -148,6 +150,16 @@ noneOf name choices chosen =
 equals : Operand -> Operation
 equals =
     Equals
+
+
+lesserOrEqual : Operand -> Operation
+lesserOrEqual =
+    LesserOrEqual
+
+
+greaterOrEqual : Operand -> Operation
+greaterOrEqual =
+    GreaterOrEqual
 
 
 lesserThan : Operand -> Operation

@@ -1,39 +1,15 @@
-module FilterTest exposing (..)
+module FilterTest exposing (suite)
 
 import Dict
 import Expect exposing (Expectation)
-import Filter
-    exposing
-        ( Filter
-        , between
-        , columnName
-        , contains
-        , date
-        , endsWith
-        , equals
-        , float
-        , fromColumn
-        , greaterThan
-        , inDate
-        , init
-        , int
-        , isFalse
-        , isInTheFuture
-        , isInThePast
-        , isNull
-        , isTrue
-        , lesserThan
-        , noneOf
-        , oneOf
-        , operation
-        , parse
-        , startsWith
-        , text
-        , time
-        )
+import Filter exposing (..)
 import Fuzz exposing (Fuzzer, int, list, string)
 import Postgrest.Client as PG
-import Postgrest.Schema.Definition as Definition exposing (Column(..), Definition)
+import Postgrest.Schema.Definition as Definition
+    exposing
+        ( Column(..)
+        , Definition
+        )
 import Postgrest.Value exposing (Value(..))
 import Test exposing (..)
 
@@ -51,12 +27,22 @@ suite =
                      , "text=ilike.*bar%20baz*"
                      , "text=ilike.bar%20baz*"
                      , "text=ilike.*bar%20baz"
+                     , "int=lt.1"
+                     , "int=gt.1"
                      , "float=lt.1.1"
                      , "float=gt.1.1"
                      , "date=gt.now"
                      , "date=lt.now"
                      , "time=gt.now"
                      , "time=lt.now"
+                     , "int=lte.1"
+                     , "int=gte.1"
+                     , "float=lte.1.1"
+                     , "float=gte.1.1"
+                     , "date=gte.now"
+                     , "date=lte.now"
+                     , "time=gte.now"
+                     , "time=lte.now"
                      ]
                         |> List.map
                             (\q ->
@@ -106,6 +92,15 @@ suite =
                     Filter.parse definition "float=gt.1.1"
                         |> Expect.equal
                             (Just <| float "float" greaterThan "1.1")
+            , test "lesser or equal to" <|
+                \_ ->
+                    Filter.parse definition "float=lte.1.1"
+                        |> Expect.equal (Just <| float "float" lesserOrEqual "1.1")
+            , test "greater or equal to" <|
+                \_ ->
+                    Filter.parse definition "float=gte.1.1"
+                        |> Expect.equal
+                            (Just <| float "float" greaterOrEqual "1.1")
             , test "time in the future" <|
                 \_ ->
                     Filter.parse definition "time=gt.now"

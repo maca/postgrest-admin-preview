@@ -291,16 +291,7 @@ textFilterInputs required name idx op =
 
 intFilterInputs : Bool -> String -> Int -> Operation -> List (Html Msg)
 intFilterInputs required name idx op =
-    let
-        options =
-            List.map operationOption
-                [ map Filter.equals int
-                , map Filter.lesserThan int
-                , map Filter.greaterThan int
-                , map2 Filter.between int
-                ]
-    in
-    [ select (options ++ nullOption required op) op
+    [ select (numberOptions int op ++ nullOption required op) op
         |> Html.map (Filter.init name >> UpdateFilter idx)
     , input name idx op
     ]
@@ -308,16 +299,7 @@ intFilterInputs required name idx op =
 
 floatFilterInputs : Bool -> String -> Int -> Operation -> List (Html Msg)
 floatFilterInputs required name idx op =
-    let
-        options =
-            List.map operationOption
-                [ map Filter.equals float
-                , map Filter.lesserThan float
-                , map Filter.greaterThan float
-                , map2 Filter.between float
-                ]
-    in
-    [ select (options ++ nullOption required op) op
+    [ select (numberOptions float op ++ nullOption required op) op
         |> Html.map (Filter.init name >> UpdateFilter idx)
     , input name idx op
     ]
@@ -496,6 +478,12 @@ input name idx op =
         GreaterThan a ->
             input_ GreaterThan a []
 
+        LesserOrEqual a ->
+            input_ LesserOrEqual a []
+
+        GreaterOrEqual a ->
+            input_ GreaterOrEqual a []
+
         Between a b ->
             div []
                 [ input_ (flip Between b) a []
@@ -574,12 +562,26 @@ operationOption cons =
     ( Operation.toString (cons "" ""), cons )
 
 
+numberOptions : (String -> Operand) -> Operation -> List ( String, OperationConst )
+numberOptions cons op =
+    List.map operationOption
+        [ map Filter.equals cons
+        , map Filter.lesserOrEqual cons
+        , map Filter.greaterOrEqual cons
+        , map Filter.lesserThan cons
+        , map Filter.greaterThan cons
+        , map2 Filter.between cons
+        ]
+
+
 timeOptions : (String -> Operand) -> Operation -> List ( String, OperationConst )
 timeOptions cons op =
     List.map operationOption
         [ map Filter.inDate date
         , dropBoth (IsInTheFuture <| Just op)
         , dropBoth (IsInThePast <| Just op)
+        , map Filter.lesserOrEqual cons
+        , map Filter.greaterOrEqual cons
         , map Filter.lesserThan cons
         , map Filter.greaterThan cons
         , map2 Filter.between cons

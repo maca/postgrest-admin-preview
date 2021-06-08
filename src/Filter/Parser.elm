@@ -42,6 +42,8 @@ operation =
         , inThePast
         , lesserThan
         , greaterThan
+        , lesserOrEqual
+        , greaterOrEqual
         ]
 
 
@@ -117,16 +119,28 @@ inThePast =
 lesserThan : Parser (OperandConst -> Operation)
 lesserThan =
     succeed (unquote >> operationCons LesserThan)
-        |. token "lt"
-        |. symbol "."
+        |. symbol "lt."
         |= getRest
 
 
 greaterThan : Parser (OperandConst -> Operation)
 greaterThan =
     succeed (unquote >> operationCons GreaterThan)
-        |. token "gt"
-        |. symbol "."
+        |. symbol "gt."
+        |= getRest
+
+
+lesserOrEqual : Parser (OperandConst -> Operation)
+lesserOrEqual =
+    succeed (unquote >> operationCons LesserOrEqual)
+        |. symbol "lte."
+        |= getRest
+
+
+greaterOrEqual : Parser (OperandConst -> Operation)
+greaterOrEqual =
+    succeed (unquote >> operationCons GreaterOrEqual)
+        |. symbol "gte."
         |= getRest
 
 
