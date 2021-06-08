@@ -374,8 +374,8 @@ enumInputs required name idx op =
     let
         options enum =
             List.map operationOption
-                [ map OneOf (flip choose enum)
-                , map NoneOf (flip choose enum)
+                [ map OneOf (always enum)
+                , map NoneOf (always enum)
                 ]
 
         inputs makeOp enum =
@@ -423,9 +423,6 @@ choose choice enum =
     in
     if Set.member choice chosen then
         Operand.enum choices (Set.remove choice chosen)
-
-    else if String.isEmpty choice then
-        Operand.enum choices chosen
 
     else
         Operand.enum choices (Set.insert choice chosen)

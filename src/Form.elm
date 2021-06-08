@@ -314,12 +314,7 @@ recordLabelHelp (Form _ fields) fieldName =
 
 
 
--- To refactor
-
-
-recordIdentifiers : List String
-recordIdentifiers =
-    [ "title", "name", "full name", "email", "first name", "last name" ]
+-- Sort
 
 
 sortInputs : ( String, Input ) -> ( String, Input ) -> Order
@@ -352,3 +347,12 @@ sortValues ( name, a ) ( _, b ) =
 
         _ ->
             EQ
+
+
+
+-- To refactor
+
+
+recordIdentifiers : List String
+recordIdentifiers =
+    [ "title", "name", "full name", "email", "first name", "last name" ]

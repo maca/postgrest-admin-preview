@@ -257,10 +257,10 @@ makeListingRoute model url resourcesName =
                         Listing.showSearch
 
                     else
-                        identity
+                        Listing.hideSearch
 
                 _ ->
-                    identity
+                    Listing.showSearch
     in
     LoadingDefinition resourcesName
         (Listing.init resourcesName url.query >> modify >> Listing)
