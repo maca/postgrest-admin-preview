@@ -38,6 +38,8 @@ operation =
         , startsWith
         , is
         , equals
+        , inTheFuture
+        , inThePast
         , lesserThan
         , greaterThan
         ]
@@ -98,6 +100,18 @@ equals =
         |. token "eq"
         |. symbol "."
         |= getRest
+
+
+inTheFuture : Parser (OperandConst -> Operation)
+inTheFuture =
+    succeed (always <| IsInTheFuture Nothing)
+        |. token "gt.now"
+
+
+inThePast : Parser (OperandConst -> Operation)
+inThePast =
+    succeed (always <| IsInThePast Nothing)
+        |. token "lt.now"
 
 
 lesserThan : Parser (OperandConst -> Operation)

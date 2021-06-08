@@ -13,6 +13,8 @@ module Filter exposing
     , init
     , int
     , isFalse
+    , isInTheFuture
+    , isInThePast
     , isNull
     , isTrue
     , lesserThan
@@ -225,6 +227,16 @@ isFalse name =
 isNull : String -> Filter
 isNull name =
     Filter name (IsNull Nothing)
+
+
+isInTheFuture : String -> Filter
+isInTheFuture name =
+    Filter name (IsInTheFuture Nothing)
+
+
+isInThePast : String -> Filter
+isInThePast name =
+    Filter name (IsInThePast Nothing)
 
 
 

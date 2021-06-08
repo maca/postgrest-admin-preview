@@ -18,6 +18,8 @@ import Filter
         , init
         , int
         , isFalse
+        , isInTheFuture
+        , isInThePast
         , isNull
         , isTrue
         , lesserThan
@@ -51,6 +53,10 @@ suite =
                      , "text=ilike.*bar%20baz"
                      , "float=lt.1.1"
                      , "float=gt.1.1"
+                     , "date=gt.now"
+                     , "date=lt.now"
+                     , "time=gt.now"
+                     , "time=lt.now"
                      ]
                         |> List.map
                             (\q ->
@@ -100,6 +106,24 @@ suite =
                     Filter.parse definition "float=gt.1.1"
                         |> Expect.equal
                             (Just <| float "float" greaterThan "1.1")
+            , test "time in the future" <|
+                \_ ->
+                    Filter.parse definition "time=gt.now"
+                        |> Expect.equal (Just <| isInTheFuture "time")
+            , test "time in the past" <|
+                \_ ->
+                    Filter.parse definition "time=lt.now"
+                        |> Expect.equal
+                            (Just <| isInThePast "time")
+            , test "date in the future" <|
+                \_ ->
+                    Filter.parse definition "date=gt.now"
+                        |> Expect.equal (Just <| isInTheFuture "date")
+            , test "date in the past" <|
+                \_ ->
+                    Filter.parse definition "date=lt.now"
+                        |> Expect.equal
+                            (Just <| isInThePast "date")
             ]
         ]
 

@@ -325,16 +325,7 @@ floatFilterInputs required name idx op =
 
 dateFilterInputs : Bool -> String -> Int -> Operation -> List (Html Msg)
 dateFilterInputs required name idx op =
-    let
-        options =
-            List.map operationOption
-                [ map Filter.inDate date
-                , map Filter.lesserThan date
-                , map Filter.greaterThan date
-                , map2 Filter.between date
-                ]
-    in
-    [ select (options ++ nullOption required op) op
+    [ select (timeOptions date op ++ nullOption required op) op
         |> Html.map (Filter.init name >> UpdateFilter idx)
     , input name idx op
     ]
@@ -342,16 +333,7 @@ dateFilterInputs required name idx op =
 
 timeFilterInputs : Bool -> String -> Int -> Operation -> List (Html Msg)
 timeFilterInputs required name idx op =
-    let
-        options =
-            List.map operationOption
-                [ map Filter.inDate date
-                , map Filter.lesserThan time
-                , map Filter.greaterThan time
-                , map2 Filter.between time
-                ]
-    in
-    [ select (options ++ nullOption required op) op
+    [ select (timeOptions time op ++ nullOption required op) op
         |> Html.map (Filter.init name >> UpdateFilter idx)
     , input name idx op
     ]
@@ -539,6 +521,12 @@ input name idx op =
         IsNull _ ->
             Html.text ""
 
+        IsInTheFuture _ ->
+            Html.text ""
+
+        IsInThePast _ ->
+            Html.text ""
+
 
 textInput : List (Attribute Msg) -> (Operand -> Msg) -> Operand -> Html Msg
 textInput attributes makeOperation operand =
@@ -584,6 +572,18 @@ nullOption required op =
 operationOption : OperationConst -> ( String, OperationConst )
 operationOption cons =
     ( Operation.toString (cons "" ""), cons )
+
+
+timeOptions : (String -> Operand) -> Operation -> List ( String, OperationConst )
+timeOptions cons op =
+    List.map operationOption
+        [ map Filter.inDate date
+        , dropBoth (IsInTheFuture <| Just op)
+        , dropBoth (IsInThePast <| Just op)
+        , map Filter.lesserThan cons
+        , map Filter.greaterThan cons
+        , map2 Filter.between cons
+        ]
 
 
 defaultFilter : String -> Definition -> Maybe Filter

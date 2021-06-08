@@ -7,10 +7,7 @@ import String.Extra as String
 
 
 type Operation
-    = IsTrue
-    | IsFalse
-    | IsNull (Maybe Operation)
-    | Equals Operand
+    = Equals Operand
     | LesserThan Operand
     | GreaterThan Operand
     | Between Operand Operand
@@ -20,6 +17,11 @@ type Operation
     | InDate Operand
     | OneOf Enum
     | NoneOf Enum
+    | IsTrue
+    | IsFalse
+    | IsInTheFuture (Maybe Operation)
+    | IsInThePast (Maybe Operation)
+    | IsNull (Maybe Operation)
 
 
 toPGQuery : String -> Operation -> Maybe PG.Param
@@ -29,15 +31,6 @@ toPGQuery name op =
             Just << PG.param name
     in
     case op of
-        IsTrue ->
-            param PG.true
-
-        IsFalse ->
-            param PG.false
-
-        IsNull _ ->
-            param PG.null
-
         Equals operand ->
             Operand.value operand
                 |> String.nonEmpty
@@ -122,19 +115,25 @@ toPGQuery name op =
             else
                 param <| PG.not (PG.inList PG.string <| Set.toList chosen)
 
+        IsTrue ->
+            param PG.true
+
+        IsFalse ->
+            param PG.false
+
+        IsNull _ ->
+            param PG.null
+
+        IsInTheFuture _ ->
+            param <| PG.value <| PG.string <| "gt.now"
+
+        IsInThePast _ ->
+            param <| PG.value <| PG.string <| "lt.now"
+
 
 toString : Operation -> String
 toString operation =
     case operation of
-        IsTrue ->
-            "is true"
-
-        IsFalse ->
-            "is false"
-
-        IsNull _ ->
-            "is not set"
-
         Equals _ ->
             "is equal to"
 
@@ -164,6 +163,21 @@ toString operation =
 
         NoneOf _ ->
             "is none of"
+
+        IsTrue ->
+            "is true"
+
+        IsFalse ->
+            "is false"
+
+        IsNull _ ->
+            "is not set"
+
+        IsInTheFuture _ ->
+            "is in the future"
+
+        IsInThePast _ ->
+            "is in the past"
 
 
 values : Operation -> List String
@@ -206,4 +220,10 @@ values operation =
             []
 
         IsNull _ ->
+            []
+
+        IsInTheFuture _ ->
+            []
+
+        IsInThePast _ ->
             []
