@@ -469,7 +469,7 @@ input name idx op =
                     (operationCons >> Filter.init name >> UpdateFilter idx)
                     operand
 
-            else if date (Operand.value operand) == operand then
+            else if time (Operand.value operand) == operand then
                 textInput (type_ "datetime-local" :: attrs)
                     (operationCons >> Filter.init name >> UpdateFilter idx)
                     operand
