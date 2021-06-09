@@ -134,6 +134,14 @@ suite =
                             (Just <|
                                 time2 "time" between "1800-01-01" "2021-01-02"
                             )
+            , test "between time inverted" <|
+                \_ ->
+                    Filter.parse definition
+                        "and=(time.lte.2021-01-02,time.gte.1800-01-01)"
+                        |> Expect.equal
+                            (Just <|
+                                time2 "time" between "1800-01-01" "2021-01-02"
+                            )
             , test "time in the future" <|
                 \_ ->
                     Filter.parse definition "time=gt.now"
@@ -159,6 +167,21 @@ suite =
                             String.join ","
                                 [ "time.gte.2021-01-01T00%3A00"
                                 , "time.lt.2021-01-02T00%3A00"
+                                ]
+
+                        query =
+                            "and=(" ++ times ++ ")"
+                    in
+                    Filter.parse definition query
+                        |> Expect.equal
+                            (Just <| time "time" inDate "2021-01-01")
+            , test "time is in date inverted" <|
+                \_ ->
+                    let
+                        times =
+                            String.join ","
+                                [ "time.lt.2021-01-02T00%3A00"
+                                , "time.gte.2021-01-01T00%3A00"
                                 ]
 
                         query =

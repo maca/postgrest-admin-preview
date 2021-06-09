@@ -7,9 +7,12 @@ module Filter.Operation exposing
     )
 
 import Filter.Operand as Operand exposing (Enum, Operand(..))
+import Iso8601
 import Postgrest.Client as PG
 import Set
 import String.Extra as String
+import Time
+import Time.Extra as Time
 
 
 type Operation
@@ -108,9 +111,24 @@ toPGQuery name op =
                 (String.nonEmpty <| Operand.value operandB)
 
         InDate operand ->
-            Operand.value operand
-                |> String.nonEmpty
-                |> Maybe.andThen (param << PG.eq << PG.string)
+            let
+                makeOperation min =
+                    let
+                        max =
+                            (Time.posixToMillis min + Time.hours24)
+                                |> Time.millisToPosix
+                    in
+                    PG.and
+                        [ PG.string ("gte." ++ Iso8601.fromTime min)
+                            |> PG.value
+                            |> PG.param name
+                        , PG.string ("lt." ++ Iso8601.fromTime max)
+                            |> PG.value
+                            |> PG.param name
+                        ]
+            in
+            Time.parse (Operand.value operand ++ "T00:00")
+                |> Maybe.map makeOperation
 
         OneOf enum ->
             let
@@ -241,10 +259,10 @@ operands operation =
         InDate a ->
             [ a ]
 
-        OneOf enum ->
+        OneOf _ ->
             []
 
-        NoneOf enum ->
+        NoneOf _ ->
             []
 
         IsTrue ->

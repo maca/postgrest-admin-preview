@@ -11,7 +11,6 @@ import Parser
         , backtrackable
         , chompIf
         , chompUntil
-        , chompUntilEndOr
         , chompWhile
         , getChompedString
         , spaces

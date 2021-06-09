@@ -291,7 +291,7 @@ textFilterInputs required name idx op =
 
 intFilterInputs : Bool -> String -> Int -> Operation -> List (Html Msg)
 intFilterInputs required name idx op =
-    [ select (numberOptions int op ++ nullOption required op) op
+    [ select (numberOptions int ++ nullOption required op) op
         |> Html.map (Filter.init name >> UpdateFilter idx)
     , input name idx op
     ]
@@ -299,7 +299,7 @@ intFilterInputs required name idx op =
 
 floatFilterInputs : Bool -> String -> Int -> Operation -> List (Html Msg)
 floatFilterInputs required name idx op =
-    [ select (numberOptions float op ++ nullOption required op) op
+    [ select (numberOptions float ++ nullOption required op) op
         |> Html.map (Filter.init name >> UpdateFilter idx)
     , input name idx op
     ]
@@ -307,7 +307,20 @@ floatFilterInputs required name idx op =
 
 dateFilterInputs : Bool -> String -> Int -> Operation -> List (Html Msg)
 dateFilterInputs required name idx op =
-    [ select (timeOptions date op ++ nullOption required op) op
+    let
+        options =
+            List.map operationOption
+                [ map Filter.equals date
+                , dropBoth (IsInTheFuture <| Just op)
+                , dropBoth (IsInThePast <| Just op)
+                , map Filter.lesserOrEqual date
+                , map Filter.greaterOrEqual date
+                , map Filter.lesserThan date
+                , map Filter.greaterThan date
+                , map2 Filter.between date
+                ]
+    in
+    [ select (options ++ nullOption required op) op
         |> Html.map (Filter.init name >> UpdateFilter idx)
     , input name idx op
     ]
@@ -315,7 +328,20 @@ dateFilterInputs required name idx op =
 
 timeFilterInputs : Bool -> String -> Int -> Operation -> List (Html Msg)
 timeFilterInputs required name idx op =
-    [ select (timeOptions time op ++ nullOption required op) op
+    let
+        options =
+            List.map operationOption
+                [ map Filter.inDate date
+                , dropBoth (IsInTheFuture <| Just op)
+                , dropBoth (IsInThePast <| Just op)
+                , map Filter.lesserOrEqual time
+                , map Filter.greaterOrEqual time
+                , map Filter.lesserThan time
+                , map Filter.greaterThan time
+                , map2 Filter.between time
+                ]
+    in
+    [ select (options ++ nullOption required op) op
         |> Html.map (Filter.init name >> UpdateFilter idx)
     , input name idx op
     ]
@@ -562,24 +588,10 @@ operationOption cons =
     ( Operation.toString (cons "" ""), cons )
 
 
-numberOptions : (String -> Operand) -> Operation -> List ( String, OperationConst )
-numberOptions cons op =
+numberOptions : (String -> Operand) -> List ( String, OperationConst )
+numberOptions cons =
     List.map operationOption
         [ map Filter.equals cons
-        , map Filter.lesserOrEqual cons
-        , map Filter.greaterOrEqual cons
-        , map Filter.lesserThan cons
-        , map Filter.greaterThan cons
-        , map2 Filter.between cons
-        ]
-
-
-timeOptions : (String -> Operand) -> Operation -> List ( String, OperationConst )
-timeOptions cons op =
-    List.map operationOption
-        [ map Filter.inDate date
-        , dropBoth (IsInTheFuture <| Just op)
-        , dropBoth (IsInThePast <| Just op)
         , map Filter.lesserOrEqual cons
         , map Filter.greaterOrEqual cons
         , map Filter.lesserThan cons

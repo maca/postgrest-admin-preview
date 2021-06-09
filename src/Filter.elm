@@ -37,8 +37,8 @@ module Filter exposing
 
 import Basics.Extra exposing (flip)
 import Dict
-import Filter.Operand as Operand exposing (Enum(..), Operand(..))
-import Filter.Operation as Operation exposing (Operation(..), operands)
+import Filter.Operand as Operand exposing (Operand(..))
+import Filter.Operation as Operation exposing (Operation(..))
 import Filter.Parser
 import Parser
     exposing
@@ -59,6 +59,8 @@ import Postgrest.Schema.Definition
         )
 import Postgrest.Value exposing (Value(..))
 import Set exposing (Set)
+import Time exposing (posixToMillis, toHour, utc)
+import Time.Extra as Time
 
 
 type Filter
@@ -343,6 +345,7 @@ combineAnd filters =
     combine [] filters |> List.head
 
 
+combine : List Filter -> List (Maybe Filter) -> List Filter
 combine acc filters =
     case filters of
         [] ->
@@ -372,38 +375,71 @@ combine acc filters =
 
 
 combineHelp : Filter -> Filter -> ( Maybe Filter, Maybe Filter )
-combineHelp ((Filter name op) as f) ((Filter name_ op_) as f_) =
+combineHelp (Filter name op) ((Filter name_ op_) as f_) =
     let
         default =
             ( Just f_, Nothing )
+
+        inDateMapFn min max =
+            let
+                diffIs24H =
+                    posixToMillis max - posixToMillis min == Time.hours24
+            in
+            diffIs24H && toHour utc min == 0
+
+        makeInDate min max =
+            case ( min, max ) of
+                ( Operand.Time tmin, Operand.Time tmax ) ->
+                    if
+                        Maybe.map2 inDateMapFn
+                            (Time.parse tmin)
+                            (Time.parse tmax)
+                            == Just True
+                    then
+                        ( Nothing
+                        , Just <| time name inDate (String.slice 0 10 tmin)
+                        )
+
+                    else
+                        default
+
+                _ ->
+                    default
     in
-    case op of
-        LesserOrEqual lteO ->
-            case op_ of
-                GreaterOrEqual gteO ->
-                    if name_ == name then
-                        ( Nothing, Just <| Filter name (Between gteO lteO) )
+    if name_ == name then
+        case op of
+            LesserOrEqual max ->
+                case op_ of
+                    GreaterOrEqual min ->
+                        ( Nothing, Just <| Filter name (Between min max) )
 
-                    else
+                    _ ->
                         default
 
-                _ ->
-                    default
+            GreaterOrEqual min ->
+                case op_ of
+                    LesserOrEqual max ->
+                        ( Nothing, Just <| Filter name (Between min max) )
 
-        GreaterOrEqual gteO ->
-            case op_ of
-                LesserOrEqual lteO ->
-                    if name_ == name then
-                        ( Nothing, Just <| Filter name (Between gteO lteO) )
+                    LesserThan max ->
+                        makeInDate min max
 
-                    else
+                    _ ->
                         default
 
-                _ ->
-                    default
+            LesserThan max ->
+                case op_ of
+                    GreaterOrEqual min ->
+                        makeInDate min max
 
-        _ ->
-            default
+                    _ ->
+                        default
+
+            _ ->
+                default
+
+    else
+        default
 
 
 

@@ -1,6 +1,6 @@
 module Filter.Operand exposing
     ( Enum
-    , Operand
+    , Operand(..)
     , choices
     , chosen
     , constructor
@@ -8,6 +8,11 @@ module Filter.Operand exposing
     , enum
     , float
     , int
+    , isDate
+    , isFloat
+    , isInt
+    , isText
+    , isTime
     , rawValue
     , text
     , time
@@ -132,3 +137,53 @@ constructor operand =
 
         Time _ ->
             time
+
+
+isText : Operand -> Bool
+isText operand =
+    case operand of
+        Text _ ->
+            True
+
+        _ ->
+            False
+
+
+isInt : Operand -> Bool
+isInt operand =
+    case operand of
+        Int _ ->
+            True
+
+        _ ->
+            False
+
+
+isFloat : Operand -> Bool
+isFloat operand =
+    case operand of
+        Float _ ->
+            True
+
+        _ ->
+            False
+
+
+isDate : Operand -> Bool
+isDate operand =
+    case operand of
+        Date _ ->
+            True
+
+        _ ->
+            False
+
+
+isTime : Operand -> Bool
+isTime operand =
+    case operand of
+        Time _ ->
+            True
+
+        _ ->
+            False

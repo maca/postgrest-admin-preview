@@ -1,5 +1,6 @@
-module Time.Extra exposing (decoder, format, toDateString)
+module Time.Extra exposing (decoder, format, hours24, parse, toDateString)
 
+import Basics.Extra exposing (flip)
 import Iso8601
 import Json.Decode as Decode exposing (Decoder)
 import Time exposing (Month(..), Weekday(..), utc)
@@ -18,6 +19,19 @@ decoder =
 format : Time.Posix -> String
 format time =
     toDateString time ++ " " ++ toTimeString time
+
+
+parse : String -> Maybe Time.Posix
+parse =
+    String.slice 0 16
+        >> flip (++) ":00"
+        >> Iso8601.toTime
+        >> Result.toMaybe
+
+
+hours24 : Int
+hours24 =
+    86400000
 
 
 toDateString : Time.Posix -> String
