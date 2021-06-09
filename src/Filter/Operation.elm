@@ -1,4 +1,10 @@
-module Filter.Operation exposing (Operation(..), toPGQuery, toString, values)
+module Filter.Operation exposing
+    ( Operation(..)
+    , operands
+    , toPGQuery
+    , toString
+    , values
+    )
 
 import Filter.Operand as Operand exposing (Enum, Operand(..))
 import Postgrest.Client as PG
@@ -91,8 +97,10 @@ toPGQuery name op =
                                     ( b, a )
                     in
                     PG.and
-                        [ PG.param name <| PG.gte <| PG.string valA
-                        , PG.param name <| PG.lte <| PG.string valB
+                        [ PG.param name <|
+                            PG.value (PG.string <| "gte." ++ valA)
+                        , PG.param name <|
+                            PG.value (PG.string <| "lte." ++ valB)
                         ]
             in
             Maybe.map2 makeOperation
@@ -200,44 +208,44 @@ toString operation =
             "is in the past"
 
 
-values : Operation -> List String
-values operation =
+operands : Operation -> List Operand
+operands operation =
     case operation of
         Equals a ->
-            [ Operand.value a ]
+            [ a ]
 
         Contains a ->
-            [ Operand.value a ]
+            [ a ]
 
         StartsWith a ->
-            [ Operand.value a ]
+            [ a ]
 
         EndsWith a ->
-            [ Operand.value a ]
+            [ a ]
 
         LesserThan a ->
-            [ Operand.value a ]
+            [ a ]
 
         GreaterThan a ->
-            [ Operand.value a ]
+            [ a ]
 
         LesserOrEqual a ->
-            [ Operand.value a ]
+            [ a ]
 
         GreaterOrEqual a ->
-            [ Operand.value a ]
+            [ a ]
 
         Between a b ->
-            [ Operand.value a, Operand.value b ]
+            [ a, b ]
 
         InDate a ->
-            [ Operand.value a ]
+            [ a ]
 
         OneOf enum ->
-            Set.toList (Operand.chosen enum)
+            []
 
         NoneOf enum ->
-            Set.diff (Set.fromList (Operand.choices enum)) (Operand.chosen enum) |> Set.toList
+            []
 
         IsTrue ->
             []
@@ -253,3 +261,17 @@ values operation =
 
         IsInThePast _ ->
             []
+
+
+values : Operation -> List String
+values operation =
+    case operation of
+        OneOf enum ->
+            Set.toList (Operand.chosen enum)
+
+        NoneOf enum ->
+            Set.diff (Set.fromList (Operand.choices enum)) (Operand.chosen enum)
+                |> Set.toList
+
+        _ ->
+            operands operation |> List.map Operand.value

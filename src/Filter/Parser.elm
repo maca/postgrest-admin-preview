@@ -12,6 +12,7 @@ import Parser
         , chompIf
         , chompUntil
         , chompUntilEndOr
+        , chompWhile
         , getChompedString
         , spaces
         , succeed
@@ -50,8 +51,8 @@ operation =
 contains : Parser (OperandConst -> Operation)
 contains =
     succeed (operationCons Contains)
-        |. token "ilike"
-        |. symbol ".*"
+        |. symbol "ilike."
+        |. symbol "*"
         |= getUntil "*"
         |> backtrackable
 
@@ -59,99 +60,96 @@ contains =
 endsWith : Parser (OperandConst -> Operation)
 endsWith =
     succeed (operationCons EndsWith)
-        |. token "ilike"
-        |. symbol ".*"
-        |= getRest
+        |. symbol "ilike."
+        |. symbol "*"
+        |= value
         |> backtrackable
 
 
 startsWith : Parser (OperandConst -> Operation)
 startsWith =
     succeed (operationCons StartsWith)
-        |. token "ilike"
-        |. symbol "."
+        |. symbol "ilike."
         |= getUntil "*"
 
 
 is : Parser (OperandConst -> Operation)
 is =
     succeed identity
-        |. token "is"
-        |. symbol "."
+        |. symbol "is."
         |= Parser.oneOf [ true, false, null ]
 
 
 true : Parser (OperandConst -> Operation)
 true =
-    succeed (always IsTrue) |. token "true"
+    succeed (always IsTrue) |. symbol "true"
 
 
 false : Parser (OperandConst -> Operation)
 false =
-    succeed (always IsFalse) |. token "false"
+    succeed (always IsFalse) |. symbol "false"
 
 
 null : Parser (OperandConst -> Operation)
 null =
-    succeed (always (IsNull Nothing)) |. token "null"
+    succeed (always (IsNull Nothing)) |. symbol "null"
 
 
 equals : Parser (OperandConst -> Operation)
 equals =
     succeed (unquote >> operationCons Equals)
-        |. token "eq"
-        |. symbol "."
-        |= getRest
+        |. symbol "eq."
+        |= value
 
 
 inTheFuture : Parser (OperandConst -> Operation)
 inTheFuture =
     succeed (always <| IsInTheFuture Nothing)
-        |. token "gt.now"
+        |. symbol "gt.now"
 
 
 inThePast : Parser (OperandConst -> Operation)
 inThePast =
     succeed (always <| IsInThePast Nothing)
-        |. token "lt.now"
+        |. symbol "lt.now"
 
 
 lesserThan : Parser (OperandConst -> Operation)
 lesserThan =
     succeed (unquote >> operationCons LesserThan)
         |. symbol "lt."
-        |= getRest
+        |= value
 
 
 greaterThan : Parser (OperandConst -> Operation)
 greaterThan =
     succeed (unquote >> operationCons GreaterThan)
         |. symbol "gt."
-        |= getRest
+        |= value
 
 
 lesserOrEqual : Parser (OperandConst -> Operation)
 lesserOrEqual =
     succeed (unquote >> operationCons LesserOrEqual)
         |. symbol "lte."
-        |= getRest
+        |= value
 
 
 greaterOrEqual : Parser (OperandConst -> Operation)
 greaterOrEqual =
     succeed (unquote >> operationCons GreaterOrEqual)
         |. symbol "gte."
-        |= getRest
+        |= value
 
 
 enum : Parser (List String -> Operation)
 enum =
     Parser.oneOf
         [ succeed (Set.fromList >> enumOperationCons OneOf)
-            |. token "in."
+            |. symbol "in."
             |= items
         , succeed (Set.fromList >> enumOperationCons NoneOf)
-            |. token "not.in."
+            |. symbol "not.in."
             |= items
         ]
 
@@ -204,10 +202,17 @@ stringHelp delimiter =
         ]
 
 
-getRest : Parser String
-getRest =
+value : Parser String
+value =
+    let
+        exclude =
+            [ ',', ')' ]
+    in
     succeed (percentDecode >> Maybe.withDefault "")
-        |= (getChompedString <| succeed () |. chompUntilEndOr "\n")
+        |= (succeed ()
+                |. chompWhile (\c -> List.member c exclude |> not)
+                |> getChompedString
+           )
 
 
 getUntil : String -> Parser String

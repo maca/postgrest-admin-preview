@@ -488,7 +488,7 @@ input name idx op =
             div []
                 [ input_ (flip Between b) a []
                 , span [] [ Html.text "and" ]
-                , input_ (flip Between a) b []
+                , input_ (Between a) b []
                 ]
 
         InDate a ->

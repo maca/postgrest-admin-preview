@@ -43,6 +43,10 @@ suite =
                      , "date=lte.now"
                      , "time=gte.now"
                      , "time=lte.now"
+                     , "and=(int.gte.1,int.lte.2)"
+                     , "and=(float.gte.1.1,float.lte.2.2)"
+                     , "and=(date.gte.1800-01-01,date.lte.2021-01-02)"
+                     , "and=(time.gte.2021-01-02T01%3A10,time.lte.2027-01-03T01%3A00)"
                      ]
                         |> List.map
                             (\q ->
@@ -95,12 +99,41 @@ suite =
             , test "lesser or equal to" <|
                 \_ ->
                     Filter.parse definition "float=lte.1.1"
-                        |> Expect.equal (Just <| float "float" lesserOrEqual "1.1")
+                        |> Expect.equal
+                            (Just <| float "float" lesserOrEqual "1.1")
             , test "greater or equal to" <|
                 \_ ->
                     Filter.parse definition "float=gte.1.1"
                         |> Expect.equal
                             (Just <| float "float" greaterOrEqual "1.1")
+            , test "between int" <|
+                \_ ->
+                    Filter.parse definition
+                        "and=(int.gte.1,int.lte.10)"
+                        |> Expect.equal
+                            (Just <| int2 "int" between "1" "10")
+            , test "between float" <|
+                \_ ->
+                    Filter.parse definition
+                        "and=(float.gte.1.1,float.lte.10.1)"
+                        |> Expect.equal
+                            (Just <| float2 "float" between "1.1" "10.1")
+            , test "between date" <|
+                \_ ->
+                    Filter.parse definition
+                        "and=(date.gte.1800-01-01,date.lte.2021-01-02)"
+                        |> Expect.equal
+                            (Just <|
+                                date2 "date" between "1800-01-01" "2021-01-02"
+                            )
+            , test "between time" <|
+                \_ ->
+                    Filter.parse definition
+                        "and=(time.gte.1800-01-01,time.lte.2021-01-02)"
+                        |> Expect.equal
+                            (Just <|
+                                time2 "time" between "1800-01-01" "2021-01-02"
+                            )
             , test "time in the future" <|
                 \_ ->
                     Filter.parse definition "time=gt.now"
@@ -119,6 +152,21 @@ suite =
                     Filter.parse definition "date=lt.now"
                         |> Expect.equal
                             (Just <| isInThePast "date")
+            , test "time is in date" <|
+                \_ ->
+                    let
+                        times =
+                            String.join ","
+                                [ "time.gte.2021-01-01T00%3A00"
+                                , "time.lt.2021-01-02T00%3A00"
+                                ]
+
+                        query =
+                            "and=(" ++ times ++ ")"
+                    in
+                    Filter.parse definition query
+                        |> Expect.equal
+                            (Just <| time "time" inDate "2021-01-01")
             ]
         ]
 

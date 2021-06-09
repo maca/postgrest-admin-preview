@@ -4,15 +4,18 @@ module Filter exposing
     , columnName
     , contains
     , date
+    , date2
     , endsWith
     , equals
     , float
+    , float2
     , fromColumn
     , greaterOrEqual
     , greaterThan
     , inDate
     , init
     , int
+    , int2
     , isFalse
     , isInTheFuture
     , isInThePast
@@ -27,13 +30,15 @@ module Filter exposing
     , startsWith
     , text
     , time
+    , time2
     , toPGQuery
     , toQueryString
     )
 
+import Basics.Extra exposing (flip)
 import Dict
 import Filter.Operand as Operand exposing (Enum(..), Operand(..))
-import Filter.Operation as Operation exposing (Operation(..))
+import Filter.Operation as Operation exposing (Operation(..), operands)
 import Filter.Parser
 import Parser
     exposing
@@ -198,17 +203,7 @@ inDate =
 
 
 
--- Operand constructors
-
-
-float : String -> (Operand -> Operation) -> String -> Filter
-float name operationCons value =
-    init name (operationCons <| Operand.float value)
-
-
-int : String -> (Operand -> Operation) -> String -> Filter
-int name operationCons value =
-    init name (operationCons <| Operand.int value)
+-- Filter constructors
 
 
 text : String -> (Operand -> Operation) -> String -> Filter
@@ -216,14 +211,44 @@ text name operationCons value =
     init name (operationCons <| Operand.text value)
 
 
+int : String -> (Operand -> Operation) -> String -> Filter
+int name operationCons value =
+    init name (operationCons <| Operand.int value)
+
+
+int2 : String -> (Operand -> Operand -> Operation) -> String -> String -> Filter
+int2 name operationCons valueA valueB =
+    init name (operationCons (Operand.int valueA) (Operand.int valueB))
+
+
+float : String -> (Operand -> Operation) -> String -> Filter
+float name operationCons value =
+    init name (operationCons <| Operand.float value)
+
+
+float2 : String -> (Operand -> Operand -> Operation) -> String -> String -> Filter
+float2 name operationCons valueA valueB =
+    init name (operationCons (Operand.float valueA) (Operand.float valueB))
+
+
 date : String -> (Operand -> Operation) -> String -> Filter
 date name operationCons value =
     init name (operationCons <| Operand.date value)
 
 
+date2 : String -> (Operand -> Operand -> Operation) -> String -> String -> Filter
+date2 name operationCons valueA valueB =
+    init name (operationCons (Operand.date valueA) (Operand.date valueB))
+
+
 time : String -> (Operand -> Operation) -> String -> Filter
 time name operationCons value =
     init name (operationCons <| Operand.time value)
+
+
+time2 : String -> (Operand -> Operand -> Operation) -> String -> String -> Filter
+time2 name operationCons valueA valueB =
+    init name (operationCons (Operand.time valueA) (Operand.time valueB))
 
 
 isTrue : String -> Filter
@@ -259,33 +284,130 @@ parse : Definition -> String -> Maybe Filter
 parse definition query =
     query
         |> Parser.run (parseFilter definition)
-        |> Result.mapError (Debug.log "error")
+        |> Result.mapError (Debug.log query)
         |> Result.toMaybe
         |> Maybe.andThen identity
 
 
 parseFilter : Definition -> Parser (Maybe Filter)
 parseFilter definition =
-    let
-        colNames =
-            Dict.keys definition
-                |> List.map (\s -> succeed (always s) |= token s)
-    in
     Parser.oneOf
-        [ succeed (\name f -> f name)
-            |= Parser.oneOf colNames
-            |. symbol "="
-            |= Parser.oneOf
-                [ succeed (enumCons definition)
-                    |= Filter.Parser.enum
-                , succeed (filterCons definition)
-                    |= Filter.Parser.operation
-                ]
+        [ and definition
+        , columnFilter definition "="
         ]
 
 
 
 -- Parse helpers
+
+
+and : Definition -> Parser (Maybe Filter)
+and definition =
+    succeed combineAnd
+        |. symbol "and="
+        |= list definition
+
+
+list : Definition -> Parser (List (Maybe Filter))
+list definition =
+    Parser.sequence
+        { start = "("
+        , separator = ","
+        , end = ")"
+        , spaces = Parser.spaces
+        , item = columnFilter definition "."
+        , trailing = Forbidden
+        }
+
+
+columnFilter : Definition -> String -> Parser (Maybe Filter)
+columnFilter definition separator =
+    let
+        colNames =
+            Dict.keys definition
+                |> List.map (\s -> succeed (always s) |= token s)
+    in
+    succeed (\name f -> f name)
+        |= Parser.oneOf colNames
+        |. symbol separator
+        |= Parser.oneOf
+            [ succeed (enumCons definition)
+                |= Filter.Parser.enum
+            , succeed (filterCons definition)
+                |= Filter.Parser.operation
+            ]
+
+
+combineAnd : List (Maybe Filter) -> Maybe Filter
+combineAnd filters =
+    combine [] filters |> List.head
+
+
+combine acc filters =
+    case filters of
+        [] ->
+            acc
+
+        Nothing :: fs ->
+            combine acc fs
+
+        (Just f) :: fs ->
+            let
+                ( rest, combined ) =
+                    fs
+                        |> List.foldl
+                            (\mf ( rem, comb ) ->
+                                case mf of
+                                    Just f_ ->
+                                        combineHelp f f_
+                                            |> Tuple.mapFirst (flip (::) rem)
+                                            |> Tuple.mapSecond (flip (::) comb)
+
+                                    Nothing ->
+                                        ( rem, comb )
+                            )
+                            ( [], [] )
+            in
+            combine (List.filterMap identity combined ++ acc) rest
+
+
+combineHelp : Filter -> Filter -> ( Maybe Filter, Maybe Filter )
+combineHelp ((Filter name op) as f) ((Filter name_ op_) as f_) =
+    let
+        default =
+            ( Just f_, Nothing )
+    in
+    case op of
+        LesserOrEqual lteO ->
+            case op_ of
+                GreaterOrEqual gteO ->
+                    if name_ == name then
+                        ( Nothing, Just <| Filter name (Between gteO lteO) )
+
+                    else
+                        default
+
+                _ ->
+                    default
+
+        GreaterOrEqual gteO ->
+            case op_ of
+                LesserOrEqual lteO ->
+                    if name_ == name then
+                        ( Nothing, Just <| Filter name (Between gteO lteO) )
+
+                    else
+                        default
+
+                _ ->
+                    default
+
+        _ ->
+            default
+
+
+
+-- False
 
 
 filterCons : Definition -> (OperandConst -> Operation) -> String -> Maybe Filter
