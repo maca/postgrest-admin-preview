@@ -90,20 +90,11 @@ toPGQuery name op =
         Between operandA operandB ->
             let
                 makeOperation a b =
-                    let
-                        ( valA, valB ) =
-                            case compare a b of
-                                LT ->
-                                    ( a, b )
-
-                                _ ->
-                                    ( b, a )
-                    in
                     PG.and
                         [ PG.param name <|
-                            PG.value (PG.string <| "gte." ++ valA)
+                            PG.value (PG.string <| "gte." ++ a)
                         , PG.param name <|
-                            PG.value (PG.string <| "lte." ++ valB)
+                            PG.value (PG.string <| "lte." ++ b)
                         ]
             in
             Maybe.map2 makeOperation
