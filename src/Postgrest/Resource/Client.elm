@@ -17,14 +17,14 @@ import Postgrest.Schema.Definition as Definition
         , Definition
         )
 import Postgrest.Value as Value
-import Url.Builder as Url
+import Url exposing (Url)
 import Utils.Task exposing (Error(..))
 
 
 type alias Client a =
     { a
         | schema : Schema
-        , host : String
+        , host : Url
         , jwt : PG.JWT
     }
 
@@ -46,6 +46,7 @@ fetchOne { host } definition resourcesName id =
 fetchMany : Client a -> Definition -> String -> Request (List Resource)
 fetchMany { host } definition resourcesName =
     resourceEndpoint host resourcesName definition
+        |> Debug.log "many"
         |> PG.getMany
         |> PG.setParams [ PG.select <| selects definition ]
 
@@ -101,7 +102,8 @@ selects definition =
         |> (++) (Dict.keys definition |> List.map PG.attribute)
 
 
-resourceEndpoint : String -> String -> Definition -> Endpoint Resource
-resourceEndpoint host resourcesName definition =
+resourceEndpoint : Url -> String -> Definition -> Endpoint Resource
+resourceEndpoint url resourcesName definition =
     Resource.decoder definition
-        |> PG.endpoint (Url.crossOrigin host [ resourcesName ] [])
+        |> PG.endpoint
+            ({ url | path = "/" ++ resourcesName } |> Url.toString)

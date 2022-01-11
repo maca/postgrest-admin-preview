@@ -8,5 +8,5 @@ import PostgrestAdmin.Config as Config exposing (Config)
 main : Program () Model Msg
 main =
     Config.default
-        |> Config.withUrl "http://localhost:3000"
+        |> Config.withUrl "http://localhost:4000"
         |> PostgrestAdmin.application

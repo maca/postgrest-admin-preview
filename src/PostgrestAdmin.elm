@@ -18,7 +18,6 @@ import Postgrest.Value exposing (Value(..))
 import PostgrestAdmin.Config as Config exposing (Config)
 import String.Extra as String
 import Url exposing (Url)
-import Url.Builder as Url
 import Url.Parser as Parser exposing ((</>), Parser)
 import Utils.Task exposing (Error(..), attemptWithError, fail)
 
@@ -83,10 +82,7 @@ init : Config -> () -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init config () url key =
     let
         jwt =
-            PG.jwt "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoidG9kb191c2VyIn0.gm7S31FmVXlluCKr2ZBXBolkei2n06gNGJaw1IUJBEk"
-
-        host =
-            Url.toString config.url
+            PG.jwt "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYXBwX3VzZXIiLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwiZXhwIjoxNjQxODc2MDQ1fQ.ROrd1cpcmXr1FhGc6RGAZcSZaQz9uwchNBzZwfUDckk"
 
         schema =
             Dict.fromList []
@@ -95,12 +91,12 @@ init config () url key =
             { route = Root
             , key = key
             , schema = schema
-            , host = host
+            , host = config.url
             , jwt = jwt
             }
     in
     ( { model | route = getRoute url model }
-    , Schema.getSchema host |> attemptWithError Failed SchemaFetched
+    , Schema.getSchema model.host |> attemptWithError Failed SchemaFetched
     )
 
 
