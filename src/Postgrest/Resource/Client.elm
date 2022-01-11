@@ -46,7 +46,6 @@ fetchOne { host } definition resourcesName id =
 fetchMany : Client a -> Definition -> String -> Request (List Resource)
 fetchMany { host } definition resourcesName =
     resourceEndpoint host resourcesName definition
-        |> Debug.log "many"
         |> PG.getMany
         |> PG.setParams [ PG.select <| selects definition ]
 
