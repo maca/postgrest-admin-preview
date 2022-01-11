@@ -1,12 +1,12 @@
 Sequel.migration do
   up do
     run <<-SQL
-      drop role if exists todo_user;
-      create role todo_user nologin;
+      drop role if exists app_user;
+      create role app_user nologin;
     SQL
   end
 
   down do
-    run "drop role todo_user"
+    run "drop role app_user"
   end
 end

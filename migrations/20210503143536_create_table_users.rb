@@ -25,9 +25,9 @@ Sequel.migration do
     end
 
     run <<-SQL
-      grant select on api.users to todo_anon;
-      grant all on api.users to todo_user;
-      grant usage, select on sequence api.users_id_seq to todo_user;
+      grant select on api.users to app_anon;
+      grant all on api.users to app_user;
+      grant usage, select on sequence api.users_id_seq to app_user;
     SQL
   end
 

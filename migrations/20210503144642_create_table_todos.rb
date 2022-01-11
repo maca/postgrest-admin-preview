@@ -7,13 +7,13 @@ Sequel.migration do
   status = %w(idle started finished aproved rejected)
 
   up do
-    DB.create_enum(:todo_status, status)
+    DB.create_enum(:app_status, status)
 
     create_table(api[:todos]) do
       foreign_key :user_id, api[:users], null: false
       primary_key :id
       varchar :title, null: false
-      column :status, :todo_status
+      column :status, :app_status
 
       date :due
     end
@@ -28,9 +28,9 @@ Sequel.migration do
     SQL
 
     run <<-SQL
-      grant select on api.todos to todo_anon;
-      grant all on api.todos to todo_user;
-      grant usage, select on sequence api.todos_id_seq to todo_user;
+      grant select on api.todos to app_anon;
+      grant all on api.todos to app_user;
+      grant usage, select on sequence api.todos_id_seq to app_user;
     SQL
 
     100.times do
@@ -45,7 +45,7 @@ Sequel.migration do
   end
 
   down do
-    # DB.drop_enum(api[:todo_status])
+    # DB.drop_enum(api[:app_status])
     drop_table(api[:todos])
   end
 end

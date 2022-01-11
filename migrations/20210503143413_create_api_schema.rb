@@ -2,8 +2,8 @@ Sequel.migration do
   up do
     run <<-SQL
       create schema api;
-      grant usage on schema api to todo_anon;
-      grant usage on schema api to todo_user;
+      grant usage on schema api to app_anon;
+      grant usage on schema api to app_user;
     SQL
   end
 
