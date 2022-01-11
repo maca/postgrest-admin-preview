@@ -10,7 +10,7 @@ import Html.Attributes exposing (class, href, style)
 import Inflect as String
 import Json.Decode as Decode exposing (Decoder, Value)
 import Listing exposing (Listing)
-import Message exposing (Message)
+import Notification exposing (Notification)
 import Postgrest.Client as PG
 import Postgrest.Resource.Client exposing (Client)
 import Postgrest.Schema as Schema exposing (Schema)
@@ -18,6 +18,8 @@ import Postgrest.Schema.Definition exposing (Definition)
 import PostgrestAdmin.Config as Config exposing (Config)
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 import String.Extra as String
+import Task
+import Time
 import Url exposing (Url)
 import Url.Parser as Parser exposing ((</>), Parser)
 import Utils.Task exposing (Error(..), attemptWithError, fail)
@@ -27,6 +29,7 @@ type Msg
     = SchemaFetched Schema
     | ListingChanged Listing Listing.Msg
     | FormChanged Form Form.Msg
+    | NotificationChanged Notification.Msg
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
     | Failed Error
@@ -55,6 +58,7 @@ type alias Model =
     Client
         { route : Route
         , key : Nav.Key
+        , notification : Notification
         }
 
 
@@ -85,6 +89,7 @@ init decoder flags url key =
                     , schema = Dict.fromList []
                     , host = config.url
                     , authScheme = config.authScheme
+                    , notification = Notification.none
                     }
             in
             ( { model | route = getRoute url model }
@@ -115,6 +120,13 @@ update msg model =
             Form.update model innerMsg form
                 |> mapNested Form FormChanged model
                 |> handleOuterMsg (Form.outerMsg innerMsg)
+
+        NotificationChanged innerMsg ->
+            let
+                ( notification, messageCmd ) =
+                    Notification.update innerMsg model.notification
+            in
+            ( { model | notification = notification }, Cmd.none )
 
         LinkClicked urlRequest ->
             case urlRequest of
@@ -166,13 +178,21 @@ mapNested makeRoute makeMsg model ( a, cmd ) =
 
 
 handleOuterMsg : OuterMsg -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
-handleOuterMsg msg tuple =
+handleOuterMsg msg ( model, cmd ) =
     case msg of
         OuterMsg.RequestFailed err ->
-            tuple
+            -- Do something
+            ( model, cmd )
+
+        OuterMsg.NotificationChanged innerMsg ->
+            ( model
+            , Time.now
+                |> Task.andThen (always <| Task.succeed innerMsg)
+                |> Task.perform NotificationChanged
+            )
 
         OuterMsg.Pass ->
-            tuple
+            ( model, cmd )
 
 
 
@@ -193,7 +213,10 @@ body model =
         [ sideMenu model
         , div
             [ class "main-area" ]
-            [ displayMainContent model ]
+            [ Notification.view model.notification
+                |> Html.map NotificationChanged
+            , displayMainContent model
+            ]
         ]
     ]
 
@@ -302,17 +325,6 @@ makeFormRoute resources id model definition =
         params =
             { resourcesName = resources
             , definition = definition
-            , message =
-                case model.route of
-                    Form f ->
-                        if Form.id f == Just id then
-                            Form.message f
-
-                        else
-                            Message.none
-
-                    _ ->
-                        Message.none
             }
 
         form =

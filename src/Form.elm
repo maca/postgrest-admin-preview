@@ -10,7 +10,6 @@ module Form exposing
     , fromResource
     , hasErrors
     , id
-    , message
     , outerMsg
     , primaryKey
     , primaryKeyName
@@ -29,7 +28,7 @@ import Form.Input as Input exposing (Input)
 import Html exposing (Html, button, fieldset, h1, section, text)
 import Html.Attributes exposing (autocomplete, class, disabled, novalidate)
 import Html.Events exposing (onSubmit)
-import Message exposing (Message)
+import Notification exposing (Notification)
 import Postgrest.Client as PG
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
 import Postgrest.Resource as Resource exposing (Resource)
@@ -52,7 +51,6 @@ import Utils.Task exposing (Error(..), attemptWithError)
 type alias Params =
     { resourcesName : String
     , definition : Definition
-    , message : Message
     }
 
 
@@ -61,8 +59,8 @@ type Msg
     | Created Resource
     | Updated Resource
     | Changed Input.Msg
+    | NotificationChanged Notification.Msg
     | Submitted
-    | MessageChanged Message.Msg
     | Failed Error
 
 
@@ -82,48 +80,41 @@ update client msg ((Form params fields) as form) =
 
         Created resource ->
             let
-                confirmation =
-                    Message.confirm "The record was created"
-
                 rid =
                     Resource.id resource |> Maybe.withDefault ""
             in
-            ( fromResource { params | message = confirmation } resource
-            , Nav.pushUrl client.key <|
-                Url.absolute [ params.resourcesName, rid ] []
+            ( fromResource params resource
+            , Cmd.batch
+                [ Nav.pushUrl client.key <|
+                    Url.absolute [ params.resourcesName, rid ] []
+                , Notification.confirm "The record was created"
+                    |> Task.perform NotificationChanged
+                ]
             )
 
         Updated resource ->
-            let
-                confirmation =
-                    Message.confirm "The record was updated"
-            in
-            ( fromResource { params | message = confirmation } resource
-            , Cmd.none
+            ( fromResource params resource
+            , Notification.confirm "The record was updated"
+                |> Task.perform NotificationChanged
             )
 
         Changed inputMsg ->
-            let
-                ( updatedMsg, messageCmd ) =
-                    Message.update Message.dismiss params.message
-            in
             Input.update client inputMsg fields
-                |> Tuple.mapFirst (Form { params | message = updatedMsg })
+                |> Tuple.mapFirst (Form params)
                 |> Tuple.mapSecond
                     (\cmd ->
                         Cmd.batch
                             [ Cmd.map Changed cmd
-                            , Cmd.map MessageChanged messageCmd
+                            , Notification.dismiss
+                                |> Task.perform NotificationChanged
                             ]
                     )
 
         Submitted ->
             ( form, save client params form )
 
-        MessageChanged messageMsg ->
-            Message.update messageMsg params.message
-                |> Tuple.mapFirst (\m -> Form { params | message = m } fields)
-                |> Tuple.mapSecond (Cmd.map MessageChanged)
+        NotificationChanged _ ->
+            ( form, Cmd.none )
 
         Failed _ ->
             ( form, Cmd.none )
@@ -170,13 +161,11 @@ outerMsg msg =
         Failed err ->
             OuterMsg.RequestFailed err
 
+        NotificationChanged innerMsg ->
+            OuterMsg.NotificationChanged innerMsg
+
         _ ->
             OuterMsg.Pass
-
-
-message : Form -> Message
-message (Form params _) =
-    params.message
 
 
 id : Form -> Maybe String
@@ -302,7 +291,6 @@ view ((Form params record) as form) =
                 |> (++) (String.humanize params.resourcesName ++ " - ")
                 |> text
             ]
-        , Message.view params.message |> Html.map MessageChanged
         , Html.form
             [ autocomplete False
             , onSubmit Submitted

@@ -328,8 +328,8 @@ label {
 
 
 /* ------------ */
-/* Message      */
-.message {
+/* Notification */
+.notification {
     position: fixed;
     display: flex;
     top: 4rem;
@@ -339,27 +339,27 @@ label {
     justify-content: space-between;
 }
 
-.message .close {
+.notification .close {
     justify-content: flex-end;
 }
 
-.message p {
+.notification p {
     margin-top: 0.4rem;
     padding-right: 4rem;
 }
 
-.message.confirmation {
+.notification.confirmation {
     background: rgba(204, 229, 189, 0.6);
 }
 
-.message.confirmation, .message.confirmation i {
+.notification.confirmation, .notification.confirmation i {
     color: #698658;
 }
 
 i.icono-cross {
     cursor: pointer;
 }
-/* Message      */
+/* Notification      */
 /* ------------ */
 a:hover {
     text-decoration: underline;
