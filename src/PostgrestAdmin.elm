@@ -86,7 +86,7 @@ init config () url key =
             PG.jwt "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoidG9kb191c2VyIn0.gm7S31FmVXlluCKr2ZBXBolkei2n06gNGJaw1IUJBEk"
 
         host =
-            "http://localhost:4000"
+            Url.toString config.url
 
         schema =
             Dict.fromList []
