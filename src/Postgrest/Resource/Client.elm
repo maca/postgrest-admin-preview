@@ -17,6 +17,7 @@ import Postgrest.Schema.Definition as Definition
         , Definition
         )
 import Postgrest.Value as Value
+import PostgrestAdmin.AuthScheme exposing (AuthScheme)
 import Url exposing (Url)
 import Utils.Task exposing (Error(..))
 
@@ -25,7 +26,7 @@ type alias Client a =
     { a
         | schema : Schema
         , host : Url
-        , jwt : PG.JWT
+        , authScheme : AuthScheme
     }
 
 

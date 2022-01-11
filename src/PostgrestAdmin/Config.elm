@@ -1,11 +1,14 @@
-module PostgrestAdmin.Config exposing (Config, default, url, withUrl)
+module PostgrestAdmin.Config exposing (Config, default, withJwt, withUrl)
 
+import Json.Decode as Decode exposing (Decoder, Value)
+import PostgrestAdmin.AuthScheme as AuthScheme exposing (AuthScheme)
 import Result
 import Url exposing (Protocol(..), Url)
 
 
 type alias Config =
     { url : Url
+    , authScheme : AuthScheme
     }
 
 
@@ -19,16 +22,27 @@ default =
         , query = Nothing
         , fragment = Nothing
         }
+    , authScheme = AuthScheme.unset
     }
 
 
-withUrl : String -> Config -> Result String Config
-withUrl urlStr config =
-    Url.fromString urlStr
-        |> Maybe.map (\u -> Ok { config | url = u })
-        |> Maybe.withDefault (Err "Postgrest url is not valid")
+withUrl : String -> Decoder Config -> Decoder Config
+withUrl urlStr decoder =
+    decoder
+        |> Decode.andThen
+            (\conf ->
+                Url.fromString urlStr
+                    |> Maybe.map (\u -> Decode.succeed { conf | url = u })
+                    |> Maybe.withDefault
+                        (Decode.fail "Postgrest url is not valid")
+            )
 
 
-url : Config -> String
-url config =
-    Url.toString config.url
+withJwt : String -> Decoder Config -> Decoder Config
+withJwt tokenStr decoder =
+    decoder
+        |> Decode.andThen
+            (\conf ->
+                Decode.succeed
+                    { conf | authScheme = AuthScheme.fromTokenString tokenStr }
+            )

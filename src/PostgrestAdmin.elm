@@ -1,4 +1,4 @@
-module PostgrestAdmin exposing (Model, Msg, application)
+module PostgrestAdmin exposing (Model, Msg, application, applicationParams)
 
 import Browser
 import Browser.Navigation as Nav
@@ -8,14 +8,15 @@ import Form exposing (Form(..))
 import Html exposing (Html, a, aside, div, h1, li, pre, text, ul)
 import Html.Attributes exposing (class, href, style)
 import Inflect as String
+import Json.Decode as Decode exposing (Decoder, Value)
 import Listing exposing (Listing)
-import Message
+import Message exposing (Message)
 import Postgrest.Client as PG
 import Postgrest.Resource.Client exposing (Client)
 import Postgrest.Schema as Schema exposing (Schema)
 import Postgrest.Schema.Definition exposing (Definition)
-import Postgrest.Value exposing (Value(..))
 import PostgrestAdmin.Config as Config exposing (Config)
+import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 import String.Extra as String
 import Url exposing (Url)
 import Url.Parser as Parser exposing ((</>), Parser)
@@ -40,6 +41,16 @@ type Route
     | NotFound
 
 
+type alias Params =
+    { init : Value -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
+    , view : Model -> Browser.Document Msg
+    , update : Msg -> Model -> ( Model, Cmd Msg )
+    , subscriptions : Model -> Sub Msg
+    , onUrlRequest : Browser.UrlRequest -> Msg
+    , onUrlChange : Url -> Msg
+    }
+
+
 type alias Model =
     Client
         { route : Route
@@ -47,57 +58,42 @@ type alias Model =
         }
 
 
-application : Result String Config -> Program () Model Msg
-application confResult =
-    case confResult of
+application : Decoder Config -> Program Value Model Msg
+application decoder =
+    applicationParams decoder |> Browser.application
+
+
+applicationParams : Decoder Config -> Params
+applicationParams decoder =
+    { init = init decoder
+    , update = update
+    , view = view
+    , subscriptions = subscriptions
+    , onUrlRequest = LinkClicked
+    , onUrlChange = UrlChanged
+    }
+
+
+init : Decoder Config -> Value -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
+init decoder flags url key =
+    case Decode.decodeValue decoder flags of
         Ok config ->
-            Browser.application
-                { init = init config
-                , update = update
-                , view = view
-                , subscriptions = subscriptions
-                , onUrlRequest = LinkClicked
-                , onUrlChange = UrlChanged
-                }
+            let
+                model =
+                    { route = Root
+                    , key = key
+                    , schema = Dict.fromList []
+                    , host = config.url
+                    , authScheme = config.authScheme
+                    }
+            in
+            ( { model | route = getRoute url model }
+            , Schema.getSchema model.host
+                |> attemptWithError Failed SchemaFetched
+            )
 
-        Err str ->
-            Browser.application
-                { init = init Config.default
-                , update = update
-                , view =
-                    always
-                        { title = "Admin"
-                        , body =
-                            [ h1 [] [ text "Bad config!" ]
-                            , pre [ style "color" "red" ] [ text str ]
-                            ]
-                        }
-                , subscriptions = subscriptions
-                , onUrlRequest = LinkClicked
-                , onUrlChange = UrlChanged
-                }
-
-
-init : Config -> () -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
-init config () url key =
-    let
-        jwt =
-            PG.jwt "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYXBwX3VzZXIiLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwiZXhwIjoxNjQxODc2MDQ1fQ.ROrd1cpcmXr1FhGc6RGAZcSZaQz9uwchNBzZwfUDckk"
-
-        schema =
-            Dict.fromList []
-
-        model =
-            { route = Root
-            , key = key
-            , schema = schema
-            , host = config.url
-            , jwt = jwt
-            }
-    in
-    ( { model | route = getRoute url model }
-    , Schema.getSchema model.host |> attemptWithError Failed SchemaFetched
-    )
+        Err _ ->
+            Debug.todo "crash"
 
 
 
@@ -110,13 +106,15 @@ update msg model =
         SchemaFetched schema ->
             urlChanged { model | schema = schema }
 
-        ListingChanged listing lMsg ->
-            Listing.update model lMsg listing
+        ListingChanged listing innerMsg ->
+            Listing.update model innerMsg listing
                 |> mapNested Listing ListingChanged model
+                |> handleOuterMsg (Listing.outerMsg innerMsg)
 
-        FormChanged form fMsg ->
-            Form.update model fMsg form
+        FormChanged form innerMsg ->
+            Form.update model innerMsg form
                 |> mapNested Form FormChanged model
+                |> handleOuterMsg (Form.outerMsg innerMsg)
 
         LinkClicked urlRequest ->
             case urlRequest of
@@ -165,6 +163,16 @@ mapNested makeRoute makeMsg model ( a, cmd ) =
     ( { model | route = makeRoute a }
     , Cmd.map (makeMsg a) cmd
     )
+
+
+handleOuterMsg : OuterMsg -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
+handleOuterMsg msg tuple =
+    case msg of
+        OuterMsg.RequestFailed err ->
+            tuple
+
+        OuterMsg.Pass ->
+            tuple
 
 
 

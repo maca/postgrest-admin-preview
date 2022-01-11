@@ -36,6 +36,7 @@ import Postgrest.PrimaryKey as PrimaryKey
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
 import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
+import PostgrestAdmin.AuthScheme as AuthScheme
 import Result
 import String.Extra as String
 import Url.Builder as Url
@@ -538,13 +539,18 @@ fetchResources client name field ({ foreignKeyParams } as autocomplete) =
                     AutocompleteError foreignKeyParams autocomplete.userInput
 
             else
-                Client.fetchMany client definition foreignKeyParams.table
-                    |> PG.setParams
-                        [ PG.select selects, PG.or queries, PG.limit 40 ]
-                    |> PG.toCmd client.jwt
-                        (ListingFetched name field autocomplete
-                            << Result.mapError PGError
-                        )
+                case AuthScheme.jwt client.authScheme of
+                    Just token ->
+                        Client.fetchMany client definition foreignKeyParams.table
+                            |> PG.setParams
+                                [ PG.select selects, PG.or queries, PG.limit 40 ]
+                            |> PG.toCmd token
+                                (ListingFetched name field autocomplete
+                                    << Result.mapError PGError
+                                )
+
+                    Nothing ->
+                        Debug.todo "crash"
 
         Nothing ->
             fail Failure <| BadSchema foreignKeyParams.table

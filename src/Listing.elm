@@ -7,6 +7,7 @@ module Listing exposing
     , hideSearch
     , init
     , isSearchVisible
+    , outerMsg
     , showSearch
     , update
     , view
@@ -54,6 +55,8 @@ import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
 import Postgrest.Schema.Definition exposing (Column(..), Definition)
 import Postgrest.Value exposing (Value(..))
+import PostgrestAdmin.AuthScheme as AuthScheme
+import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 import Search exposing (Search)
 import String.Extra as String
 import Task
@@ -139,6 +142,16 @@ init resourcesName rawQuery definition =
     , searchOpen = False
     , textSelect = Off
     }
+
+
+outerMsg : Msg -> OuterMsg
+outerMsg msg =
+    case msg of
+        Failed err ->
+            OuterMsg.RequestFailed err
+
+        _ ->
+            OuterMsg.Pass
 
 
 isSearchVisible : Listing -> Bool
@@ -270,7 +283,7 @@ update client msg listing =
         ToggleSearchOpen ->
             ( { listing | searchOpen = not listing.searchOpen }, Cmd.none )
 
-        Failed _ ->
+        Failed err ->
             ( listing, Cmd.none )
 
         SelectEnter ->
@@ -576,11 +589,16 @@ fetchResources client { search, resourcesName, page, definition, order } =
             , PG.offset (perPage * page)
             ]
     in
-    Client.fetchMany client definition resourcesName
-        |> PG.setParams (params ++ pgOrder ++ Search.toPGQuery search)
-        |> PG.toTask client.jwt
-        |> Task.mapError PGError
-        |> attemptWithError Failed Fetched
+    case AuthScheme.jwt client.authScheme of
+        Just token ->
+            Client.fetchMany client definition resourcesName
+                |> PG.setParams (params ++ pgOrder ++ Search.toPGQuery search)
+                |> PG.toTask token
+                |> Task.mapError PGError
+                |> attemptWithError Failed Fetched
+
+        Nothing ->
+            Debug.todo "crash"
 
 
 sortBy : String -> SortOrder -> ( String, Column ) -> Maybe PG.Param
@@ -632,7 +650,8 @@ parseQueryHelp : String -> Maybe ( String, String )
 parseQueryHelp fragment =
     case String.split "=" fragment of
         [ key, val ] ->
-            Maybe.map2 Tuple.pair (Url.percentDecode key) (Url.percentDecode val)
+            Url.percentDecode val
+                |> Maybe.map2 Tuple.pair (Url.percentDecode key)
 
         _ ->
             Nothing

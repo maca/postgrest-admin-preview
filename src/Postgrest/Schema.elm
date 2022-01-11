@@ -30,8 +30,8 @@ type alias Schema =
     Dict String Definition
 
 
-type Cuadruple a b c d
-    = Cuadruple a b c d
+type Quadruple a b c d
+    = Quadruple a b c d
 
 
 getSchema : Url -> Task Error Schema
@@ -83,7 +83,7 @@ decoder =
 
 valueDecoder : Decoder Value
 valueDecoder =
-    Decode.map4 Cuadruple
+    Decode.map4 Quadruple
         (field "type" string)
         (field "format" string)
         (maybe <| field "description" string)
@@ -91,39 +91,39 @@ valueDecoder =
         |> andThen
             (\data ->
                 case data of
-                    Cuadruple "number" _ _ _ ->
+                    Quadruple "number" _ _ _ ->
                         mapValue PFloat float
 
-                    Cuadruple "integer" _ maybeDesc _ ->
+                    Quadruple "integer" _ maybeDesc _ ->
                         Decode.oneOf
                             [ mapPrimaryKey maybeDesc
                             , mapForeignKey maybeDesc
                             , mapValue PInt int
                             ]
 
-                    Cuadruple "string" "timestamp without time zone" _ _ ->
+                    Quadruple "string" "timestamp without time zone" _ _ ->
                         mapValue PTime Time.decoder
 
-                    Cuadruple "string" "date" _ _ ->
+                    Quadruple "string" "date" _ _ ->
                         mapValue PDate Time.decoder
 
-                    Cuadruple "string" "text" _ _ ->
+                    Quadruple "string" "text" _ _ ->
                         mapValue PText string
 
-                    Cuadruple "string" _ _ (Just enum) ->
+                    Quadruple "string" _ _ (Just enum) ->
                         mapValue (flip PEnum enum) string
 
-                    Cuadruple "string" _ maybeDesc _ ->
+                    Quadruple "string" _ maybeDesc _ ->
                         Decode.oneOf
                             [ mapPrimaryKey maybeDesc
                             , mapForeignKey maybeDesc
                             , mapValue PString string
                             ]
 
-                    Cuadruple "boolean" _ _ _ ->
+                    Quadruple "boolean" _ _ _ ->
                         mapValue PBool bool
 
-                    Cuadruple _ _ _ _ ->
+                    Quadruple _ _ _ _ ->
                         Decode.map BadValue Decode.value
             )
 

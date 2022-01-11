@@ -11,6 +11,7 @@ module Form exposing
     , hasErrors
     , id
     , message
+    , outerMsg
     , primaryKey
     , primaryKeyName
     , save
@@ -39,6 +40,8 @@ import Postgrest.Schema.Definition as Definition
         , Definition
         )
 import Postgrest.Value exposing (Value(..))
+import PostgrestAdmin.AuthScheme as AuthScheme
+import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 import Regex exposing (Regex)
 import String.Extra as String
 import Task exposing (Task)
@@ -95,7 +98,9 @@ update client msg ((Form params fields) as form) =
                 confirmation =
                     Message.confirm "The record was updated"
             in
-            ( fromResource { params | message = confirmation } resource, Cmd.none )
+            ( fromResource { params | message = confirmation } resource
+            , Cmd.none
+            )
 
         Changed inputMsg ->
             let
@@ -159,6 +164,16 @@ hasErrors record =
     toResource record |> Resource.hasErrors
 
 
+outerMsg : Msg -> OuterMsg
+outerMsg msg =
+    case msg of
+        Failed err ->
+            OuterMsg.RequestFailed err
+
+        _ ->
+            OuterMsg.Pass
+
+
 message : Form -> Message
 message (Form params _) =
     params.message
@@ -214,11 +229,16 @@ columnRegex =
 
 
 fetch : Client a -> Form -> String -> Cmd Msg
-fetch model (Form { definition, resourcesName } _) rid =
-    Client.fetchOne model definition resourcesName rid
-        |> PG.toTask model.jwt
-        |> Task.mapError PGError
-        |> attemptWithError Failed Fetched
+fetch client (Form { definition, resourcesName } _) rid =
+    case AuthScheme.jwt client.authScheme of
+        Just token ->
+            Client.fetchOne client definition resourcesName rid
+                |> PG.toTask token
+                |> Task.mapError PGError
+                |> attemptWithError Failed Fetched
+
+        Nothing ->
+            Debug.todo "crash"
 
 
 save : Client a -> Params -> Form -> Cmd Msg
@@ -235,18 +255,28 @@ save client params form =
 
 updateRecord : Client a -> Params -> String -> Form -> Task Error Resource
 updateRecord client { definition, resourcesName } rid record =
-    toResource record
-        |> Client.update client definition resourcesName rid
-        |> PG.toTask client.jwt
-        |> Task.mapError PGError
+    case AuthScheme.jwt client.authScheme of
+        Just token ->
+            toResource record
+                |> Client.update client definition resourcesName rid
+                |> PG.toTask token
+                |> Task.mapError PGError
+
+        Nothing ->
+            Debug.todo "crash"
 
 
 createRecord : Client a -> Params -> Form -> Task Error Resource
 createRecord client { definition, resourcesName } record =
-    toResource record
-        |> Client.create client definition resourcesName
-        |> PG.toTask client.jwt
-        |> Task.mapError PGError
+    case AuthScheme.jwt client.authScheme of
+        Just token ->
+            toResource record
+                |> Client.create client definition resourcesName
+                |> PG.toTask token
+                |> Task.mapError PGError
+
+        Nothing ->
+            Debug.todo "crash"
 
 
 
