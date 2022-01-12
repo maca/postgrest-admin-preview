@@ -8,7 +8,7 @@ import PostgrestAdmin.Config as Config exposing (Config)
 
 main : Program Decode.Value Model Msg
 main =
-    Decode.succeed Config.default
+    Config.noFlags
         |> Config.withUrl "http://localhost:4000"
         |> Config.withJwt tokenStr
         |> PostgrestAdmin.application
@@ -16,4 +16,4 @@ main =
 
 tokenStr : String
 tokenStr =
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYXBwX3VzZXIiLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwiZXhwIjoxNjQxODc2MDQ1fQ.ROrd1cpcmXr1FhGc6RGAZcSZaQz9uwchNBzZwfUDckk"
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYXBwX3VzZXIiLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwiZXhwIjoxNjQxOTQ1NTU3fQ.ntpyIrsVYBB7lacORt318d8V7wuqYf2228rIfRFYWk4"
