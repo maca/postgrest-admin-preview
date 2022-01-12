@@ -1,4 +1,10 @@
-module PostgrestAdmin.Config exposing (Config, default, noFlags, withJwt, withUrl)
+module PostgrestAdmin.Config exposing
+    ( Config
+    , default
+    , noFlags
+    , withJwt
+    , withUrl
+    )
 
 import Json.Decode as Decode exposing (Decoder, Value)
 import PostgrestAdmin.AuthScheme as AuthScheme exposing (AuthScheme)

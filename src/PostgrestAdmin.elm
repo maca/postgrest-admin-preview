@@ -119,7 +119,7 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         SchemaFetched schema ->
-            urlChanged { model | schema = schema }
+            navigate { model | schema = schema }
 
         ListingChanged listing innerMsg ->
             Listing.update model innerMsg listing
@@ -145,19 +145,19 @@ update msg model =
                     ( model, Nav.load href )
 
         UrlChanged url ->
-            urlChanged { model | route = getRoute url model }
+            navigate { model | route = getRoute url model }
 
         Failed _ ->
             ( model, Cmd.none )
 
 
-urlChanged : Model -> ( Model, Cmd Msg )
-urlChanged model =
+navigate : Model -> ( Model, Cmd Msg )
+navigate model =
     case model.route of
         LoadingDefinition resourcesName makeRoute ->
             case Dict.get resourcesName model.schema of
                 Just definition ->
-                    urlChanged { model | route = makeRoute definition }
+                    navigate { model | route = makeRoute definition }
 
                 Nothing ->
                     ( model, fail Failed <| BadSchema resourcesName )
