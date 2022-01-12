@@ -61,7 +61,7 @@ type Msg
     | Changed Input.Msg
     | NotificationChanged Notification.Msg
     | Submitted
-    | Failed Error
+    | RequestFailed Error
 
 
 type alias Fields =
@@ -116,7 +116,7 @@ update client msg ((Form params fields) as form) =
         NotificationChanged _ ->
             ( form, Cmd.none )
 
-        Failed _ ->
+        RequestFailed _ ->
             ( form, Cmd.none )
 
 
@@ -158,7 +158,7 @@ hasErrors record =
 outerMsg : Msg -> OuterMsg
 outerMsg msg =
     case msg of
-        Failed err ->
+        RequestFailed err ->
             OuterMsg.RequestFailed err
 
         NotificationChanged innerMsg ->
@@ -224,7 +224,7 @@ fetch client (Form { definition, resourcesName } _) rid =
             Client.fetchOne client definition resourcesName rid
                 |> PG.toTask token
                 |> Task.mapError PGError
-                |> attemptWithError Failed Fetched
+                |> attemptWithError RequestFailed Fetched
 
         Nothing ->
             Debug.todo "crash"
@@ -235,11 +235,11 @@ save client params form =
     case id form of
         Just rid ->
             updateRecord client params rid form
-                |> attemptWithError Failed Updated
+                |> attemptWithError RequestFailed Updated
 
         Nothing ->
             createRecord client params form
-                |> attemptWithError Failed Created
+                |> attemptWithError RequestFailed Created
 
 
 updateRecord : Client a -> Params -> String -> Form -> Task Error Resource

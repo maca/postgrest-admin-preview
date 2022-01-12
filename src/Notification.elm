@@ -53,17 +53,17 @@ task msg =
     Time.now |> Task.andThen (always <| Task.succeed msg)
 
 
-update : Msg -> Notification -> ( Notification, Cmd Msg )
-update msg _ =
+update : Msg -> Notification
+update msg =
     case msg of
         Confirm message ->
-            ( Confirmation message, Cmd.none )
+            Confirmation message
 
         Alert message ->
-            ( Error message, Cmd.none )
+            Error message
 
         Dismiss ->
-            ( None, Cmd.none )
+            None
 
 
 view : Notification -> Html Msg

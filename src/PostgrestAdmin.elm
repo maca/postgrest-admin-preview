@@ -59,6 +59,7 @@ type alias Model =
         { route : Route
         , key : Nav.Key
         , notification : Notification
+        , decodingError : Maybe Decode.Error
         }
 
 
@@ -80,25 +81,34 @@ applicationParams decoder =
 
 init : Decoder Config -> Value -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init decoder flags url key =
+    let
+        makeModel config =
+            { route = Root
+            , key = key
+            , schema = Dict.fromList []
+            , host = config.url
+            , authScheme = config.authScheme
+            , notification = Notification.none
+            , decodingError = Nothing
+            }
+    in
     case Decode.decodeValue decoder flags of
         Ok config ->
             let
                 model =
-                    { route = Root
-                    , key = key
-                    , schema = Dict.fromList []
-                    , host = config.url
-                    , authScheme = config.authScheme
-                    , notification = Notification.none
-                    }
+                    makeModel config
             in
             ( { model | route = getRoute url model }
             , Schema.getSchema model.host
                 |> attemptWithError Failed SchemaFetched
             )
 
-        Err _ ->
-            Debug.todo "crash"
+        Err error ->
+            let
+                model =
+                    makeModel Config.default
+            in
+            ( { model | decodingError = Just error }, Cmd.none )
 
 
 
@@ -122,11 +132,9 @@ update msg model =
                 |> handleOuterMsg (Form.outerMsg innerMsg)
 
         NotificationChanged innerMsg ->
-            let
-                ( notification, messageCmd ) =
-                    Notification.update innerMsg model.notification
-            in
-            ( { model | notification = notification }, Cmd.none )
+            ( { model | notification = Notification.update innerMsg }
+            , Cmd.none
+            )
 
         LinkClicked urlRequest ->
             case urlRequest of
@@ -184,10 +192,10 @@ handleOuterMsg msg ( model, cmd ) =
             -- Do something
             ( model, cmd )
 
-        OuterMsg.NotificationChanged innerMsg ->
+        OuterMsg.NotificationChanged notificationMsg ->
             ( model
             , Time.now
-                |> Task.andThen (always <| Task.succeed innerMsg)
+                |> Task.andThen (always <| Task.succeed notificationMsg)
                 |> Task.perform NotificationChanged
             )
 
@@ -208,17 +216,32 @@ view model =
 
 body : Model -> List (Html Msg)
 body model =
-    [ div
-        [ class "main-container" ]
-        [ sideMenu model
-        , div
-            [ class "main-area" ]
-            [ Notification.view model.notification
-                |> Html.map NotificationChanged
-            , displayMainContent model
+    case model.decodingError of
+        Just err ->
+            [ div
+                [ class "main-container" ]
+                [ div
+                    [ class "main-area" ]
+                    [ h1 [] [ text "Init failed" ]
+                    , pre
+                        [ class "parse-errors" ]
+                        [ text (Decode.errorToString err) ]
+                    ]
+                ]
             ]
-        ]
-    ]
+
+        Nothing ->
+            [ div
+                [ class "main-container" ]
+                [ sideMenu model
+                , div
+                    [ class "main-area" ]
+                    [ Notification.view model.notification
+                        |> Html.map NotificationChanged
+                    , displayMainContent model
+                    ]
+                ]
+            ]
 
 
 sideMenu : Model -> Html Msg
