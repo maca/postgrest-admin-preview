@@ -147,8 +147,8 @@ update msg model =
         UrlChanged url ->
             navigate { model | route = getRoute url model }
 
-        Failed _ ->
-            ( model, Cmd.none )
+        Failed err ->
+            failed err model
 
 
 navigate : Model -> ( Model, Cmd Msg )
@@ -189,8 +189,7 @@ handleOuterMsg : OuterMsg -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
 handleOuterMsg msg ( model, cmd ) =
     case msg of
         OuterMsg.RequestFailed err ->
-            -- Do something
-            ( model, cmd )
+            failed err model
 
         OuterMsg.NotificationChanged notificationMsg ->
             ( model
@@ -203,6 +202,21 @@ handleOuterMsg msg ( model, cmd ) =
             ( model, cmd )
 
 
+failed : Error -> Model -> ( Model, Cmd Msg )
+failed err model =
+    case err of
+        PGError (PG.BadStatus 401 _ { message }) ->
+            case message of
+                Just "JWT expired" ->
+                    ( model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        _ ->
+            ( model, Cmd.none )
+
+
 
 -- View
 
@@ -210,7 +224,13 @@ handleOuterMsg msg ( model, cmd ) =
 view : Model -> Browser.Document Msg
 view model =
     { title = "Admin"
-    , body = body model
+    , body =
+        [ div
+            [ class "main-container" ]
+            [ sideMenu model
+            , div [ class "main-area" ] (body model)
+            ]
+        ]
     }
 
 
@@ -218,29 +238,16 @@ body : Model -> List (Html Msg)
 body model =
     case model.decodingError of
         Just err ->
-            [ div
-                [ class "main-container" ]
-                [ div
-                    [ class "main-area" ]
-                    [ h1 [] [ text "Init failed" ]
-                    , pre
-                        [ class "parse-errors" ]
-                        [ text (Decode.errorToString err) ]
-                    ]
-                ]
+            [ h1 [] [ text "Init failed" ]
+            , pre
+                [ class "parse-errors" ]
+                [ text (Decode.errorToString err) ]
             ]
 
         Nothing ->
-            [ div
-                [ class "main-container" ]
-                [ sideMenu model
-                , div
-                    [ class "main-area" ]
-                    [ Notification.view model.notification
-                        |> Html.map NotificationChanged
-                    , displayMainContent model
-                    ]
-                ]
+            [ Notification.view model.notification
+                |> Html.map NotificationChanged
+            , mainContent model
             ]
 
 
@@ -258,8 +265,8 @@ menuItem name =
         [ a [ href <| "/" ++ name ] [ text <| String.humanize name ] ]
 
 
-displayMainContent : Model -> Html Msg
-displayMainContent model =
+mainContent : Model -> Html Msg
+mainContent model =
     case model.route of
         Root ->
             text ""
