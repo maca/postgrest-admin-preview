@@ -132,9 +132,7 @@ update msg model =
                 |> handleOuterMsg (Form.outerMsg innerMsg)
 
         NotificationChanged innerMsg ->
-            ( { model | notification = Notification.update innerMsg }
-            , Cmd.none
-            )
+            updateNotification innerMsg model
 
         LinkClicked urlRequest ->
             case urlRequest of
@@ -192,11 +190,7 @@ handleOuterMsg msg ( model, cmd ) =
             failed err model
 
         OuterMsg.NotificationChanged notificationMsg ->
-            ( model
-            , Time.now
-                |> Task.andThen (always <| Task.succeed notificationMsg)
-                |> Task.perform NotificationChanged
-            )
+            updateNotification notificationMsg model
 
         OuterMsg.Pass ->
             ( model, cmd )
@@ -215,6 +209,11 @@ failed err model =
 
         _ ->
             ( model, Cmd.none )
+
+
+updateNotification : Notification.Msg -> Model -> ( Model, Cmd Msg )
+updateNotification msg model =
+    ( { model | notification = Notification.update msg }, Cmd.none )
 
 
 
