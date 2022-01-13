@@ -6,9 +6,8 @@ module PostgrestAdmin.Config exposing
     , withUrl
     )
 
-import Json.Decode as Decode exposing (Decoder, Value)
+import Json.Decode as Decode exposing (Decoder)
 import PostgrestAdmin.AuthScheme as AuthScheme exposing (AuthScheme)
-import Result
 import Url exposing (Protocol(..), Url)
 
 

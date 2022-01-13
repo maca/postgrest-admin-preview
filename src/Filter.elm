@@ -125,10 +125,10 @@ fromColumn name col =
         PEnum _ choices ->
             Just <| oneOf name choices Set.empty
 
-        PPrimaryKey mprimaryKey ->
+        PPrimaryKey _ ->
             Nothing
 
-        PForeignKey mprimaryKey { label } ->
+        PForeignKey _ _ ->
             Nothing
 
         BadValue _ ->
@@ -286,7 +286,6 @@ parse : Definition -> String -> Maybe Filter
 parse definition query =
     query
         |> Parser.run (parseFilter definition)
-        |> Result.mapError (Debug.log query)
         |> Result.toMaybe
         |> Maybe.andThen identity
 

@@ -283,7 +283,7 @@ update client msg listing =
         ToggleSearchOpen ->
             ( { listing | searchOpen = not listing.searchOpen }, Cmd.none )
 
-        Failed err ->
+        Failed _ ->
             ( listing, Cmd.none )
 
         SelectEnter ->

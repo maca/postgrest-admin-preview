@@ -6,7 +6,7 @@ import Dict
 import Dict.Extra as Dict
 import Form exposing (Form(..))
 import Html exposing (Html, a, aside, div, h1, li, pre, text, ul)
-import Html.Attributes exposing (class, href, style)
+import Html.Attributes exposing (class, href)
 import Inflect as String
 import Json.Decode as Decode exposing (Decoder, Value)
 import Listing exposing (Listing)
@@ -17,9 +17,8 @@ import Postgrest.Schema as Schema exposing (Schema)
 import Postgrest.Schema.Definition exposing (Definition)
 import PostgrestAdmin.Config as Config exposing (Config)
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
+import Route exposing (Route)
 import String.Extra as String
-import Task
-import Time
 import Url exposing (Url)
 import Url.Parser as Parser exposing ((</>), Parser)
 import Utils.Task exposing (Error(..), attemptWithError, fail)
@@ -33,15 +32,6 @@ type Msg
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
     | Failed Error
-
-
-type Route
-    = Root
-    | LoadingDefinition String (Definition -> Route)
-    | Listing Listing
-    | FormLoading Form String
-    | Form Form
-    | NotFound
 
 
 type alias Params =
@@ -83,7 +73,7 @@ init : Decoder Config -> Value -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init decoder flags url key =
     let
         makeModel config =
-            { route = Root
+            { route = Route.Root
             , key = key
             , schema = Dict.fromList []
             , host = config.url
@@ -125,10 +115,10 @@ update msg model =
             let
                 updateFun =
                     Listing.update model innerMsg
-                        >> updateRoute Listing ListingChanged model
+                        >> updateRoute Route.Listing ListingChanged model
                         >> handleOuterMsg (Listing.outerMsg innerMsg)
             in
-            toListing model
+            Route.toListing model.route
                 |> Maybe.map updateFun
                 |> Maybe.withDefault ( model, Cmd.none )
 
@@ -136,10 +126,10 @@ update msg model =
             let
                 updateFun =
                     Form.update model innerMsg
-                        >> updateRoute Form FormChanged model
+                        >> updateRoute Route.Form FormChanged model
                         >> handleOuterMsg (Form.outerMsg innerMsg)
             in
-            toForm model
+            Route.toForm model.route
                 |> Maybe.map updateFun
                 |> Maybe.withDefault ( model, Cmd.none )
 
@@ -164,7 +154,7 @@ update msg model =
 navigate : Model -> ( Model, Cmd Msg )
 navigate model =
     case model.route of
-        LoadingDefinition resourcesName makeRoute ->
+        Route.LoadingDefinition resourcesName makeRoute ->
             case Dict.get resourcesName model.schema of
                 Just definition ->
                     navigate { model | route = makeRoute definition }
@@ -172,11 +162,11 @@ navigate model =
                 Nothing ->
                     ( model, fail Failed <| BadSchema resourcesName )
 
-        Listing listing ->
+        Route.Listing listing ->
             Listing.fetch model listing
-                |> updateRoute Listing ListingChanged model
+                |> updateRoute Route.Listing ListingChanged model
 
-        FormLoading form id ->
+        Route.FormLoading form id ->
             ( model, Form.fetch model form id |> Cmd.map FormChanged )
 
         _ ->
@@ -226,29 +216,6 @@ failed err model =
 updateNotification : Notification.Msg -> Model -> ( Model, Cmd Msg )
 updateNotification msg model =
     ( { model | notification = Notification.update msg }, Cmd.none )
-
-
-toListing : Model -> Maybe Listing
-toListing { route } =
-    case route of
-        Listing listing ->
-            Just listing
-
-        _ ->
-            Nothing
-
-
-toForm : Model -> Maybe Form
-toForm { route } =
-    case route of
-        FormLoading form _ ->
-            Just form
-
-        Form form ->
-            Just form
-
-        _ ->
-            Nothing
 
 
 
@@ -302,22 +269,22 @@ menuItem name =
 mainContent : Model -> Html Msg
 mainContent model =
     case model.route of
-        Root ->
+        Route.Root ->
             text ""
 
-        LoadingDefinition _ _ ->
+        Route.LoadingDefinition _ _ ->
             loading
 
-        Listing listing ->
+        Route.Listing listing ->
             Html.map ListingChanged <| Listing.view listing
 
-        FormLoading _ _ ->
+        Route.FormLoading _ _ ->
             loading
 
-        Form form ->
+        Route.Form form ->
             Html.map FormChanged <| Form.view form
 
-        NotFound ->
+        Route.NotFound ->
             notFound
 
 
@@ -346,15 +313,15 @@ subscriptions _ =
 
 getRoute : Url -> Model -> Route
 getRoute url model =
-    Parser.parse (routeParser url model) url |> Maybe.withDefault NotFound
+    Parser.parse (routeParser url model) url |> Maybe.withDefault Route.NotFound
 
 
 routeParser : Url -> Model -> Parser (Route -> a) a
 routeParser url model =
     Parser.oneOf
-        [ Parser.map Root Parser.top
+        [ Parser.map Route.Root Parser.top
         , Parser.map (makeListingRoute model url) Parser.string
-        , formRouteParser model
+        , formRouteParser
         ]
 
 
@@ -363,7 +330,7 @@ makeListingRoute model url resourcesName =
     let
         modify =
             case model.route of
-                Listing listing ->
+                Route.Listing listing ->
                     if Listing.isSearchVisible listing then
                         Listing.showSearch
 
@@ -373,18 +340,19 @@ makeListingRoute model url resourcesName =
                 _ ->
                     Listing.showSearch
     in
-    LoadingDefinition resourcesName
-        (Listing.init resourcesName url.query >> modify >> Listing)
+    Route.LoadingDefinition resourcesName
+        (Listing.init resourcesName url.query >> modify >> Route.Listing)
 
 
-formRouteParser : Model -> Parser (Route -> a) a
-formRouteParser model =
-    Parser.map (\res id -> LoadingDefinition res (makeFormRoute res id model))
+formRouteParser : Parser (Route -> a) a
+formRouteParser =
+    Parser.map
+        (\res id -> Route.LoadingDefinition res (makeFormRoute res id))
         (Parser.string </> Parser.string)
 
 
-makeFormRoute : String -> String -> Model -> Definition -> Route
-makeFormRoute resources id model definition =
+makeFormRoute : String -> String -> Definition -> Route
+makeFormRoute resources id definition =
     let
         params =
             { resourcesName = resources
@@ -395,7 +363,7 @@ makeFormRoute resources id model definition =
             Form.fromDefinition params definition
     in
     if id == "new" then
-        Form form
+        Route.Form form
 
     else
-        FormLoading form id
+        Route.FormLoading form id

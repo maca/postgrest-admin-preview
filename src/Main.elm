@@ -1,9 +1,8 @@
 module Main exposing (main)
 
-import Browser
-import Json.Decode as Decode exposing (Decoder, Value)
+import Json.Decode as Decode
 import PostgrestAdmin exposing (Model, Msg)
-import PostgrestAdmin.Config as Config exposing (Config)
+import PostgrestAdmin.Config as Config
 
 
 main : Program Decode.Value Model Msg

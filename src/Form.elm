@@ -28,7 +28,7 @@ import Form.Input as Input exposing (Input)
 import Html exposing (Html, button, fieldset, h1, section, text)
 import Html.Attributes exposing (autocomplete, class, disabled, novalidate)
 import Html.Events exposing (onSubmit)
-import Notification exposing (Notification)
+import Notification
 import Postgrest.Client as PG
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
 import Postgrest.Resource as Resource exposing (Resource)
