@@ -27,8 +27,8 @@ import Utils.Task exposing (Error(..), attemptWithError, fail)
 
 type Msg
     = SchemaFetched Schema
-    | ListingChanged Listing Listing.Msg
-    | FormChanged Form Form.Msg
+    | ListingChanged Listing.Msg
+    | FormChanged Form.Msg
     | NotificationChanged Notification.Msg
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
@@ -121,15 +121,27 @@ update msg model =
         SchemaFetched schema ->
             navigate { model | schema = schema }
 
-        ListingChanged listing innerMsg ->
-            Listing.update model innerMsg listing
-                |> mapNested Listing ListingChanged model
-                |> handleOuterMsg (Listing.outerMsg innerMsg)
+        ListingChanged innerMsg ->
+            let
+                updateFun =
+                    Listing.update model innerMsg
+                        >> mapNested Listing ListingChanged model
+                        >> handleOuterMsg (Listing.outerMsg innerMsg)
+            in
+            toListing model
+                |> Maybe.map updateFun
+                |> Maybe.withDefault ( model, Cmd.none )
 
-        FormChanged form innerMsg ->
-            Form.update model innerMsg form
-                |> mapNested Form FormChanged model
-                |> handleOuterMsg (Form.outerMsg innerMsg)
+        FormChanged innerMsg ->
+            let
+                updateFun =
+                    Form.update model innerMsg
+                        >> mapNested Form FormChanged model
+                        >> handleOuterMsg (Form.outerMsg innerMsg)
+            in
+            toForm model
+                |> Maybe.map updateFun
+                |> Maybe.withDefault ( model, Cmd.none )
 
         NotificationChanged innerMsg ->
             updateNotification innerMsg model
@@ -165,7 +177,7 @@ navigate model =
                 |> mapNested Listing ListingChanged model
 
         FormLoading form id ->
-            ( model, Form.fetch model form id |> Cmd.map (FormChanged form) )
+            ( model, Form.fetch model form id |> Cmd.map FormChanged )
 
         _ ->
             ( model, Cmd.none )
@@ -173,13 +185,13 @@ navigate model =
 
 mapNested :
     (a -> Route)
-    -> (a -> innerMsg -> Msg)
+    -> (innerMsg -> Msg)
     -> Model
     -> ( a, Cmd innerMsg )
     -> ( Model, Cmd Msg )
 mapNested makeRoute makeMsg model ( a, cmd ) =
     ( { model | route = makeRoute a }
-    , Cmd.map (makeMsg a) cmd
+    , Cmd.map makeMsg cmd
     )
 
 
@@ -214,6 +226,29 @@ failed err model =
 updateNotification : Notification.Msg -> Model -> ( Model, Cmd Msg )
 updateNotification msg model =
     ( { model | notification = Notification.update msg }, Cmd.none )
+
+
+toListing : Model -> Maybe Listing
+toListing { route } =
+    case route of
+        Listing listing ->
+            Just listing
+
+        _ ->
+            Nothing
+
+
+toForm : Model -> Maybe Form
+toForm { route } =
+    case route of
+        FormLoading form _ ->
+            Just form
+
+        Form form ->
+            Just form
+
+        _ ->
+            Nothing
 
 
 
@@ -274,13 +309,13 @@ mainContent model =
             loading
 
         Listing listing ->
-            Html.map (ListingChanged listing) <| Listing.view listing
+            Html.map ListingChanged <| Listing.view listing
 
         FormLoading _ _ ->
             loading
 
         Form form ->
-            Html.map (FormChanged form) <| Form.view form
+            Html.map FormChanged <| Form.view form
 
         NotFound ->
             notFound
