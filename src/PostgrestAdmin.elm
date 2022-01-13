@@ -125,7 +125,7 @@ update msg model =
             let
                 updateFun =
                     Listing.update model innerMsg
-                        >> mapNested Listing ListingChanged model
+                        >> updateRoute Listing ListingChanged model
                         >> handleOuterMsg (Listing.outerMsg innerMsg)
             in
             toListing model
@@ -136,7 +136,7 @@ update msg model =
             let
                 updateFun =
                     Form.update model innerMsg
-                        >> mapNested Form FormChanged model
+                        >> updateRoute Form FormChanged model
                         >> handleOuterMsg (Form.outerMsg innerMsg)
             in
             toForm model
@@ -174,7 +174,7 @@ navigate model =
 
         Listing listing ->
             Listing.fetch model listing
-                |> mapNested Listing ListingChanged model
+                |> updateRoute Listing ListingChanged model
 
         FormLoading form id ->
             ( model, Form.fetch model form id |> Cmd.map FormChanged )
@@ -183,13 +183,13 @@ navigate model =
             ( model, Cmd.none )
 
 
-mapNested :
+updateRoute :
     (a -> Route)
     -> (innerMsg -> Msg)
     -> Model
     -> ( a, Cmd innerMsg )
     -> ( Model, Cmd Msg )
-mapNested makeRoute makeMsg model ( a, cmd ) =
+updateRoute makeRoute makeMsg model ( a, cmd ) =
     ( { model | route = makeRoute a }
     , Cmd.map makeMsg cmd
     )
