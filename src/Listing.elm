@@ -589,7 +589,7 @@ fetchResources client { search, resourcesName, page, definition, order } =
             , PG.offset (perPage * page)
             ]
     in
-    case AuthScheme.jwt client.authScheme of
+    case AuthScheme.toJwt client.authScheme of
         Just token ->
             Client.fetchMany client definition resourcesName
                 |> PG.setParams (params ++ pgOrder ++ Search.toPGQuery search)

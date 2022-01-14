@@ -28,7 +28,6 @@ import Html.Attributes
         , target
         )
 import Html.Events exposing (onInput)
-import Inflect as String
 import Maybe.Extra as Maybe
 import Postgrest.Client as PG exposing (PostgrestErrorJSON)
 import Postgrest.Field as Field exposing (Field)
@@ -539,7 +538,7 @@ fetchResources client name field ({ foreignKeyParams } as autocomplete) =
                     AutocompleteError foreignKeyParams autocomplete.userInput
 
             else
-                case AuthScheme.jwt client.authScheme of
+                case AuthScheme.toJwt client.authScheme of
                     Just token ->
                         Client.fetchMany client definition foreignKeyParams.table
                             |> PG.setParams

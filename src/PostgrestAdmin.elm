@@ -15,6 +15,7 @@ import Postgrest.Client as PG
 import Postgrest.Resource.Client exposing (Client)
 import Postgrest.Schema as Schema exposing (Schema)
 import Postgrest.Schema.Definition exposing (Definition)
+import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.Config as Config exposing (Config)
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 import Route exposing (Route)
@@ -28,6 +29,7 @@ type Msg
     = SchemaFetched Schema
     | ListingChanged Listing.Msg
     | FormChanged Form.Msg
+    | AuthChanged AuthScheme.Msg
     | NotificationChanged Notification.Msg
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
@@ -76,10 +78,10 @@ init decoder flags url key =
             { route = Route.Root
             , key = key
             , schema = Dict.fromList []
-            , host = config.url
-            , authScheme = config.authScheme
             , notification = Notification.none
             , decodingError = Nothing
+            , host = config.url
+            , authScheme = config.authScheme
             }
     in
     case Decode.decodeValue decoder flags of
@@ -132,6 +134,15 @@ update msg model =
             Route.toForm model.route
                 |> Maybe.map updateFun
                 |> Maybe.withDefault ( model, Cmd.none )
+
+        AuthChanged innerMsg ->
+            let
+                ( authScheme, cmd ) =
+                    AuthScheme.update innerMsg model.authScheme
+            in
+            ( { model | authScheme = authScheme }
+            , Cmd.map AuthChanged cmd
+            )
 
         NotificationChanged innerMsg ->
             updateNotification innerMsg model
@@ -229,6 +240,7 @@ view model =
         [ div
             [ class "main-container" ]
             [ sideMenu model
+            , AuthScheme.view model.authScheme |> Html.map AuthChanged
             , div [ class "main-area" ] (body model)
             ]
         ]

@@ -219,7 +219,7 @@ columnRegex =
 
 fetch : Client a -> Form -> String -> Cmd Msg
 fetch client (Form { definition, resourcesName } _) rid =
-    case AuthScheme.jwt client.authScheme of
+    case AuthScheme.toJwt client.authScheme of
         Just token ->
             Client.fetchOne client definition resourcesName rid
                 |> PG.toTask token
@@ -244,7 +244,7 @@ save client params form =
 
 updateRecord : Client a -> Params -> String -> Form -> Task Error Resource
 updateRecord client { definition, resourcesName } rid record =
-    case AuthScheme.jwt client.authScheme of
+    case AuthScheme.toJwt client.authScheme of
         Just token ->
             toResource record
                 |> Client.update client definition resourcesName rid
@@ -257,7 +257,7 @@ updateRecord client { definition, resourcesName } rid record =
 
 createRecord : Client a -> Params -> Form -> Task Error Resource
 createRecord client { definition, resourcesName } record =
-    case AuthScheme.jwt client.authScheme of
+    case AuthScheme.toJwt client.authScheme of
         Just token ->
             toResource record
                 |> Client.create client definition resourcesName

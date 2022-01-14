@@ -2,10 +2,12 @@ module PostgrestAdmin.Config exposing
     ( Config
     , default
     , noFlags
+    , withBasicAuth
     , withJwt
     , withUrl
     )
 
+import BasicAuth exposing (BasicAuth)
 import Json.Decode as Decode exposing (Decoder)
 import PostgrestAdmin.AuthScheme as AuthScheme exposing (AuthScheme)
 import Url exposing (Protocol(..), Url)
@@ -19,7 +21,8 @@ type alias Config =
 
 default : Config
 default =
-    { url =
+    { authScheme = AuthScheme.unset
+    , url =
         { protocol = Http
         , host = "localhost"
         , port_ = Just 3000
@@ -27,7 +30,6 @@ default =
         , query = Nothing
         , fragment = Nothing
         }
-    , authScheme = AuthScheme.unset
     }
 
 
@@ -54,6 +56,12 @@ withJwt tokenStr decoder =
     decoder
         |> Decode.andThen
             (\conf ->
-                Decode.succeed
-                    { conf | authScheme = AuthScheme.fromTokenString tokenStr }
+                Decode.succeed { conf | authScheme = AuthScheme.jwt tokenStr }
             )
+
+
+withBasicAuth : Decoder BasicAuth -> Decoder Config -> Decoder Config
+withBasicAuth authDecoder decoder =
+    Decode.map2 (\auth conf -> { conf | authScheme = AuthScheme.basic auth })
+        authDecoder
+        decoder
