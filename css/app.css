@@ -403,3 +403,11 @@ a:hover {
 }
 /* Auth modal */
 /* ---------- */
+
+.form-error-message {
+    padding: 10px;
+    margin-bottom: 15px;
+    color: #950000;
+    background: #eedbdb;
+    border-radius: 5px;
+}

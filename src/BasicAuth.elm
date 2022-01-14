@@ -11,15 +11,14 @@ module BasicAuth exposing
     )
 
 import Dict exposing (Dict)
-import Html exposing (Html, button, div, fieldset, form, input, label, text)
-import Html.Attributes exposing (class, disabled, for, id, type_, value)
+import Html exposing (Html, button, div, fieldset, form, input, label, pre, text)
+import Html.Attributes exposing (class, disabled, for, id, style, type_, value)
 import Html.Events exposing (onInput, onSubmit)
-import Http
+import Http exposing (Error(..))
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Postgrest.Client as PG
 import String.Extra as String
-import Task exposing (Task)
 import Url exposing (Protocol(..), Url)
 
 
@@ -37,13 +36,22 @@ type alias Params =
     }
 
 
+type Error
+    = Forbidden
+    | ServerError Int
+    | DecodeError String
+    | NetworkError
+
+
 type BasicAuth
-    = BasicAuth Params (Maybe PG.JWT)
+    = Init Params
+    | Successful Params PG.JWT
+    | Failed Params Error
 
 
 noFlags : Decoder BasicAuth
 noFlags =
-    BasicAuth
+    Init
         { url =
             { protocol = Http
             , host = "localhost"
@@ -56,7 +64,6 @@ noFlags =
         , encoder = Encode.dict identity Encode.string
         , fields = [ ( "email", "" ), ( "password", "" ) ]
         }
-        Nothing
         |> Decode.succeed
 
 
@@ -65,10 +72,14 @@ withUrl urlStr decoder =
     decoder |> Decode.andThen (withUrlHelp urlStr)
 
 
-withUrlHelp urlStr (BasicAuth params m) =
+withUrlHelp : String -> BasicAuth -> Decoder BasicAuth
+withUrlHelp urlStr auth =
+    let
+        params =
+            toParams auth
+    in
     Url.fromString urlStr
-        |> Maybe.map
-            (\url -> Decode.succeed <| BasicAuth { params | url = url } m)
+        |> Maybe.map (\url -> Decode.succeed <| Init { params | url = url })
         |> Maybe.withDefault
             (Decode.fail "`BasicAuth.withUrl` was given an invalid URL")
 
@@ -77,9 +88,12 @@ withDecoder : Decoder PG.JWT -> Decoder BasicAuth -> Decoder BasicAuth
 withDecoder jwtDecoder decoder =
     decoder
         |> Decode.andThen
-            (\(BasicAuth params m) ->
-                BasicAuth { params | decoder = jwtDecoder } m
-                    |> Decode.succeed
+            (\auth ->
+                let
+                    params =
+                        toParams auth
+                in
+                Init { params | decoder = jwtDecoder } |> Decode.succeed
             )
 
 
@@ -90,9 +104,12 @@ withEncoder :
 withEncoder encoder decoder =
     decoder
         |> Decode.andThen
-            (\(BasicAuth params m) ->
-                BasicAuth { params | encoder = encoder } m
-                    |> Decode.succeed
+            (\auth ->
+                let
+                    params =
+                        toParams auth
+                in
+                Init { params | encoder = encoder } |> Decode.succeed
             )
 
 
@@ -101,7 +118,11 @@ withEncoder encoder decoder =
 
 
 update : Msg -> BasicAuth -> ( BasicAuth, Cmd Msg )
-update msg ((BasicAuth params m) as auth) =
+update msg auth =
+    let
+        params =
+            toParams auth
+    in
     case msg of
         InputChanged fieldName value ->
             let
@@ -116,23 +137,24 @@ update msg ((BasicAuth params m) as auth) =
                         )
                         params.fields
             in
-            ( BasicAuth { params | fields = fields } m, Cmd.none )
+            ( Init { params | fields = fields }, Cmd.none )
 
         Submitted ->
             ( auth, requestToken auth )
 
         GotHttp result ->
+            let
+                fields =
+                    List.map clearPassword params.fields
+            in
             case result of
                 Ok token ->
-                    ( BasicAuth params (Just token), Cmd.none )
+                    ( Successful { params | fields = fields } token
+                    , Cmd.none
+                    )
 
-                Err err ->
-                    ( BasicAuth
-                        { params
-                            | fields =
-                                List.map clearPassword params.fields
-                        }
-                        m
+                Err error ->
+                    ( Failed { params | fields = fields } (mapError error)
                     , Cmd.none
                     )
 
@@ -146,8 +168,31 @@ clearPassword ( k, v ) =
         ( k, v )
 
 
+mapError : Http.Error -> Error
+mapError error =
+    case error of
+        BadStatus 401 ->
+            Forbidden
+
+        BadStatus 403 ->
+            Forbidden
+
+        BadStatus status ->
+            ServerError status
+
+        BadBody string ->
+            DecodeError string
+
+        _ ->
+            NetworkError
+
+
 requestToken : BasicAuth -> Cmd Msg
-requestToken (BasicAuth params _) =
+requestToken auth =
+    let
+        params =
+            toParams auth
+    in
     Http.post
         { url = Url.toString params.url
         , body = Http.jsonBody (Dict.fromList params.fields |> params.encoder)
@@ -160,12 +205,26 @@ requestToken (BasicAuth params _) =
 
 
 view : BasicAuth -> Html Msg
-view (BasicAuth { fields } _) =
+view auth =
+    if hasToken auth then
+        text ""
+
+    else
+        viewForm auth
+
+
+viewForm : BasicAuth -> Html Msg
+viewForm auth =
+    let
+        { fields } =
+            toParams auth
+    in
     div
         [ class "auth-modal" ]
         [ div
             [ class "auth-form" ]
-            [ form
+            [ errorMessage auth
+            , form
                 [ class "auth-form"
                 , onSubmit Submitted
                 ]
@@ -197,6 +256,7 @@ viewField ( fieldName, fieldValue ) =
         ]
 
 
+fieldType : String -> String
 fieldType fieldName =
     case fieldName of
         "email" ->
@@ -219,5 +279,71 @@ fieldType fieldName =
 
 
 toJwt : BasicAuth -> Maybe PG.JWT
-toJwt (BasicAuth _ maybeJwt) =
-    maybeJwt
+toJwt auth =
+    case auth of
+        Init _ ->
+            Nothing
+
+        Successful _ token ->
+            Just token
+
+        Failed _ _ ->
+            Nothing
+
+
+hasToken : BasicAuth -> Bool
+hasToken auth =
+    toJwt auth
+        |> Maybe.map (always True)
+        |> Maybe.withDefault False
+
+
+toParams : BasicAuth -> Params
+toParams auth =
+    case auth of
+        Init params ->
+            params
+
+        Successful params _ ->
+            params
+
+        Failed params _ ->
+            params
+
+
+errorMessage : BasicAuth -> Html Msg
+errorMessage auth =
+    case auth of
+        Failed _ error ->
+            case error of
+                Forbidden ->
+                    errorWrapper
+                        [ text
+                            "It looks like you have provided the wrong password"
+                        ]
+
+                ServerError status ->
+                    errorWrapper
+                        [ text "The server responded with an error:"
+                        , pre [] [ text (String.fromInt status) ]
+                        ]
+
+                DecodeError message ->
+                    errorWrapper
+                        [ text "There was an issue parsing the server response:"
+                        , pre [] [ text message ]
+                        ]
+
+                NetworkError ->
+                    errorWrapper
+                        [ text """There was an issue reaching the server,
+                          please try later"""
+                        ]
+
+        _ ->
+            div [ class "form-error-message", style "visibility" "hidden" ] []
+
+
+errorWrapper : List (Html Msg) -> Html Msg
+errorWrapper html =
+    div [ class "form-error-message" ] html

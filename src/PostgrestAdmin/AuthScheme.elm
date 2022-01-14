@@ -13,8 +13,6 @@ module PostgrestAdmin.AuthScheme exposing
 import BasicAuth exposing (BasicAuth)
 import Html exposing (Html, text)
 import Postgrest.Client as PG
-import Task exposing (Task)
-import Utils.Task exposing (Error(..), fail)
 
 
 type AuthScheme
@@ -25,7 +23,6 @@ type AuthScheme
 
 type Msg
     = BasicAuthChanged BasicAuth.Msg
-    | Failed Error
 
 
 basic : BasicAuth -> AuthScheme
@@ -59,9 +56,6 @@ update msg authScheme =
 
                 _ ->
                     ( Unset, Cmd.none )
-
-        Failed err ->
-            ( authScheme, Cmd.none )
 
 
 
