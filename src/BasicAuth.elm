@@ -1,6 +1,8 @@
 module BasicAuth exposing
     ( BasicAuth
     , Msg
+    , Session
+    , isAuthenticated
     , noFlags
     , toJwt
     , update
@@ -22,15 +24,20 @@ import String.Extra as String
 import Url exposing (Protocol(..), Url)
 
 
+type Session
+    = Token PG.JWT
+    | Cookie
+
+
 type Msg
     = InputChanged String String
     | Submitted
-    | GotHttp (Result Http.Error PG.JWT)
+    | GotHttp (Result Http.Error Session)
 
 
 type alias Params =
     { url : Url
-    , decoder : Decoder PG.JWT
+    , decoder : Decoder Session
     , encoder : Dict String String -> Value
     , fields : List ( String, String )
     }
@@ -45,7 +52,7 @@ type Error
 
 type BasicAuth
     = Init Params
-    | Successful Params PG.JWT
+    | Successful Params Session
     | Failed Params Error
 
 
@@ -60,7 +67,9 @@ noFlags =
             , query = Nothing
             , fragment = Nothing
             }
-        , decoder = Decode.map PG.jwt (Decode.field "token" Decode.string)
+        , decoder =
+            Decode.map (PG.jwt >> Token)
+                (Decode.field "token" Decode.string)
         , encoder = Encode.dict identity Encode.string
         , fields = [ ( "email", "" ), ( "password", "" ) ]
         }
@@ -79,12 +88,13 @@ withUrlHelp urlStr auth =
             toParams auth
     in
     Url.fromString urlStr
-        |> Maybe.map (\url -> Decode.succeed <| Init { params | url = url })
+        |> Maybe.map
+            (\url -> updateParams { params | url = url } auth |> Decode.succeed)
         |> Maybe.withDefault
             (Decode.fail "`BasicAuth.withUrl` was given an invalid URL")
 
 
-withDecoder : Decoder PG.JWT -> Decoder BasicAuth -> Decoder BasicAuth
+withDecoder : Decoder Session -> Decoder BasicAuth -> Decoder BasicAuth
 withDecoder jwtDecoder decoder =
     decoder
         |> Decode.andThen
@@ -93,7 +103,8 @@ withDecoder jwtDecoder decoder =
                     params =
                         toParams auth
                 in
-                Init { params | decoder = jwtDecoder } |> Decode.succeed
+                updateParams { params | decoder = jwtDecoder } auth
+                    |> Decode.succeed
             )
 
 
@@ -109,8 +120,22 @@ withEncoder encoder decoder =
                     params =
                         toParams auth
                 in
-                Init { params | encoder = encoder } |> Decode.succeed
+                updateParams { params | encoder = encoder } auth
+                    |> Decode.succeed
             )
+
+
+updateParams : Params -> BasicAuth -> BasicAuth
+updateParams params auth =
+    case auth of
+        Init _ ->
+            Init params
+
+        Successful _ session ->
+            Successful params session
+
+        Failed _ error ->
+            Failed params error
 
 
 
@@ -206,7 +231,7 @@ requestToken auth =
 
 view : BasicAuth -> Html Msg
 view auth =
-    if hasToken auth then
+    if isAuthenticated auth then
         text ""
 
     else
@@ -285,17 +310,33 @@ toJwt auth =
             Nothing
 
         Successful _ token ->
-            Just token
+            Just (sessionToJwt token)
 
         Failed _ _ ->
             Nothing
 
 
-hasToken : BasicAuth -> Bool
-hasToken auth =
-    toJwt auth
-        |> Maybe.map (always True)
-        |> Maybe.withDefault False
+sessionToJwt : Session -> PG.JWT
+sessionToJwt session =
+    case session of
+        Token token ->
+            token
+
+        Cookie ->
+            PG.jwt "dummy-token"
+
+
+isAuthenticated : BasicAuth -> Bool
+isAuthenticated auth =
+    case auth of
+        Init _ ->
+            False
+
+        Successful _ token ->
+            True
+
+        Failed _ _ ->
+            False
 
 
 toParams : BasicAuth -> Params
@@ -319,25 +360,25 @@ errorMessage auth =
                 Forbidden ->
                     errorWrapper
                         [ text
-                            "It looks like you have provided the wrong password"
+                            "It looks like you have provided the wrong password."
                         ]
 
                 ServerError status ->
                     errorWrapper
-                        [ text "The server responded with an error:"
+                        [ text "The server responded with error "
                         , pre [] [ text (String.fromInt status) ]
                         ]
 
                 DecodeError message ->
                     errorWrapper
-                        [ text "There was an issue parsing the server response:"
+                        [ text "There was an issue parsing the server response."
                         , pre [] [ text message ]
                         ]
 
                 NetworkError ->
                     errorWrapper
                         [ text """There was an issue reaching the server,
-                          please try later"""
+                          please try again later."""
                         ]
 
         _ ->

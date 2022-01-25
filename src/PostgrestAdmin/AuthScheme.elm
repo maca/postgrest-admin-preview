@@ -2,7 +2,7 @@ module PostgrestAdmin.AuthScheme exposing
     ( AuthScheme
     , Msg
     , basic
-    , hasToken
+    , isAuthenticated
     , jwt
     , toJwt
     , unset
@@ -75,11 +75,17 @@ view authScheme =
             text ""
 
 
-hasToken : AuthScheme -> Bool
-hasToken authScheme =
-    toJwt authScheme
-        |> Maybe.map (always True)
-        |> Maybe.withDefault False
+isAuthenticated : AuthScheme -> Bool
+isAuthenticated authScheme =
+    case authScheme of
+        BasicAuth auth ->
+            BasicAuth.isAuthenticated auth
+
+        Jwt token ->
+            True
+
+        Unset ->
+            False
 
 
 toJwt : AuthScheme -> Maybe PG.JWT

@@ -1,0 +1,26 @@
+#!/usr/bin/env sh
+
+set -e
+
+pod=postgrest-admin
+pg_user=admin
+pg_password=password
+context="$(dirname $0)/.."
+
+
+buildah build --tag $pod-postgres $context/postgres
+buildah build --tag $pod-migrator $context/migrator
+
+# podman network exists $network || podman network create $network
+
+# podman run \
+#        --name="$network-db" \
+#        --network=$network -d \
+#        -e POSTGRES_USER=$pg_user \
+#        -e POSTGRES_PASSWORD=$pg_password \
+#        'docker.io/postgres:14'
+
+
+
+
+# podman run --rm -d --name echogolem1 --network $network quay.io/elmiko/echo-golem:python-flask

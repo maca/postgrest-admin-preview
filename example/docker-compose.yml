@@ -1,0 +1,31 @@
+version: '3.1'
+
+
+services:
+    db:
+      build:
+        context: .
+        dockerfile: ./postgres/Dockerfile
+      environment:
+        - POSTGRES_USER=user
+        - POSTGRES_PASSWORD=password
+        - POSTGRES_DB=postgres_db
+      # healthcheck:
+      #   test: ["CMD-SHELL", "pg_isready"]
+      #   interval: 5s
+      #   timeout: 30s
+      #   retries: 3
+
+    migrator:
+      build:
+        context: .
+        dockerfile: ./migrator/Dockerfile
+      volumes:
+        - ./migrator/migrations:/migrations
+      environment:
+        - DATABASE_URL=postgres://user:password@db/posgres_db
+      depends_on:
+        - db
+      # depends_on:
+      #   db: {condition: service_healthy}
+      entrypoint: /bin/sh -c "echo $$DATABASE_URL"
