@@ -7,14 +7,33 @@ services:
         context: .
         dockerfile: ./postgres/Dockerfile
       environment:
-        - POSTGRES_USER=user
-        - POSTGRES_PASSWORD=password
+        - POSTGRES_USER=db_user
+        - POSTGRES_PASSWORD=db_password
         - POSTGRES_DB=postgres_db
-      # healthcheck:
-      #   test: ["CMD-SHELL", "pg_isready"]
-      #   interval: 5s
-      #   timeout: 30s
-      #   retries: 3
+      healthcheck:
+        test: [ "CMD-SHELL", "pg_isready" ]
+        interval: 5s
+        timeout: 30s
+        retries: 3
+
+    postgrest:
+      image: docker.io/postgrest/postgrest
+      environment:
+        - PGRST_DB_URI=postgres://db_user:db_password@db/postgres_db
+        - PGRST_JWT_SECRET=6oKDJMClxO1/6GiWRIvfYocH/w4yPerCHyV0BmAQius=
+        - PGRST_DB_SCHEMA=api
+        - PGRST_DB_ANON_ROLE=app_anon
+      depends_on:
+        db: { condition: service_healthy }
+
+    nginx:
+      image: docker.io/openresty/openresty:alpine
+      volumes:
+        - ./nginx/conf.d:/etc/nginx/conf.d
+      ports:
+        - 8080:8080
+      depends_on:
+        - postgrest
 
     migrator:
       build:
@@ -23,9 +42,7 @@ services:
       volumes:
         - ./migrator/migrations:/migrations
       environment:
-        - DATABASE_URL=postgres://user:password@db/posgres_db
+        - DATABASE_URL=postgres://db_user:db_password@db/postgres_db
       depends_on:
-        - db
-      # depends_on:
-      #   db: {condition: service_healthy}
-      entrypoint: /bin/sh -c "echo $$DATABASE_URL"
+        db: { condition: service_healthy }
+      entrypoint: /bin/sh -c "sequel -E -m /migrations $$DATABASE_URL"

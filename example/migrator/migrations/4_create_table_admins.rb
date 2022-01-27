@@ -26,9 +26,10 @@ Sequel.migration do
 
     # This shouldn't be here
     run <<-SQL
-      ALTER DATABASE "postgrest-admin-demo" SET "app.jwt_secret" TO '6oKDJMClxO1/6GiWRIvfYocH/w4yPerCHyV0BmAQius=';
+      ALTER DATABASE "postgres_db"
+            SET "app.jwt_secret"
+            TO '6oKDJMClxO1/6GiWRIvfYocH/w4yPerCHyV0BmAQius=';
     SQL
-
 
     # Set constraint on role to allow only existing roles
     run <<-SQL
