@@ -85,13 +85,13 @@ type Msg
     | Sort SortOrder
     | Reload
     | Scrolled
-    | ScrollInfo Viewport
+    | ScrollInfo (Result Dom.Error Viewport)
     | SearchChanged Search.Msg
     | SelectEnter
     | SelectOn
     | SelectOff
     | ToggleSearchOpen
-    | Failed Error
+    | FetchFailed Error
 
 
 type TextSelect
@@ -147,7 +147,7 @@ init resourcesName rawQuery definition =
 outerMsg : Msg -> OuterMsg
 outerMsg msg =
     case msg of
-        Failed err ->
+        FetchFailed err ->
             OuterMsg.RequestFailed err
 
         _ ->
@@ -183,7 +183,7 @@ fetch : Client a -> Listing -> ( Listing, Cmd Msg )
 fetch client listing =
     ( listing
     , fetchResources client listing
-        |> attemptWithError Failed Fetched
+        |> attemptWithError FetchFailed Fetched
     )
 
 
@@ -254,27 +254,39 @@ update client msg listing =
         Scrolled ->
             ( listing
             , Dom.getViewportOf listing.resourcesName
-                |> Task.mapError DomError
-                |> attemptWithError Failed ScrollInfo
+                |> Task.attempt ScrollInfo
             )
 
-        ScrollInfo viewport ->
-            if scrollingDown viewport listing && closeToBottom viewport then
-                case listing.pages of
-                    Blank :: _ ->
+        ScrollInfo result ->
+            case result of
+                Ok viewport ->
+                    if
+                        scrollingDown viewport listing
+                            && closeToBottom viewport
+                    then
+                        case listing.pages of
+                            Blank :: _ ->
+                                ( { listing
+                                    | scrollPosition =
+                                        viewport.viewport.y
+                                  }
+                                , Cmd.none
+                                )
+
+                            _ ->
+                                fetch client
+                                    { listing
+                                        | scrollPosition = viewport.viewport.y
+                                        , pages = Blank :: listing.pages
+                                    }
+
+                    else
                         ( { listing | scrollPosition = viewport.viewport.y }
                         , Cmd.none
                         )
 
-                    _ ->
-                        fetch client
-                            { listing
-                                | scrollPosition = viewport.viewport.y
-                                , pages = Blank :: listing.pages
-                            }
-
-            else
-                ( { listing | scrollPosition = viewport.viewport.y }, Cmd.none )
+                Err _ ->
+                    ( listing, Cmd.none )
 
         SearchChanged searchMsg ->
             Search.update searchMsg listing.search
@@ -284,9 +296,6 @@ update client msg listing =
         ToggleSearchOpen ->
             ( { listing | searchOpen = not listing.searchOpen }, Cmd.none )
 
-        Failed _ ->
-            ( listing, Cmd.none )
-
         SelectEnter ->
             ( { listing | textSelect = Enter }, Cmd.none )
 
@@ -295,6 +304,9 @@ update client msg listing =
 
         SelectOn ->
             ( { listing | textSelect = On }, Cmd.none )
+
+        FetchFailed _ ->
+            ( listing, Cmd.none )
 
 
 scrollingDown : Viewport -> Listing -> Bool
@@ -578,8 +590,11 @@ perPage =
 
 
 fetchResources : Client a -> Listing -> Task Error (List Resource)
-fetchResources client { search, resourcesName, page, definition, order } =
+fetchResources client listing =
     let
+        { search, resourcesName, page, definition, order } =
+            listing
+
         pgOrder =
             Dict.toList definition
                 |> List.filterMap (sortBy resourcesName order)

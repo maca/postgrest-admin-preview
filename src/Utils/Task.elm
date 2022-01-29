@@ -20,7 +20,6 @@ type Error
     | BadSchema String
     | AutocompleteError ForeignKeyParams String
     | AuthError
-    | DomError Dom.Error
 
 
 attemptWithError : (Error -> msg) -> (a -> msg) -> Task Error a -> Cmd msg

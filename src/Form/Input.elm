@@ -58,7 +58,7 @@ type Msg
     = Changed String Input String
     | AutocompleteInput String Field Autocomplete String
     | ListingFetched String Field Autocomplete AutocompleteResult
-    | Failure Error
+    | Failed Error
 
 
 type alias AutocompleteResult =
@@ -162,7 +162,7 @@ update client msg record =
                 Err _ ->
                     ( record, Cmd.none )
 
-        Failure _ ->
+        Failed _ ->
             ( record, Cmd.none )
 
 
@@ -534,7 +534,7 @@ fetchResources client name field ({ foreignKeyParams } as autocomplete) =
                     List.filterMap identity [ idQuery, labelQuery ]
             in
             if List.isEmpty queries then
-                fail Failure <|
+                fail Failed <|
                     AutocompleteError foreignKeyParams autocomplete.userInput
 
             else
@@ -542,7 +542,10 @@ fetchResources client name field ({ foreignKeyParams } as autocomplete) =
                     Just token ->
                         Client.fetchMany client definition foreignKeyParams.table
                             |> PG.setParams
-                                [ PG.select selects, PG.or queries, PG.limit 40 ]
+                                [ PG.select selects
+                                , PG.or queries
+                                , PG.limit 40
+                                ]
                             |> PG.toCmd token
                                 (ListingFetched name field autocomplete
                                     << Result.mapError PGError
@@ -552,7 +555,7 @@ fetchResources client name field ({ foreignKeyParams } as autocomplete) =
                         Debug.todo "crash"
 
         Nothing ->
-            fail Failure <| BadSchema foreignKeyParams.table
+            fail Failed <| BadSchema foreignKeyParams.table
 
 
 findResource : Autocomplete -> String -> Maybe Resource
