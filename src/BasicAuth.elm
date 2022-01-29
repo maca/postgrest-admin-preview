@@ -3,6 +3,7 @@ module BasicAuth exposing
     , Msg
     , Session
     , fail
+    , mapMsg
     , noFlags
     , toJwt
     , update
@@ -16,12 +17,15 @@ import Dict exposing (Dict)
 import Html exposing (Html, button, div, fieldset, form, input, label, pre, text)
 import Html.Attributes exposing (class, disabled, for, id, style, type_, value)
 import Html.Events exposing (onInput, onSubmit)
-import Http exposing (Error(..))
+import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Postgrest.Client as PG
+import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 import String.Extra as String
+import Task exposing (Task)
 import Url exposing (Protocol(..), Url)
+import Utils.Task exposing (attemptWithError)
 
 
 type Session
@@ -32,7 +36,8 @@ type Session
 type Msg
     = InputChanged String String
     | Submitted
-    | GotHttp (Result Http.Error Session)
+    | Succeeded Session
+    | Failed Error
 
 
 type alias Params =
@@ -47,15 +52,15 @@ type Error
     = Forbidden
     | Unauthorized
     | ServerError Int
-    | DecodeError String
+    | DecodeError Decode.Error
     | NetworkError
 
 
 type BasicAuth
     = Ready Params
     | Active Params
-    | Successful Params Session
-    | Failed Params Error
+    | Success Params Session
+    | Failure Params Error
 
 
 noFlags : Decoder BasicAuth
@@ -78,85 +83,30 @@ noFlags =
         |> Decode.succeed
 
 
-withUrl : String -> Decoder BasicAuth -> Decoder BasicAuth
-withUrl urlStr decoder =
-    decoder |> Decode.andThen (withUrlHelp urlStr)
+mapMsg : Msg -> OuterMsg
+mapMsg msg =
+    case msg of
+        Succeeded _ ->
+            OuterMsg.LoginSuccess
 
-
-withUrlHelp : String -> BasicAuth -> Decoder BasicAuth
-withUrlHelp urlStr auth =
-    let
-        params =
-            toParams auth
-    in
-    Url.fromString urlStr
-        |> Maybe.map
-            (\url -> updateParams { params | url = url } auth |> Decode.succeed)
-        |> Maybe.withDefault
-            (Decode.fail "`BasicAuth.withUrl` was given an invalid URL")
-
-
-withDecoder : Decoder Session -> Decoder BasicAuth -> Decoder BasicAuth
-withDecoder jwtDecoder decoder =
-    decoder
-        |> Decode.andThen
-            (\auth ->
-                let
-                    params =
-                        toParams auth
-                in
-                updateParams { params | decoder = jwtDecoder } auth
-                    |> Decode.succeed
-            )
-
-
-withEncoder :
-    (Dict String String -> Value)
-    -> Decoder BasicAuth
-    -> Decoder BasicAuth
-withEncoder encoder decoder =
-    decoder
-        |> Decode.andThen
-            (\auth ->
-                let
-                    params =
-                        toParams auth
-                in
-                updateParams { params | encoder = encoder } auth
-                    |> Decode.succeed
-            )
-
-
-updateParams : Params -> BasicAuth -> BasicAuth
-updateParams params auth =
-    case auth of
-        Ready _ ->
-            Ready params
-
-        Active _ ->
-            Active params
-
-        Successful _ session ->
-            Successful params session
-
-        Failed _ error ->
-            Failed params error
+        _ ->
+            OuterMsg.Pass
 
 
 fail : BasicAuth -> BasicAuth
 fail auth =
     case auth of
         Ready params ->
-            Failed params Unauthorized
+            Failure params Unauthorized
 
         Active params ->
-            Failed params Unauthorized
+            Failure params Unauthorized
 
-        Successful params _ ->
-            Failed params Unauthorized
+        Success params _ ->
+            Failure params Unauthorized
 
-        Failed params _ ->
-            Failed params Unauthorized
+        Failure params _ ->
+            Failure params Unauthorized
 
 
 
@@ -186,27 +136,29 @@ update msg auth =
             ( Active { params | fields = fields }, Cmd.none )
 
         Submitted ->
-            ( auth, requestToken auth )
+            ( auth
+            , requestToken auth
+                |> attemptWithError Failed Succeeded
+            )
 
-        GotHttp result ->
-            let
-                fields =
-                    List.map clearPassword params.fields
-            in
-            case result of
-                Ok token ->
-                    ( Successful { params | fields = fields } token
-                    , Cmd.none
-                    )
+        Succeeded session ->
+            ( Success { params | fields = clearPassword params.fields } session
+            , Cmd.none
+            )
 
-                Err error ->
-                    ( Failed { params | fields = fields } (mapError error)
-                    , Cmd.none
-                    )
+        Failed error ->
+            ( Failure { params | fields = clearPassword params.fields } error
+            , Cmd.none
+            )
 
 
-clearPassword : ( String, String ) -> ( String, String )
-clearPassword ( k, v ) =
+clearPassword : List ( String, String ) -> List ( String, String )
+clearPassword fields =
+    List.map clearPasswordHelp fields
+
+
+clearPasswordHelp : ( String, String ) -> ( String, String )
+clearPasswordHelp ( k, v ) =
     if k == "password" || k == "pass" then
         ( k, "" )
 
@@ -214,36 +166,42 @@ clearPassword ( k, v ) =
         ( k, v )
 
 
-mapError : Http.Error -> Error
-mapError error =
-    case error of
-        BadStatus 401 ->
-            Forbidden
-
-        BadStatus 403 ->
-            Forbidden
-
-        BadStatus status ->
-            ServerError status
-
-        BadBody string ->
-            DecodeError string
-
-        _ ->
-            NetworkError
-
-
-requestToken : BasicAuth -> Cmd Msg
+requestToken : BasicAuth -> Task Error Session
 requestToken auth =
     let
         params =
             toParams auth
     in
-    Http.post
-        { url = Url.toString params.url
+    Http.task
+        { method = "POST"
+        , headers = []
+        , url = Url.toString params.url
         , body = Http.jsonBody (Dict.fromList params.fields |> params.encoder)
-        , expect = Http.expectJson GotHttp params.decoder
+        , resolver = Http.stringResolver <| handleJsonResponse <| params.decoder
+        , timeout = Nothing
         }
+
+
+handleJsonResponse : Decoder a -> Http.Response String -> Result Error a
+handleJsonResponse decoder response =
+    case response of
+        Http.BadStatus_ { statusCode } _ ->
+            if statusCode == 401 || statusCode == 403 then
+                Err <| Forbidden
+
+            else
+                Err <| ServerError statusCode
+
+        Http.GoodStatus_ _ body ->
+            case Decode.decodeString decoder body of
+                Err err ->
+                    Err <| DecodeError err
+
+                Ok result ->
+                    Ok result
+
+        _ ->
+            Err <| NetworkError
 
 
 
@@ -333,10 +291,10 @@ toJwt auth =
         Active _ ->
             Nothing
 
-        Successful _ token ->
+        Success _ token ->
             Just (sessionToJwt token)
 
-        Failed _ _ ->
+        Failure _ _ ->
             Nothing
 
 
@@ -359,10 +317,10 @@ requiresAuthentication auth =
         Active _ ->
             True
 
-        Successful _ token ->
+        Success _ token ->
             False
 
-        Failed _ _ ->
+        Failure _ _ ->
             True
 
 
@@ -375,17 +333,17 @@ toParams auth =
         Active params ->
             params
 
-        Successful params _ ->
+        Success params _ ->
             params
 
-        Failed params _ ->
+        Failure params _ ->
             params
 
 
 errorMessage : BasicAuth -> Html Msg
 errorMessage auth =
     case auth of
-        Failed _ error ->
+        Failure _ error ->
             case error of
                 Forbidden ->
                     errorWrapper
@@ -405,10 +363,10 @@ errorMessage auth =
                         , pre [] [ text (String.fromInt status) ]
                         ]
 
-                DecodeError message ->
+                DecodeError err ->
                     errorWrapper
                         [ text "There was an issue parsing the server response: "
-                        , pre [] [ text message ]
+                        , pre [] [ text (Decode.errorToString err) ]
                         ]
 
                 NetworkError ->
@@ -424,3 +382,72 @@ errorMessage auth =
 errorWrapper : List (Html Msg) -> Html Msg
 errorWrapper html =
     div [ class "form-error-message" ] html
+
+
+
+-- Decoders
+
+
+withUrl : String -> Decoder BasicAuth -> Decoder BasicAuth
+withUrl urlStr decoder =
+    decoder |> Decode.andThen (withUrlHelp urlStr)
+
+
+withUrlHelp : String -> BasicAuth -> Decoder BasicAuth
+withUrlHelp urlStr auth =
+    let
+        params =
+            toParams auth
+    in
+    Url.fromString urlStr
+        |> Maybe.map
+            (\url -> updateParams { params | url = url } auth |> Decode.succeed)
+        |> Maybe.withDefault
+            (Decode.fail "`BasicAuth.withUrl` was given an invalid URL")
+
+
+withDecoder : Decoder Session -> Decoder BasicAuth -> Decoder BasicAuth
+withDecoder jwtDecoder decoder =
+    decoder
+        |> Decode.andThen
+            (\auth ->
+                let
+                    params =
+                        toParams auth
+                in
+                updateParams { params | decoder = jwtDecoder } auth
+                    |> Decode.succeed
+            )
+
+
+withEncoder :
+    (Dict String String -> Value)
+    -> Decoder BasicAuth
+    -> Decoder BasicAuth
+withEncoder encoder decoder =
+    decoder
+        |> Decode.andThen
+            (\auth ->
+                let
+                    params =
+                        toParams auth
+                in
+                updateParams { params | encoder = encoder } auth
+                    |> Decode.succeed
+            )
+
+
+updateParams : Params -> BasicAuth -> BasicAuth
+updateParams params auth =
+    case auth of
+        Ready _ ->
+            Ready params
+
+        Active _ ->
+            Active params
+
+        Success _ session ->
+            Success params session
+
+        Failure _ error ->
+            Failure params error

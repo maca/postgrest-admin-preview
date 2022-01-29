@@ -113,39 +113,40 @@ update msg model =
         SchemaFetched schema ->
             navigate { model | schema = schema }
 
-        ListingChanged innerMsg ->
+        ListingChanged childMsg ->
             let
                 updateFun =
-                    Listing.update model innerMsg
+                    Listing.update model childMsg
                         >> updateRoute Route.Listing ListingChanged model
-                        >> handleOuterMsg (Listing.outerMsg innerMsg)
+                        >> handleChildMsg (Listing.mapMsg childMsg)
             in
             Route.toListing model.route
                 |> Maybe.map updateFun
                 |> Maybe.withDefault ( model, Cmd.none )
 
-        FormChanged innerMsg ->
+        FormChanged childMsg ->
             let
                 updateFun =
-                    Form.update model innerMsg
+                    Form.update model childMsg
                         >> updateRoute Route.Form FormChanged model
-                        >> handleOuterMsg (Form.outerMsg innerMsg)
+                        >> handleChildMsg (Form.mapMsg childMsg)
             in
             Route.toForm model.route
                 |> Maybe.map updateFun
                 |> Maybe.withDefault ( model, Cmd.none )
 
-        AuthChanged innerMsg ->
+        AuthChanged childMsg ->
             let
                 ( authScheme, cmd ) =
-                    AuthScheme.update innerMsg model.authScheme
+                    AuthScheme.update childMsg model.authScheme
             in
-            ( { model | authScheme = authScheme }
-            , Cmd.map AuthChanged cmd
-            )
+            handleChildMsg (AuthScheme.mapMsg childMsg)
+                ( { model | authScheme = authScheme }
+                , Cmd.map AuthChanged cmd
+                )
 
-        NotificationChanged innerMsg ->
-            updateNotification innerMsg model
+        NotificationChanged childMsg ->
+            updateNotification childMsg model
 
         LinkClicked urlRequest ->
             case urlRequest of
@@ -186,9 +187,9 @@ navigate model =
 
 updateRoute :
     (a -> Route)
-    -> (innerMsg -> Msg)
+    -> (childMsg -> Msg)
     -> Model
-    -> ( a, Cmd innerMsg )
+    -> ( a, Cmd childMsg )
     -> ( Model, Cmd Msg )
 updateRoute makeRoute makeMsg model ( a, cmd ) =
     ( { model | route = makeRoute a }
@@ -196,14 +197,27 @@ updateRoute makeRoute makeMsg model ( a, cmd ) =
     )
 
 
-handleOuterMsg : OuterMsg -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
-handleOuterMsg msg ( model, cmd ) =
+handleChildMsg : OuterMsg -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
+handleChildMsg msg ( model, cmd ) =
     case msg of
         OuterMsg.RequestFailed err ->
             failed err model
 
         OuterMsg.NotificationChanged notificationMsg ->
             updateNotification notificationMsg model
+
+        OuterMsg.LoginSuccess ->
+            case model.route of
+                Route.Listing listing ->
+                    ( model
+                    , Cmd.map ListingChanged (Listing.retryCmd listing)
+                    )
+
+                Route.Form form ->
+                    ( model, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
 
         OuterMsg.Pass ->
             ( model, cmd )

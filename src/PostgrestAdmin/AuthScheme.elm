@@ -4,6 +4,7 @@ module PostgrestAdmin.AuthScheme exposing
     , basic
     , fail
     , jwt
+    , mapMsg
     , toJwt
     , unset
     , update
@@ -13,6 +14,7 @@ module PostgrestAdmin.AuthScheme exposing
 import BasicAuth exposing (BasicAuth)
 import Html exposing (Html, text)
 import Postgrest.Client as PG
+import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 
 
 type AuthScheme
@@ -53,8 +55,9 @@ unset =
     Unset
 
 
-
--- Update
+mapMsg : Msg -> OuterMsg
+mapMsg (BasicAuthChanged basicAuthMsg) =
+    BasicAuth.mapMsg basicAuthMsg
 
 
 update : Msg -> AuthScheme -> ( AuthScheme, Cmd Msg )

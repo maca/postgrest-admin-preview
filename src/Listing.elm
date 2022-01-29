@@ -7,7 +7,8 @@ module Listing exposing
     , hideSearch
     , init
     , isSearchVisible
-    , outerMsg
+    , mapMsg
+    , retryCmd
     , showSearch
     , update
     , view
@@ -110,6 +111,7 @@ type alias Listing =
     , search : Search
     , searchOpen : Bool
     , textSelect : TextSelect
+    , attemptedCmd : Cmd Msg
     }
 
 
@@ -141,11 +143,12 @@ init resourcesName rawQuery definition =
     , search = Search.init definition (rawQuery |> Maybe.withDefault "")
     , searchOpen = False
     , textSelect = Off
+    , attemptedCmd = Cmd.none
     }
 
 
-outerMsg : Msg -> OuterMsg
-outerMsg msg =
+mapMsg : Msg -> OuterMsg
+mapMsg msg =
     case msg of
         FetchFailed err ->
             OuterMsg.RequestFailed err
@@ -181,10 +184,20 @@ descendingBy column listing =
 
 fetch : Client a -> Listing -> ( Listing, Cmd Msg )
 fetch client listing =
-    ( listing
-    , fetchResources client listing
-        |> attemptWithError FetchFailed Fetched
+    ( { listing | attemptedCmd = fetchResources listing client }
+    , fetchResources listing client
     )
+
+
+fetchResources : Listing -> Client a -> Cmd Msg
+fetchResources listing client =
+    fetchResourcesTask client listing
+        |> attemptWithError FetchFailed Fetched
+
+
+retryCmd : Listing -> Cmd Msg
+retryCmd { attemptedCmd } =
+    attemptedCmd
 
 
 update : Client { a | key : Nav.Key } -> Msg -> Listing -> ( Listing, Cmd Msg )
@@ -589,8 +602,8 @@ perPage =
     50
 
 
-fetchResources : Client a -> Listing -> Task Error (List Resource)
-fetchResources client listing =
+fetchResourcesTask : Client a -> Listing -> Task Error (List Resource)
+fetchResourcesTask client listing =
     let
         { search, resourcesName, page, definition, order } =
             listing

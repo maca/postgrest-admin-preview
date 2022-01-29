@@ -6,7 +6,7 @@ module Form exposing
     , fetch
     , fromDefinition
     , id
-    , outerMsg
+    , mapMsg
     , update
     , view
     )
@@ -145,8 +145,8 @@ hasErrors record =
     toResource record |> Resource.hasErrors
 
 
-outerMsg : Msg -> OuterMsg
-outerMsg msg =
+mapMsg : Msg -> OuterMsg
+mapMsg msg =
     case msg of
         Failed err ->
             OuterMsg.RequestFailed err

@@ -22,7 +22,7 @@ type Error
     | AuthError
 
 
-attemptWithError : (Error -> msg) -> (a -> msg) -> Task Error a -> Cmd msg
+attemptWithError : (error -> msg) -> (a -> msg) -> Task error a -> Cmd msg
 attemptWithError failure success task =
     let
         tagger result =
