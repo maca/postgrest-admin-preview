@@ -11,9 +11,9 @@ main =
     let
         auth =
             BasicAuth.noFlags
-                |> BasicAuth.withUrl "http://localhost:4000/rpc/login"
+                |> BasicAuth.withUrl "http://localhost:8080/rpc/login"
     in
     Config.noFlags
-        |> Config.withUrl "http://localhost:4000"
+        |> Config.withUrl "http://localhost:8080"
         |> Config.withBasicAuth auth
         |> PostgrestAdmin.application
