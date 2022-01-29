@@ -2,22 +2,12 @@ module Form exposing
     ( Form
     , Msg
     , Params
-    , changed
-    , createRecord
     , errors
     , fetch
     , fromDefinition
-    , fromResource
-    , hasErrors
     , id
     , outerMsg
-    , primaryKey
-    , primaryKeyName
-    , save
-    , setError
-    , toResource
     , update
-    , updateRecord
     , view
     )
 

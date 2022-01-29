@@ -59,7 +59,7 @@ import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 import Search exposing (Search)
 import String.Extra as String
-import Task
+import Task exposing (Task)
 import Time
 import Time.Extra as Time
 import Url
@@ -183,6 +183,7 @@ fetch : Client a -> Listing -> ( Listing, Cmd Msg )
 fetch client listing =
     ( listing
     , fetchResources client listing
+        |> attemptWithError Failed Fetched
     )
 
 
@@ -576,7 +577,7 @@ perPage =
     50
 
 
-fetchResources : Client a -> Listing -> Cmd Msg
+fetchResources : Client a -> Listing -> Task Error (List Resource)
 fetchResources client { search, resourcesName, page, definition, order } =
     let
         pgOrder =
@@ -595,10 +596,9 @@ fetchResources client { search, resourcesName, page, definition, order } =
                 |> PG.setParams (params ++ pgOrder ++ Search.toPGQuery search)
                 |> PG.toTask token
                 |> Task.mapError PGError
-                |> attemptWithError Failed Fetched
 
         Nothing ->
-            fail Failed AuthError
+            Task.fail AuthError
 
 
 sortBy : String -> SortOrder -> ( String, Column ) -> Maybe PG.Param

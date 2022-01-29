@@ -2,7 +2,7 @@ module BasicAuth exposing
     ( BasicAuth
     , Msg
     , Session
-    , isAuthenticated
+    , fail
     , noFlags
     , toJwt
     , update
@@ -45,20 +45,22 @@ type alias Params =
 
 type Error
     = Forbidden
+    | Unauthorized
     | ServerError Int
     | DecodeError String
     | NetworkError
 
 
 type BasicAuth
-    = Init Params
+    = Ready Params
+    | Active Params
     | Successful Params Session
     | Failed Params Error
 
 
 noFlags : Decoder BasicAuth
 noFlags =
-    Init
+    Ready
         { url =
             { protocol = Http
             , host = "localhost"
@@ -128,14 +130,33 @@ withEncoder encoder decoder =
 updateParams : Params -> BasicAuth -> BasicAuth
 updateParams params auth =
     case auth of
-        Init _ ->
-            Init params
+        Ready _ ->
+            Ready params
+
+        Active _ ->
+            Active params
 
         Successful _ session ->
             Successful params session
 
         Failed _ error ->
             Failed params error
+
+
+fail : BasicAuth -> BasicAuth
+fail auth =
+    case auth of
+        Ready params ->
+            Failed params Unauthorized
+
+        Active params ->
+            Failed params Unauthorized
+
+        Successful params _ ->
+            Failed params Unauthorized
+
+        Failed params _ ->
+            Failed params Unauthorized
 
 
 
@@ -162,7 +183,7 @@ update msg auth =
                         )
                         params.fields
             in
-            ( Init { params | fields = fields }, Cmd.none )
+            ( Active { params | fields = fields }, Cmd.none )
 
         Submitted ->
             ( auth, requestToken auth )
@@ -231,11 +252,11 @@ requestToken auth =
 
 view : BasicAuth -> Html Msg
 view auth =
-    if isAuthenticated auth then
-        text ""
+    if requiresAuthentication auth then
+        viewForm auth
 
     else
-        viewForm auth
+        text ""
 
 
 viewForm : BasicAuth -> Html Msg
@@ -306,7 +327,10 @@ fieldType fieldName =
 toJwt : BasicAuth -> Maybe PG.JWT
 toJwt auth =
     case auth of
-        Init _ ->
+        Ready _ ->
+            Nothing
+
+        Active _ ->
             Nothing
 
         Successful _ token ->
@@ -326,23 +350,29 @@ sessionToJwt session =
             PG.jwt "dummy-token"
 
 
-isAuthenticated : BasicAuth -> Bool
-isAuthenticated auth =
+requiresAuthentication : BasicAuth -> Bool
+requiresAuthentication auth =
     case auth of
-        Init _ ->
+        Ready _ ->
             False
 
-        Successful _ token ->
+        Active _ ->
             True
 
-        Failed _ _ ->
+        Successful _ token ->
             False
+
+        Failed _ _ ->
+            True
 
 
 toParams : BasicAuth -> Params
 toParams auth =
     case auth of
-        Init params ->
+        Ready params ->
+            params
+
+        Active params ->
             params
 
         Successful params _ ->
@@ -359,19 +389,25 @@ errorMessage auth =
             case error of
                 Forbidden ->
                     errorWrapper
+                        [ text """You may have entered the wrong password,
+                          please try again."""
+                        ]
+
+                Unauthorized ->
+                    errorWrapper
                         [ text
-                            "It looks like you have provided the wrong password."
+                            "Please sign in to continue."
                         ]
 
                 ServerError status ->
                     errorWrapper
-                        [ text "The server responded with error "
+                        [ text "The server responded with an error: "
                         , pre [] [ text (String.fromInt status) ]
                         ]
 
                 DecodeError message ->
                     errorWrapper
-                        [ text "There was an issue parsing the server response."
+                        [ text "There was an issue parsing the server response: "
                         , pre [] [ text message ]
                         ]
 

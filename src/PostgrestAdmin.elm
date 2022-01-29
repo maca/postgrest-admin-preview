@@ -210,15 +210,17 @@ handleOuterMsg msg ( model, cmd ) =
 
 
 failed : Error -> Model -> ( Model, Cmd Msg )
-failed err model =
+failed err ({ authScheme } as model) =
     case err of
-        PGError (PG.BadStatus 401 _ { message }) ->
-            case message of
-                Just "JWT expired" ->
-                    ( model, Cmd.none )
+        PGError (PG.BadStatus 401 _ _) ->
+            ( { model | authScheme = AuthScheme.fail authScheme }
+            , Cmd.none
+            )
 
-                _ ->
-                    ( model, Cmd.none )
+        AuthError ->
+            ( { model | authScheme = AuthScheme.fail authScheme }
+            , Cmd.none
+            )
 
         _ ->
             ( model, Cmd.none )

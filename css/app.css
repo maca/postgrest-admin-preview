@@ -396,6 +396,7 @@ a:hover {
     align-items: center;
     justify-content: center;
     overflow: hidden;
+    z-index: 1000;
 }
 
 .auth-modal .auth-form {
