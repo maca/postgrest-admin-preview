@@ -19,7 +19,7 @@ type Error
     | PGError PG.Error
     | BadSchema String
     | AutocompleteError ForeignKeyParams String
-    | AuthFailed String
+    | AuthError
     | DomError Dom.Error
 
 

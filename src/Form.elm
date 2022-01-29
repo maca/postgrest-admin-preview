@@ -45,7 +45,7 @@ import Regex exposing (Regex)
 import String.Extra as String
 import Task exposing (Task)
 import Url.Builder as Url
-import Utils.Task exposing (Error(..), attemptWithError)
+import Utils.Task exposing (Error(..), attemptWithError, fail)
 
 
 type alias Params =
@@ -61,7 +61,7 @@ type Msg
     | Changed Input.Msg
     | NotificationChanged Notification.Msg
     | Submitted
-    | RequestFailed Error
+    | Failed Error
 
 
 type alias Fields =
@@ -116,7 +116,7 @@ update client msg ((Form params fields) as form) =
         NotificationChanged _ ->
             ( form, Cmd.none )
 
-        RequestFailed _ ->
+        Failed _ ->
             ( form, Cmd.none )
 
 
@@ -158,7 +158,7 @@ hasErrors record =
 outerMsg : Msg -> OuterMsg
 outerMsg msg =
     case msg of
-        RequestFailed err ->
+        Failed err ->
             OuterMsg.RequestFailed err
 
         NotificationChanged innerMsg ->
@@ -224,10 +224,10 @@ fetch client (Form { definition, resourcesName } _) rid =
             Client.fetchOne client definition resourcesName rid
                 |> PG.toTask token
                 |> Task.mapError PGError
-                |> attemptWithError RequestFailed Fetched
+                |> attemptWithError Failed Fetched
 
         Nothing ->
-            Debug.todo "crash"
+            fail Failed AuthError
 
 
 save : Client a -> Params -> Form -> Cmd Msg
@@ -235,11 +235,11 @@ save client params form =
     case id form of
         Just rid ->
             updateRecord client params rid form
-                |> attemptWithError RequestFailed Updated
+                |> attemptWithError Failed Updated
 
         Nothing ->
             createRecord client params form
-                |> attemptWithError RequestFailed Created
+                |> attemptWithError Failed Created
 
 
 updateRecord : Client a -> Params -> String -> Form -> Task Error Resource
@@ -252,7 +252,7 @@ updateRecord client { definition, resourcesName } rid record =
                 |> Task.mapError PGError
 
         Nothing ->
-            Debug.todo "crash"
+            Task.fail AuthError
 
 
 createRecord : Client a -> Params -> Form -> Task Error Resource
@@ -265,7 +265,7 @@ createRecord client { definition, resourcesName } record =
                 |> Task.mapError PGError
 
         Nothing ->
-            Debug.todo "crash"
+            Task.fail AuthError
 
 
 

@@ -64,7 +64,7 @@ import Time
 import Time.Extra as Time
 import Url
 import Url.Builder as Url exposing (QueryParameter)
-import Utils.Task exposing (Error(..), attemptWithError)
+import Utils.Task exposing (Error(..), attemptWithError, fail)
 
 
 type Page
@@ -598,7 +598,7 @@ fetchResources client { search, resourcesName, page, definition, order } =
                 |> attemptWithError Failed Fetched
 
         Nothing ->
-            Debug.todo "crash"
+            fail Failed AuthError
 
 
 sortBy : String -> SortOrder -> ( String, Column ) -> Maybe PG.Param
