@@ -264,9 +264,15 @@ view model =
     , body =
         [ div
             [ class "main-container" ]
-            [ sideMenu model
-            , AuthScheme.view model.authScheme |> Html.map AuthChanged
-            , div [ class "main-area" ] (body model)
+            [ if AuthScheme.isAuthenticated model.authScheme then
+                div
+                    []
+                    [ sideMenu model
+                    , div [ class "main-area" ] (body model)
+                    ]
+
+              else
+                AuthScheme.view model.authScheme |> Html.map AuthChanged
             ]
         ]
     }

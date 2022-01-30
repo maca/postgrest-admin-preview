@@ -3,6 +3,7 @@ module PostgrestAdmin.AuthScheme exposing
     , Msg
     , basic
     , fail
+    , isAuthenticated
     , jwt
     , mapMsg
     , toJwt
@@ -102,3 +103,8 @@ toJwt authScheme =
 
         Unset ->
             Nothing
+
+
+isAuthenticated : AuthScheme -> Bool
+isAuthenticated authScheme =
+    toJwt authScheme |> Maybe.map (always True) |> Maybe.withDefault False
