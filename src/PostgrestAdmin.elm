@@ -262,37 +262,37 @@ view : Model -> Browser.Document Msg
 view model =
     { title = "Admin"
     , body =
-        [ div
-            [ class "main-container" ]
-            [ if AuthScheme.isAuthenticated model.authScheme then
-                div
-                    []
-                    [ sideMenu model
-                    , div [ class "main-area" ] (body model)
-                    ]
+        case model.decodingError of
+            Just err ->
+                [ h1 [] [ text "Init failed" ]
+                , pre
+                    [ class "parse-errors" ]
+                    [ text (Decode.errorToString err) ]
+                ]
 
-              else
-                AuthScheme.view model.authScheme |> Html.map AuthChanged
-            ]
-        ]
+            Nothing ->
+                [ div
+                    [ class "main-container" ]
+                    [ if AuthScheme.isAuthenticated model.authScheme then
+                        div
+                            []
+                            [ sideMenu model
+                            , div [ class "main-area" ] (body model)
+                            ]
+
+                      else
+                        AuthScheme.view model.authScheme |> Html.map AuthChanged
+                    ]
+                ]
     }
 
 
 body : Model -> List (Html Msg)
 body model =
-    case model.decodingError of
-        Just err ->
-            [ h1 [] [ text "Init failed" ]
-            , pre
-                [ class "parse-errors" ]
-                [ text (Decode.errorToString err) ]
-            ]
-
-        Nothing ->
-            [ Notification.view model.notification
-                |> Html.map NotificationChanged
-            , mainContent model
-            ]
+    [ Notification.view model.notification
+        |> Html.map NotificationChanged
+    , mainContent model
+    ]
 
 
 sideMenu : Model -> Html Msg
