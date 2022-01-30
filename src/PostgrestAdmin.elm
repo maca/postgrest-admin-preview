@@ -1,4 +1,4 @@
-module PostgrestAdmin exposing (Model, Msg, application, applicationParams)
+port module PostgrestAdmin exposing (Model, Msg, application, applicationParams)
 
 import Browser
 import Browser.Navigation as Nav
@@ -23,6 +23,9 @@ import String.Extra as String
 import Url exposing (Url)
 import Url.Parser as Parser exposing ((</>), Parser)
 import Utils.Task exposing (Error(..), attemptWithError, fail)
+
+
+port loginSuccess : String -> Cmd msg
 
 
 type Msg
@@ -146,7 +149,9 @@ update msg model =
                 )
 
         NotificationChanged childMsg ->
-            updateNotification childMsg model
+            ( { model | notification = Notification.update childMsg }
+            , Cmd.none
+            )
 
         LinkClicked urlRequest ->
             case urlRequest of
@@ -160,7 +165,7 @@ update msg model =
             navigate { model | route = getRoute url model }
 
         Failed err ->
-            failed err model
+            ( failed err model, Cmd.none )
 
 
 navigate : Model -> ( Model, Cmd Msg )
@@ -175,7 +180,7 @@ navigate model =
                     ( model, fail Failed <| BadSchema resourcesName )
 
         Route.Listing listing ->
-            Listing.fetch model listing
+            ( listing, Listing.fetch model listing )
                 |> updateRoute Route.Listing ListingChanged model
 
         Route.FormLoading form id ->
@@ -201,57 +206,52 @@ handleChildMsg : OuterMsg -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
 handleChildMsg msg ( model, cmd ) =
     case msg of
         OuterMsg.RequestFailed err ->
-            failed err model
+            ( failed err model, Cmd.none )
 
-        OuterMsg.NotificationChanged notificationMsg ->
-            updateNotification notificationMsg model
+        OuterMsg.NotificationChanged childMsg ->
+            ( { model | notification = Notification.update childMsg }
+            , Cmd.none
+            )
 
-        OuterMsg.LoginSuccess ->
-            case model.route of
-                Route.Listing listing ->
-                    Listing.fetch model listing
-                        |> updateRoute Route.Listing ListingChanged model
-
-                Route.FormLoading form id ->
-                    ( model, Form.fetch model form id |> Cmd.map FormChanged )
-
-                Route.Form form ->
-                    case Form.id form of
-                        Just id ->
-                            ( model
-                            , Form.fetch model form id |> Cmd.map FormChanged
-                            )
-
-                        Nothing ->
-                            ( model, Cmd.none )
-
-                _ ->
-                    ( model, Cmd.none )
+        OuterMsg.LoginSuccess token ->
+            ( model, Cmd.batch [ fetch model, loginSuccess token ] )
 
         OuterMsg.Pass ->
             ( model, cmd )
 
 
-failed : Error -> Model -> ( Model, Cmd Msg )
+fetch : Model -> Cmd Msg
+fetch model =
+    case model.route of
+        Route.Listing listing ->
+            Listing.fetch model listing |> Cmd.map ListingChanged
+
+        Route.FormLoading form id ->
+            Form.fetch model form id |> Cmd.map FormChanged
+
+        Route.Form form ->
+            case Form.id form of
+                Just id ->
+                    Form.fetch model form id |> Cmd.map FormChanged
+
+                Nothing ->
+                    Cmd.none
+
+        _ ->
+            Cmd.none
+
+
+failed : Error -> Model -> Model
 failed err ({ authScheme } as model) =
     case err of
         PGError (PG.BadStatus 401 _ _) ->
-            ( { model | authScheme = AuthScheme.fail authScheme }
-            , Cmd.none
-            )
+            { model | authScheme = AuthScheme.fail authScheme }
 
         AuthError ->
-            ( { model | authScheme = AuthScheme.fail authScheme }
-            , Cmd.none
-            )
+            { model | authScheme = AuthScheme.fail authScheme }
 
         _ ->
-            ( model, Cmd.none )
-
-
-updateNotification : Notification.Msg -> Model -> ( Model, Cmd Msg )
-updateNotification msg model =
-    ( { model | notification = Notification.update msg }, Cmd.none )
+            model
 
 
 
@@ -272,10 +272,10 @@ view model =
 
             Nothing ->
                 [ div
-                    [ class "main-container" ]
+                    []
                     [ if AuthScheme.isAuthenticated model.authScheme then
                         div
-                            []
+                            [ class "main-container" ]
                             [ sideMenu model
                             , div [ class "main-area" ] (body model)
                             ]

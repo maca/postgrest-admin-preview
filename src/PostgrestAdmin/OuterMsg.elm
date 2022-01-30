@@ -6,6 +6,6 @@ import Utils.Task exposing (Error)
 
 type OuterMsg
     = RequestFailed Error
-    | LoginSuccess
+    | LoginSuccess String
     | NotificationChanged Notification.Msg
     | Pass

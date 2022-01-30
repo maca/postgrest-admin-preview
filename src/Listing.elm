@@ -179,12 +179,10 @@ descendingBy column listing =
     { listing | order = Desc column }
 
 
-fetch : Client a -> Listing -> ( Listing, Cmd Msg )
+fetch : Client a -> Listing -> Cmd Msg
 fetch client listing =
-    ( listing
-    , fetchResources client listing
+    fetchResources client listing
         |> attemptWithError FetchFailed Fetched
-    )
 
 
 update : Client { a | key : Nav.Key } -> Msg -> Listing -> ( Listing, Cmd Msg )
@@ -274,7 +272,7 @@ update client msg listing =
                                 )
 
                             _ ->
-                                fetch client
+                                fetchListing client
                                     { listing
                                         | scrollPosition = viewport.viewport.y
                                         , pages = Blank :: listing.pages
@@ -307,6 +305,11 @@ update client msg listing =
 
         FetchFailed _ ->
             ( listing, Cmd.none )
+
+
+fetchListing : Client a -> Listing -> ( Listing, Cmd Msg )
+fetchListing client listing =
+    ( listing, fetch client listing )
 
 
 scrollingDown : Viewport -> Listing -> Bool

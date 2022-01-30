@@ -20,9 +20,14 @@
   <script type="text/javascript" src="/elm.js"></script>
 </head>
 
+
 <body>
   <pre id="elm"></pre>
   <script type="text/javascript">
-    app = Elm.Main.init({token: sessionStorage.getItem("jwt")})
+    app = Elm.Main.init({flags: { jwt: sessionStorage.getItem("jwt") }})
+
+    app.ports.loginSuccess.subscribe(jwt => {
+      sessionStorage.setItem("jwt", jwt)
+    });
   </script>
 <script>

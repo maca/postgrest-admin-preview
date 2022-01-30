@@ -96,8 +96,10 @@ readyDecoder params =
 mapMsg : Msg -> OuterMsg
 mapMsg msg =
     case msg of
-        Succeeded _ ->
-            OuterMsg.LoginSuccess
+        Succeeded session ->
+            sessionToJwt session
+                |> PG.jwtString
+                |> OuterMsg.LoginSuccess
 
         _ ->
             OuterMsg.Pass
