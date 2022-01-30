@@ -212,8 +212,18 @@ handleChildMsg msg ( model, cmd ) =
                     Listing.fetch model listing
                         |> updateRoute Route.Listing ListingChanged model
 
+                Route.FormLoading form id ->
+                    ( model, Form.fetch model form id |> Cmd.map FormChanged )
+
                 Route.Form form ->
-                    ( model, Cmd.none )
+                    case Form.id form of
+                        Just id ->
+                            ( model
+                            , Form.fetch model form id |> Cmd.map FormChanged
+                            )
+
+                        Nothing ->
+                            ( model, Cmd.none )
 
                 _ ->
                     ( model, Cmd.none )

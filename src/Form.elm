@@ -68,6 +68,21 @@ update client msg ((Form params fields) as form) =
         Fetched resource ->
             ( fromResource params resource, Cmd.none )
 
+        Changed inputMsg ->
+            Input.update client inputMsg fields
+                |> Tuple.mapFirst (Form params)
+                |> Tuple.mapSecond
+                    (\cmd ->
+                        Cmd.batch
+                            [ Cmd.map Changed cmd
+                            , Notification.dismiss
+                                |> Task.perform NotificationChanged
+                            ]
+                    )
+
+        Submitted ->
+            ( form, save client form )
+
         Created resource ->
             let
                 rid =
@@ -88,25 +103,10 @@ update client msg ((Form params fields) as form) =
                 |> Task.perform NotificationChanged
             )
 
-        Changed inputMsg ->
-            Input.update client inputMsg fields
-                |> Tuple.mapFirst (Form params)
-                |> Tuple.mapSecond
-                    (\cmd ->
-                        Cmd.batch
-                            [ Cmd.map Changed cmd
-                            , Notification.dismiss
-                                |> Task.perform NotificationChanged
-                            ]
-                    )
-
-        Submitted ->
-            ( form, save client params form )
-
-        NotificationChanged _ ->
+        Failed _ ->
             ( form, Cmd.none )
 
-        Failed _ ->
+        NotificationChanged _ ->
             ( form, Cmd.none )
 
 
@@ -220,8 +220,8 @@ fetch client (Form { definition, resourcesName } _) rid =
             fail Failed AuthError
 
 
-save : Client a -> Params -> Form -> Cmd Msg
-save client params form =
+save : Client a -> Form -> Cmd Msg
+save client ((Form params fields) as form) =
     case id form of
         Just rid ->
             updateRecord client params rid form
