@@ -15,7 +15,7 @@ module PostgrestAdmin.AuthScheme exposing
 import BasicAuth exposing (BasicAuth)
 import Html exposing (Html, text)
 import Postgrest.Client as PG
-import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
+import PostgrestAdmin.OuterMsg exposing (OuterMsg)
 
 
 type AuthScheme
@@ -44,7 +44,7 @@ fail authScheme =
         BasicAuth auth ->
             BasicAuth <| BasicAuth.fail auth
 
-        Jwt token ->
+        Jwt _ ->
             Unset
 
         Unset ->

@@ -326,7 +326,7 @@ requiresAuthentication auth =
         Active _ ->
             True
 
-        Success _ token ->
+        Success _ _ ->
             False
 
         Failure _ _ ->

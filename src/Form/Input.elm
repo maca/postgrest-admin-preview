@@ -552,7 +552,7 @@ fetchResources client name field ({ foreignKeyParams } as autocomplete) =
                                 )
 
                     Nothing ->
-                        Debug.todo "crash"
+                        fail Failed AuthError
 
         Nothing ->
             fail Failed <| BadSchema foreignKeyParams.table

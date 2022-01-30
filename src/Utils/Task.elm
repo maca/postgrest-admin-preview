@@ -5,7 +5,6 @@ module Utils.Task exposing
     , handleJsonResponse
     )
 
-import Browser.Dom as Dom
 import Http
 import Json.Decode as Decode exposing (Decoder)
 import Postgrest.Client as PG

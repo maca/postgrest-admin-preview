@@ -168,11 +168,6 @@ primaryKey record =
     toResource record |> Resource.primaryKey
 
 
-primaryKeyName : Form -> Maybe String
-primaryKeyName record =
-    toResource record |> Resource.primaryKeyName
-
-
 setError : PG.PostgrestErrorJSON -> Form -> Form
 setError error ((Form params fields) as form) =
     let
@@ -221,22 +216,22 @@ fetch client (Form { definition, resourcesName } _) rid =
 
 
 save : Client a -> Form -> Cmd Msg
-save client ((Form params fields) as form) =
+save client ((Form params _) as form) =
     case id form of
         Just rid ->
-            updateRecord client params rid form
+            updateRecord client form rid
                 |> attemptWithError Failed Updated
 
         Nothing ->
-            createRecord client params form
+            createRecord client form
                 |> attemptWithError Failed Created
 
 
-updateRecord : Client a -> Params -> String -> Form -> Task Error Resource
-updateRecord client { definition, resourcesName } rid record =
+updateRecord : Client a -> Form -> String -> Task Error Resource
+updateRecord client ((Form { definition, resourcesName } _) as form) rid =
     case AuthScheme.toJwt client.authScheme of
         Just token ->
-            toResource record
+            toResource form
                 |> Client.update client definition resourcesName rid
                 |> PG.toTask token
                 |> Task.mapError PGError
@@ -245,11 +240,11 @@ updateRecord client { definition, resourcesName } rid record =
             Task.fail AuthError
 
 
-createRecord : Client a -> Params -> Form -> Task Error Resource
-createRecord client { definition, resourcesName } record =
+createRecord : Client a -> Form -> Task Error Resource
+createRecord client ((Form { definition, resourcesName } _) as form) =
     case AuthScheme.toJwt client.authScheme of
         Just token ->
-            toResource record
+            toResource form
                 |> Client.create client definition resourcesName
                 |> PG.toTask token
                 |> Task.mapError PGError
