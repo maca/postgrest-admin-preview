@@ -3,6 +3,7 @@ module Form.Input exposing
     , Msg
     , fromField
     , isRequired
+    , mapMsg
     , setError
     , toField
     , toValue
@@ -36,6 +37,7 @@ import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
 import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
 import PostgrestAdmin.AuthScheme as AuthScheme
+import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 import Result
 import String.Extra as String
 import Url.Builder as Url
@@ -77,6 +79,16 @@ type Input
     | Blank Field
 
 
+mapMsg : Msg -> OuterMsg
+mapMsg msg =
+    case msg of
+        Failed err ->
+            OuterMsg.RequestFailed err
+
+        _ ->
+            OuterMsg.Pass
+
+
 update : Client a -> Msg -> Fields -> ( Fields, Cmd Msg )
 update client msg record =
     case msg of
@@ -94,11 +106,8 @@ update client msg record =
                 value =
                     PForeignKey Nothing autocomplete.foreignKeyParams
 
-                field_ =
-                    Field.update value field
-
                 association =
-                    Association field_
+                    Association (Field.update value field)
                         { autocomplete | userInput = "", blocked = False }
             in
             ( Dict.insert name association record, Cmd.none )

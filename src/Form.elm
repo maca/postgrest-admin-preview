@@ -154,6 +154,9 @@ mapMsg msg =
         NotificationChanged innerMsg ->
             OuterMsg.NotificationChanged innerMsg
 
+        Changed inputMsg ->
+            Input.mapMsg inputMsg
+
         _ ->
             OuterMsg.Pass
 
