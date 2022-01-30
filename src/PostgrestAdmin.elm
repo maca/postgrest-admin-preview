@@ -209,9 +209,8 @@ handleChildMsg msg ( model, cmd ) =
         OuterMsg.LoginSuccess ->
             case model.route of
                 Route.Listing listing ->
-                    ( model
-                    , Cmd.map ListingChanged (Listing.retryCmd listing)
-                    )
+                    Listing.fetch model listing
+                        |> updateRoute Route.Listing ListingChanged model
 
                 Route.Form form ->
                     ( model, Cmd.none )
