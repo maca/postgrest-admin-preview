@@ -2,9 +2,9 @@ module BasicAuth exposing
     ( BasicAuth
     , Msg
     , Session
+    , config
     , fail
     , mapMsg
-    , noFlags
     , toJwt
     , update
     , view
@@ -30,7 +30,6 @@ import Utils.Task exposing (attemptWithError)
 
 type Session
     = Token PG.JWT
-    | Cookie
 
 
 type Msg
@@ -63,24 +62,35 @@ type BasicAuth
     | Failure Params Error
 
 
-noFlags : Decoder BasicAuth
-noFlags =
-    Ready
-        { url =
-            { protocol = Http
-            , host = "localhost"
-            , port_ = Just 4000
-            , path = "rpc/login"
-            , query = Nothing
-            , fragment = Nothing
+config : Decoder BasicAuth
+config =
+    let
+        params =
+            { url =
+                { protocol = Http
+                , host = "localhost"
+                , port_ = Just 4000
+                , path = "rpc/login"
+                , query = Nothing
+                , fragment = Nothing
+                }
+            , decoder =
+                Decode.map (PG.jwt >> Token)
+                    (Decode.field "token" Decode.string)
+            , encoder = Encode.dict identity Encode.string
+            , fields = [ ( "email", "" ), ( "password", "" ) ]
             }
-        , decoder =
-            Decode.map (PG.jwt >> Token)
-                (Decode.field "token" Decode.string)
-        , encoder = Encode.dict identity Encode.string
-        , fields = [ ( "email", "" ), ( "password", "" ) ]
-        }
-        |> Decode.succeed
+    in
+    Decode.oneOf
+        [ Decode.field "jwt" Decode.string
+            |> Decode.map (\token -> Success params (Token <| PG.jwt token))
+        , readyDecoder params
+        ]
+
+
+readyDecoder : Params -> Decoder BasicAuth
+readyDecoder params =
+    Decode.succeed (Ready params)
 
 
 mapMsg : Msg -> OuterMsg
@@ -303,9 +313,6 @@ sessionToJwt session =
     case session of
         Token token ->
             token
-
-        Cookie ->
-            PG.jwt "dummy-token"
 
 
 requiresAuthentication : BasicAuth -> Bool

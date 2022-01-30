@@ -10,7 +10,7 @@ main : Program Decode.Value Model Msg
 main =
     let
         auth =
-            BasicAuth.noFlags
+            BasicAuth.config
                 |> BasicAuth.withUrl "http://localhost:8080/rpc/login"
     in
     Config.noFlags

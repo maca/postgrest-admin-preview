@@ -22,5 +22,7 @@
 
 <body>
   <pre id="elm"></pre>
-  <script type="text/javascript">Elm.Main.init()</script>
+  <script type="text/javascript">
+    app = Elm.Main.init({token: sessionStorage.getItem("jwt")})
+  </script>
 <script>
