@@ -29,7 +29,7 @@ import Maybe.Extra as Maybe exposing (isNothing)
 import Postgrest.Client as PG
 import Postgrest.Field as Field exposing (Field)
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
-import Postgrest.Schema.Definition exposing (Column(..), Definition)
+import Postgrest.Schema.Definition exposing (Column, Definition)
 import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
 import Regex exposing (Regex)
 import Time.Extra as Time
@@ -128,49 +128,53 @@ decoderFold definition name _ prevDec =
 
         foldFun dict =
             case Dict.get name definition of
-                Just (Column required (PFloat _)) ->
-                    float |> map PFloat required dict
+                Just { required, value } ->
+                    case value of
+                        PFloat _ ->
+                            float |> map PFloat required dict
 
-                Just (Column required (PInt _)) ->
-                    int |> map PInt required dict
+                        PInt _ ->
+                            int |> map PInt required dict
 
-                Just (Column required (PString _)) ->
-                    string |> map PString required dict
+                        PString _ ->
+                            string |> map PString required dict
 
-                Just (Column required (PText _)) ->
-                    string |> map PText required dict
+                        PText _ ->
+                            string |> map PText required dict
 
-                Just (Column required (PEnum _ opts)) ->
-                    string |> map (flip PEnum opts) required dict
+                        PEnum _ opts ->
+                            string |> map (flip PEnum opts) required dict
 
-                Just (Column required (PBool _)) ->
-                    bool |> map PBool required dict
+                        PBool _ ->
+                            bool |> map PBool required dict
 
-                Just (Column required (PTime _)) ->
-                    Time.decoder |> map PTime required dict
+                        PTime _ ->
+                            Time.decoder |> map PTime required dict
 
-                Just (Column required (PDate _)) ->
-                    Time.decoder |> map PDate required dict
+                        PDate _ ->
+                            Time.decoder |> map PDate required dict
 
-                Just (Column required (PPrimaryKey _)) ->
-                    PrimaryKey.decoder |> map PPrimaryKey required dict
+                        PPrimaryKey _ ->
+                            PrimaryKey.decoder |> map PPrimaryKey required dict
 
-                Just (Column required (PForeignKey _ params)) ->
-                    let
-                        insertFk l pk =
-                            insert dict
-                                { error = Nothing
-                                , required = required
-                                , changed = False
-                                , value = PForeignKey pk { params | label = l }
-                                }
-                    in
-                    Decode.map2 insertFk
-                        (maybe <| referenceDecoder params)
-                        (maybe <| Decode.field name PrimaryKey.decoder)
+                        PForeignKey _ params ->
+                            let
+                                insertFk l pk =
+                                    insert dict
+                                        { error = Nothing
+                                        , required = required
+                                        , changed = False
+                                        , value =
+                                            PForeignKey pk
+                                                { params | label = l }
+                                        }
+                            in
+                            Decode.map2 insertFk
+                                (maybe <| referenceDecoder params)
+                                (maybe <| Decode.field name PrimaryKey.decoder)
 
-                Just (Column _ (BadValue _)) ->
-                    Decode.fail ""
+                        BadValue _ ->
+                            Decode.fail ""
 
                 Nothing ->
                     Decode.fail ""

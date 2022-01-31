@@ -11,11 +11,7 @@ import Dict
 import Postgrest.Client as PG exposing (Endpoint, Request, Selectable)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Schema exposing (Schema)
-import Postgrest.Schema.Definition as Definition
-    exposing
-        ( Column(..)
-        , Definition
-        )
+import Postgrest.Schema.Definition as Definition exposing (Column, Definition)
 import Postgrest.Value as Value
 import PostgrestAdmin.AuthScheme exposing (AuthScheme)
 import Url exposing (Url)
@@ -94,8 +90,8 @@ selects definition =
                 |> Maybe.map
                     (\n -> PG.resource table <| PG.attributes [ n, "id" ])
 
-        filteMapFun (Column _ val) =
-            Value.foreignKeyParams val |> Maybe.andThen resources
+        filteMapFun { value } =
+            Value.foreignKeyParams value |> Maybe.andThen resources
     in
     Dict.values definition
         |> List.filterMap filteMapFun

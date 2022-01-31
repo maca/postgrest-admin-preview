@@ -51,12 +51,7 @@ import Parser
         , token
         )
 import Postgrest.Client as PG
-import Postgrest.Schema.Definition
-    exposing
-        ( Column(..)
-        , Definition
-        , columnValue
-        )
+import Postgrest.Schema.Definition exposing (Column, Definition, columnValue)
 import Postgrest.Value exposing (Value(..))
 import Set exposing (Set)
 import Time exposing (posixToMillis, toHour, utc)

@@ -35,7 +35,7 @@ import Html.Keyed as Keyed
 import Html.Lazy as Lazy
 import Json.Decode as Decode
 import Postgrest.Client as PG
-import Postgrest.Schema.Definition exposing (Column(..), Definition)
+import Postgrest.Schema.Definition exposing (Column, Definition)
 import Postgrest.Value exposing (Value(..))
 import Set
 import String.Extra as String
@@ -199,39 +199,44 @@ viewFilter definition idx filter =
                 ]
     in
     case Dict.get name definition of
-        Just (Column isRequired (PString _)) ->
-            textFilterInputs isRequired name idx op
-                |> inputs "text"
+        Just { required, value } ->
+            case value of
+                PString _ ->
+                    textFilterInputs required name idx op
+                        |> inputs "text"
 
-        Just (Column isRequired (PText _)) ->
-            textFilterInputs isRequired name idx op
-                |> inputs "text"
+                PText _ ->
+                    textFilterInputs required name idx op
+                        |> inputs "text"
 
-        Just (Column isRequired (PInt _)) ->
-            intFilterInputs isRequired name idx op
-                |> inputs "number"
+                PInt _ ->
+                    intFilterInputs required name idx op
+                        |> inputs "number"
 
-        Just (Column isRequired (PFloat _)) ->
-            floatFilterInputs isRequired name idx op
-                |> inputs "date"
+                PFloat _ ->
+                    floatFilterInputs required name idx op
+                        |> inputs "date"
 
-        Just (Column isRequired (PBool _)) ->
-            boolFilterInputs isRequired name idx op
-                |> inputs "bool"
+                PBool _ ->
+                    boolFilterInputs required name idx op
+                        |> inputs "bool"
 
-        Just (Column isRequired (PTime _)) ->
-            timeFilterInputs isRequired name idx op
-                |> inputs "time"
+                PTime _ ->
+                    timeFilterInputs required name idx op
+                        |> inputs "time"
 
-        Just (Column isRequired (PDate _)) ->
-            dateFilterInputs isRequired name idx op
-                |> inputs "time"
+                PDate _ ->
+                    dateFilterInputs required name idx op
+                        |> inputs "time"
 
-        Just (Column isRequired (PEnum _ _)) ->
-            enumInputs isRequired name idx op
-                |> inputs "enum"
+                PEnum _ _ ->
+                    enumInputs required name idx op
+                        |> inputs "enum"
 
-        _ ->
+                _ ->
+                    Html.text ""
+
+        Nothing ->
             Html.text ""
 
 

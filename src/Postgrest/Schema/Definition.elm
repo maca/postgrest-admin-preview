@@ -1,5 +1,5 @@
 module Postgrest.Schema.Definition exposing
-    ( Column(..)
+    ( Column
     , Definition
     , columnValue
     , primaryKeyName
@@ -12,8 +12,10 @@ import Postgrest.Field exposing (Field)
 import Postgrest.Value as Value exposing (Value)
 
 
-type Column
-    = Column Bool Value
+type alias Column =
+    { required : Bool
+    , value : Value
+    }
 
 
 type alias Definition =
@@ -26,7 +28,7 @@ toResource definition =
 
 
 columnToField : Column -> Field
-columnToField (Column required value) =
+columnToField { required, value } =
     { error = Nothing
     , required = required
     , changed = False
@@ -36,10 +38,10 @@ columnToField (Column required value) =
 
 primaryKeyName : Definition -> Maybe String
 primaryKeyName definition =
-    Dict.find (\_ (Column _ value) -> Value.isPrimaryKey value) definition
+    Dict.find (\_ { value } -> Value.isPrimaryKey value) definition
         |> Maybe.map Tuple.first
 
 
 columnValue : Column -> Value
-columnValue (Column _ value) =
+columnValue { value } =
     value

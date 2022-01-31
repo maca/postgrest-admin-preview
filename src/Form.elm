@@ -23,11 +23,7 @@ import Postgrest.Client as PG
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
-import Postgrest.Schema.Definition as Definition
-    exposing
-        ( Column(..)
-        , Definition
-        )
+import Postgrest.Schema.Definition as Definition exposing (Column, Definition)
 import Postgrest.Value exposing (Value(..))
 import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)

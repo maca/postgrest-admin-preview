@@ -53,7 +53,7 @@ import Postgrest.Field exposing (Field)
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
-import Postgrest.Schema.Definition exposing (Column(..), Definition)
+import Postgrest.Schema.Definition exposing (Column, Definition)
 import Postgrest.Value exposing (Value(..))
 import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
@@ -620,7 +620,7 @@ fetchResources client listing =
 
 
 sortBy : String -> SortOrder -> ( String, Column ) -> Maybe PG.Param
-sortBy resourcesName sort ( name, Column _ value ) =
+sortBy resourcesName sort ( name, { value } ) =
     let
         colName =
             case value of
@@ -706,8 +706,8 @@ orderToQueryParams order =
 
 
 sortColumns : ( String, Column ) -> ( String, Column ) -> Order
-sortColumns ( name, Column _ val ) ( name_, Column _ val_ ) =
-    sortValues ( name, val ) ( name_, val_ )
+sortColumns ( name, column ) ( name_, column_ ) =
+    sortValues ( name, column.value ) ( name_, column_.value )
 
 
 sortValues : ( String, Value ) -> ( String, Value ) -> Order
