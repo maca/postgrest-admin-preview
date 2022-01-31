@@ -242,13 +242,16 @@ fetch model =
 
 
 failed : Error -> Model -> Model
-failed err ({ authScheme } as model) =
-    case err of
+failed error ({ authScheme } as model) =
+    case error of
         PGError (PG.BadStatus 401 _ _) ->
             { model | authScheme = AuthScheme.fail authScheme }
 
         AuthError ->
             { model | authScheme = AuthScheme.fail authScheme }
+
+        DecodeError err ->
+            { model | decodingError = Just err }
 
         _ ->
             model
