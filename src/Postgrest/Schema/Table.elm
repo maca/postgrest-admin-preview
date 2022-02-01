@@ -1,6 +1,6 @@
-module Postgrest.Schema.Definition exposing
+module Postgrest.Schema.Table exposing
     ( Column
-    , Definition
+    , Table
     , columnValue
     , primaryKeyName
     , toResource
@@ -18,13 +18,13 @@ type alias Column =
     }
 
 
-type alias Definition =
+type alias Table =
     Dict String Column
 
 
-toResource : Definition -> Dict String Field
-toResource definition =
-    Dict.map (\_ col -> columnToField col) definition
+toResource : Table -> Dict String Field
+toResource table =
+    Dict.map (\_ col -> columnToField col) table
 
 
 columnToField : Column -> Field
@@ -36,9 +36,9 @@ columnToField { required, value } =
     }
 
 
-primaryKeyName : Definition -> Maybe String
-primaryKeyName definition =
-    Dict.find (\_ { value } -> Value.isPrimaryKey value) definition
+primaryKeyName : Table -> Maybe String
+primaryKeyName table =
+    Dict.find (\_ { value } -> Value.isPrimaryKey value) table
         |> Maybe.map Tuple.first
 
 

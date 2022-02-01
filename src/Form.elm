@@ -4,7 +4,7 @@ module Form exposing
     , Params
     , errors
     , fetch
-    , fromDefinition
+    , fromTable
     , id
     , mapMsg
     , update
@@ -23,7 +23,7 @@ import Postgrest.Client as PG
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
-import Postgrest.Schema.Definition as Definition exposing (Column, Definition)
+import Postgrest.Schema.Table as Table exposing (Column, Table)
 import Postgrest.Value exposing (Value(..))
 import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
@@ -36,7 +36,7 @@ import Utils.Task exposing (Error(..), attemptWithError, fail)
 
 type alias Params =
     { resourcesName : String
-    , definition : Definition
+    , table : Table
     }
 
 
@@ -120,9 +120,9 @@ fromResource params resource =
     Form params <| Dict.map (\_ input -> Input.fromField input) resource
 
 
-fromDefinition : Params -> Definition -> Form
-fromDefinition params definition =
-    Definition.toResource definition
+fromTable : Params -> Table -> Form
+fromTable params table =
+    Table.toResource table
         |> fromResource params
 
 
@@ -202,10 +202,10 @@ columnRegex =
 
 
 fetch : Client a -> Form -> String -> Cmd Msg
-fetch client (Form { definition, resourcesName } _) rid =
+fetch client (Form { table, resourcesName } _) rid =
     case AuthScheme.toJwt client.authScheme of
         Just token ->
-            Client.fetchOne client definition resourcesName rid
+            Client.fetchOne client table resourcesName rid
                 |> PG.toTask token
                 |> Task.mapError PGError
                 |> attemptWithError Failed Fetched
@@ -227,11 +227,11 @@ save client ((Form params _) as form) =
 
 
 updateRecord : Client a -> Form -> String -> Task Error Resource
-updateRecord client ((Form { definition, resourcesName } _) as form) rid =
+updateRecord client ((Form { table, resourcesName } _) as form) rid =
     case AuthScheme.toJwt client.authScheme of
         Just token ->
             toResource form
-                |> Client.update client definition resourcesName rid
+                |> Client.update client table resourcesName rid
                 |> PG.toTask token
                 |> Task.mapError PGError
 
@@ -240,11 +240,11 @@ updateRecord client ((Form { definition, resourcesName } _) as form) rid =
 
 
 createRecord : Client a -> Form -> Task Error Resource
-createRecord client ((Form { definition, resourcesName } _) as form) =
+createRecord client ((Form { table, resourcesName } _) as form) =
     case AuthScheme.toJwt client.authScheme of
         Just token ->
             toResource form
-                |> Client.create client definition resourcesName
+                |> Client.create client table resourcesName
                 |> PG.toTask token
                 |> Task.mapError PGError
 

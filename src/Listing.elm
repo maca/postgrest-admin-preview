@@ -53,7 +53,7 @@ import Postgrest.Field exposing (Field)
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
-import Postgrest.Schema.Definition exposing (Column, Definition)
+import Postgrest.Schema.Table exposing (Column, Table)
 import Postgrest.Value exposing (Value(..))
 import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
@@ -103,7 +103,7 @@ type TextSelect
 type alias Listing =
     { resourcesName : String
     , scrollPosition : Float
-    , definition : Definition
+    , table : Table
     , pages : List Page
     , page : Int
     , order : SortOrder
@@ -120,8 +120,8 @@ type alias EventConfig =
     }
 
 
-init : String -> Maybe String -> Definition -> Listing
-init resourcesName rawQuery definition =
+init : String -> Maybe String -> Table -> Listing
+init resourcesName rawQuery table =
     let
         query =
             Maybe.map parseQuery rawQuery |> Maybe.withDefault []
@@ -135,10 +135,10 @@ init resourcesName rawQuery definition =
     { resourcesName = resourcesName
     , page = 0
     , scrollPosition = 0
-    , definition = definition
+    , table = table
     , pages = []
     , order = order
-    , search = Search.init definition (rawQuery |> Maybe.withDefault "")
+    , search = Search.init table (rawQuery |> Maybe.withDefault "")
     , searchOpen = False
     , textSelect = Off
     }
@@ -340,7 +340,7 @@ view : Listing -> Html Msg
 view listing =
     let
         fields =
-            Dict.toList listing.definition
+            Dict.toList listing.table
                 |> List.sortWith sortColumns
                 |> List.map Tuple.first
 
@@ -595,22 +595,22 @@ perPage =
 fetchResources : Client a -> Listing -> Task Error (List Resource)
 fetchResources client listing =
     let
-        { search, resourcesName, page, definition, order } =
+        { search, resourcesName, page, table, order } =
             listing
 
         pgOrder =
-            Dict.toList definition
+            Dict.toList table
                 |> List.filterMap (sortBy resourcesName order)
 
         params =
-            [ PG.select <| Client.selects definition
+            [ PG.select <| Client.selects table
             , PG.limit perPage
             , PG.offset (perPage * page)
             ]
     in
     case AuthScheme.toJwt client.authScheme of
         Just token ->
-            Client.fetchMany client definition resourcesName
+            Client.fetchMany client table resourcesName
                 |> PG.setParams (params ++ pgOrder ++ Search.toPGQuery search)
                 |> PG.toTask token
                 |> Task.mapError PGError

@@ -11,7 +11,7 @@ import Dict
 import Postgrest.Client as PG exposing (Endpoint, Request, Selectable)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Schema exposing (Schema)
-import Postgrest.Schema.Definition as Definition exposing (Column, Definition)
+import Postgrest.Schema.Table as Table exposing (Column, Table)
 import Postgrest.Value as Value
 import PostgrestAdmin.AuthScheme exposing (AuthScheme)
 import Url exposing (Url)
@@ -26,52 +26,52 @@ type alias Client a =
     }
 
 
-fetchOne : Client a -> Definition -> String -> String -> Request Resource
-fetchOne { host } definition resourcesName id =
+fetchOne : Client a -> Table -> String -> String -> Request Resource
+fetchOne { host } table resourcesName id =
     let
         pkName =
-            Definition.primaryKeyName definition |> Maybe.withDefault ""
+            Table.primaryKeyName table |> Maybe.withDefault ""
     in
-    resourceEndpoint host resourcesName definition
+    resourceEndpoint host resourcesName table
         |> PG.getOne
         |> PG.setParams
-            [ PG.select <| selects definition
+            [ PG.select <| selects table
             , PG.param pkName <| PG.eq <| PG.string id
             ]
 
 
-fetchMany : Client a -> Definition -> String -> Request (List Resource)
-fetchMany { host } definition resourcesName =
-    resourceEndpoint host resourcesName definition
+fetchMany : Client a -> Table -> String -> Request (List Resource)
+fetchMany { host } table resourcesName =
+    resourceEndpoint host resourcesName table
         |> PG.getMany
-        |> PG.setParams [ PG.select <| selects definition ]
+        |> PG.setParams [ PG.select <| selects table ]
 
 
-create : Client a -> Definition -> String -> Resource -> Request Resource
-create { host } definition resourcesName resource =
+create : Client a -> Table -> String -> Resource -> Request Resource
+create { host } table resourcesName resource =
     let
         endpoint =
-            resourceEndpoint host resourcesName definition
+            resourceEndpoint host resourcesName table
     in
     Resource.encode resource
         |> PG.postOne endpoint
-        |> PG.setParams [ PG.select <| selects definition ]
+        |> PG.setParams [ PG.select <| selects table ]
 
 
 update :
     Client a
-    -> Definition
+    -> Table
     -> String
     -> String
     -> Resource
     -> Request Resource
-update { host } definition resourcesName id resource =
+update { host } table resourcesName id resource =
     let
         pkName =
             Resource.primaryKeyName resource |> Maybe.withDefault ""
 
         endpoint =
-            resourceEndpoint host resourcesName definition
+            resourceEndpoint host resourcesName table
 
         pk =
             PG.primaryKey ( pkName, PG.string )
@@ -79,11 +79,11 @@ update { host } definition resourcesName id resource =
     Resource.encode resource
         |> PG.patchByPrimaryKey endpoint pk id
         |> PG.setParams
-            [ PG.select <| selects definition ]
+            [ PG.select <| selects table ]
 
 
-selects : Definition -> List Selectable
-selects definition =
+selects : Table -> List Selectable
+selects table_ =
     let
         resources { table, labelColumnName } =
             labelColumnName
@@ -93,13 +93,13 @@ selects definition =
         filteMapFun { value } =
             Value.foreignKeyParams value |> Maybe.andThen resources
     in
-    Dict.values definition
+    Dict.values table_
         |> List.filterMap filteMapFun
-        |> (++) (Dict.keys definition |> List.map PG.attribute)
+        |> (++) (Dict.keys table_ |> List.map PG.attribute)
 
 
-resourceEndpoint : Url -> String -> Definition -> Endpoint Resource
-resourceEndpoint url resourcesName definition =
-    Resource.decoder definition
+resourceEndpoint : Url -> String -> Table -> Endpoint Resource
+resourceEndpoint url resourcesName table =
+    Resource.decoder table
         |> PG.endpoint
             ({ url | path = "/" ++ resourcesName } |> Url.toString)

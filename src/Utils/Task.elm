@@ -3,6 +3,7 @@ module Utils.Task exposing
     , attemptWithError
     , fail
     , handleJsonResponse
+    , toError
     )
 
 import Http
@@ -63,3 +64,13 @@ handleJsonResponse decoder response =
 
                 Ok result ->
                     Ok result
+
+
+toError : Result x a -> Maybe x
+toError result =
+    case result of
+        Err err ->
+            Just err
+
+        _ ->
+            Nothing

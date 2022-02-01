@@ -19,7 +19,7 @@ import Parser
         , token
         , variable
         )
-import Postgrest.Schema.Definition exposing (Column)
+import Postgrest.Schema.Table exposing (Column)
 import Postgrest.Value exposing (Value(..))
 import Set exposing (Set)
 import String.Extra exposing (unquote)

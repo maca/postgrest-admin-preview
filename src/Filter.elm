@@ -51,7 +51,7 @@ import Parser
         , token
         )
 import Postgrest.Client as PG
-import Postgrest.Schema.Definition exposing (Column, Definition, columnValue)
+import Postgrest.Schema.Table exposing (Column, Table, columnValue)
 import Postgrest.Value exposing (Value(..))
 import Set exposing (Set)
 import Time exposing (posixToMillis, toHour, utc)
@@ -277,19 +277,19 @@ isInThePast name =
 -- Parsing
 
 
-parse : Definition -> String -> Maybe Filter
-parse definition query =
+parse : Table -> String -> Maybe Filter
+parse table query =
     query
-        |> Parser.run (parseFilter definition)
+        |> Parser.run (parseFilter table)
         |> Result.toMaybe
         |> Maybe.andThen identity
 
 
-parseFilter : Definition -> Parser (Maybe Filter)
-parseFilter definition =
+parseFilter : Table -> Parser (Maybe Filter)
+parseFilter table =
     Parser.oneOf
-        [ and definition
-        , columnFilter definition "="
+        [ and table
+        , columnFilter table "="
         ]
 
 
@@ -297,39 +297,39 @@ parseFilter definition =
 -- Parse helpers
 
 
-and : Definition -> Parser (Maybe Filter)
-and definition =
+and : Table -> Parser (Maybe Filter)
+and table =
     succeed combineAnd
         |. symbol "and="
-        |= list definition
+        |= list table
 
 
-list : Definition -> Parser (List (Maybe Filter))
-list definition =
+list : Table -> Parser (List (Maybe Filter))
+list table =
     Parser.sequence
         { start = "("
         , separator = ","
         , end = ")"
         , spaces = Parser.spaces
-        , item = columnFilter definition "."
+        , item = columnFilter table "."
         , trailing = Forbidden
         }
 
 
-columnFilter : Definition -> String -> Parser (Maybe Filter)
-columnFilter definition separator =
+columnFilter : Table -> String -> Parser (Maybe Filter)
+columnFilter table separator =
     let
         colNames =
-            Dict.keys definition
+            Dict.keys table
                 |> List.map (\s -> succeed (always s) |= token s)
     in
     succeed (\name f -> f name)
         |= Parser.oneOf colNames
         |. symbol separator
         |= Parser.oneOf
-            [ succeed (enumCons definition)
+            [ succeed (enumCons table)
                 |= Filter.Parser.enum
-            , succeed (filterCons definition)
+            , succeed (filterCons table)
                 |= Filter.Parser.operation
             ]
 
@@ -440,9 +440,9 @@ combineHelp (Filter name op) ((Filter name_ op_) as f_) =
 -- False
 
 
-filterCons : Definition -> (OperandConst -> Operation) -> String -> Maybe Filter
-filterCons definition operationCons name =
-    case Dict.get name definition |> Maybe.map columnValue of
+filterCons : Table -> (OperandConst -> Operation) -> String -> Maybe Filter
+filterCons table operationCons name =
+    case Dict.get name table |> Maybe.map columnValue of
         Just (PString _) ->
             Just <| Filter name <| operationCons Operand.text
 
@@ -472,9 +472,9 @@ filterCons definition operationCons name =
             Nothing
 
 
-enumCons : Definition -> (List String -> Operation) -> String -> Maybe Filter
-enumCons definition operationCons name =
-    case Dict.get name definition |> Maybe.map columnValue of
+enumCons : Table -> (List String -> Operation) -> String -> Maybe Filter
+enumCons table operationCons name =
+    case Dict.get name table |> Maybe.map columnValue of
         Just (PEnum _ choices) ->
             if operationCons choices == IsNull Nothing then
                 Just <| Filter name <| OneOf <| Operand.enum choices Set.empty

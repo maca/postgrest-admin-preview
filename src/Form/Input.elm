@@ -519,7 +519,7 @@ displayError error =
 fetchResources : Client a -> String -> Field -> Autocomplete -> Cmd Msg
 fetchResources client name field ({ foreignKeyParams } as autocomplete) =
     case Dict.get foreignKeyParams.table client.schema of
-        Just definition ->
+        Just table ->
             let
                 selects =
                     foreignKeyParams.labelColumnName
@@ -549,7 +549,7 @@ fetchResources client name field ({ foreignKeyParams } as autocomplete) =
             else
                 case AuthScheme.toJwt client.authScheme of
                     Just token ->
-                        Client.fetchMany client definition foreignKeyParams.table
+                        Client.fetchMany client table foreignKeyParams.table
                             |> PG.setParams
                                 [ PG.select selects
                                 , PG.or queries

@@ -14,7 +14,7 @@ import Notification exposing (Notification)
 import Postgrest.Client as PG
 import Postgrest.Resource.Client exposing (Client)
 import Postgrest.Schema as Schema exposing (Schema)
-import Postgrest.Schema.Definition exposing (Definition)
+import Postgrest.Schema.Table exposing (Table)
 import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.Config as Config exposing (Config)
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
@@ -171,10 +171,10 @@ update msg model =
 navigate : Model -> ( Model, Cmd Msg )
 navigate model =
     case model.route of
-        Route.LoadingDefinition resourcesName makeRoute ->
+        Route.LoadingTable resourcesName makeRoute ->
             case Dict.get resourcesName model.schema of
-                Just definition ->
-                    navigate { model | route = makeRoute definition }
+                Just table ->
+                    navigate { model | route = makeRoute table }
 
                 Nothing ->
                     ( model, fail Failed <| BadSchema resourcesName )
@@ -318,7 +318,7 @@ mainContent model =
         Route.Root ->
             text ""
 
-        Route.LoadingDefinition _ _ ->
+        Route.LoadingTable _ _ ->
             loading
 
         Route.Listing listing ->
@@ -386,27 +386,27 @@ makeListingRoute model url resourcesName =
                 _ ->
                     Listing.showSearch
     in
-    Route.LoadingDefinition resourcesName
+    Route.LoadingTable resourcesName
         (Listing.init resourcesName url.query >> modify >> Route.Listing)
 
 
 formRouteParser : Parser (Route -> a) a
 formRouteParser =
     Parser.map
-        (\res id -> Route.LoadingDefinition res (makeFormRoute res id))
+        (\res id -> Route.LoadingTable res (makeFormRoute res id))
         (Parser.string </> Parser.string)
 
 
-makeFormRoute : String -> String -> Definition -> Route
-makeFormRoute resources id definition =
+makeFormRoute : String -> String -> Table -> Route
+makeFormRoute resources id table =
     let
         params =
             { resourcesName = resources
-            , definition = definition
+            , table = table
             }
 
         form =
-            Form.fromDefinition params definition
+            Form.fromTable params table
     in
     if id == "new" then
         Route.Form form

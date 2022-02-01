@@ -2,12 +2,12 @@ module Route exposing (Route(..), toForm, toListing)
 
 import Form exposing (Form)
 import Listing exposing (Listing)
-import Postgrest.Schema.Definition exposing (Definition)
+import Postgrest.Schema.Table exposing (Table)
 
 
 type Route
     = Root
-    | LoadingDefinition String (Definition -> Route)
+    | LoadingTable String (Table -> Route)
     | Listing Listing
     | FormLoading Form String
     | Form Form

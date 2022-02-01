@@ -16,22 +16,26 @@ import Json.Decode as Decode
         , string
         )
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey(..))
-import Postgrest.Schema.Definition exposing (Column, Definition)
+import Postgrest.Schema.Table exposing (Column, Table)
 import Postgrest.Value exposing (Value(..))
 import Regex exposing (Regex)
 import Task exposing (Task)
 import Time.Extra as Time
 import Url exposing (Url)
 import Url.Builder as Url
-import Utils.Task exposing (Error(..), fail, handleJsonResponse)
+import Utils.Task exposing (Error(..), fail, handleJsonResponse, toError)
 
 
 type alias Schema =
-    Dict String Definition
+    Dict String Table
 
 
-type Quadruple a b c d
-    = Quadruple a b c d
+type alias ColumnDefinition =
+    { type_ : String
+    , format : String
+    , description : Maybe String
+    , enum : List String
+    }
 
 
 getSchema : Url -> Task Error Schema
@@ -48,133 +52,169 @@ getSchema url =
 
 decoder : Decoder Schema
 decoder =
+    columnNamesDecoder
+        |> Decode.andThen schemaDecoder
+
+
+columnNamesDecoder : Decoder (Dict String (List String))
+columnNamesDecoder =
+    field "definitions"
+        (Decode.dict
+            (field "properties"
+                (Decode.dict Decode.value |> Decode.map Dict.keys)
+            )
+        )
+
+
+schemaDecoder : Dict String (List String) -> Decoder Schema
+schemaDecoder columnNames =
+    field "definitions"
+        (Decode.dict
+            (field "required" (Decode.list Decode.string)
+                |> Decode.andThen
+                    (\req ->
+                        field "properties" (Decode.keyValuePairs Decode.value)
+                            |> Decode.andThen (columnsDecoder columnNames req)
+                    )
+            )
+        )
+
+
+columnsDecoder :
+    Dict String (List String)
+    -> List String
+    -> List ( String, Decode.Value )
+    -> Decoder Table
+columnsDecoder columnNames requiredCols definitions =
     let
-        makeDefinition partials _ ( requiredCols, values ) =
-            let
-                makeColumn name value =
-                    let
-                        isRequired =
-                            List.member name requiredCols
-                    in
-                    case value of
-                        PForeignKey fk params ->
-                            let
-                                col =
-                                    Dict.get params.table partials
-                                        |> Maybe.andThen
-                                            (Tuple.first >> findLabelColum)
-                            in
-                            PForeignKey fk { params | labelColumnName = col }
-                                |> Column isRequired
-
-                        _ ->
-                            Column isRequired value
-            in
-            Dict.map makeColumn values
-
-        fieldsDecoder =
-            Decode.map2 Tuple.pair
-                (field "required" <| Decode.list string)
-                (field "properties" <| Decode.dict valueDecoder)
+        results =
+            definitions
+                |> List.map
+                    (\( name, val ) ->
+                        let
+                            isRequired =
+                                List.member name requiredCols
+                        in
+                        ( name
+                        , Decode.decodeValue
+                            (columnDecoder columnNames isRequired)
+                            val
+                        )
+                    )
     in
-    Decode.map (\partials -> Dict.map (makeDefinition partials) partials)
-        (field "definitions" <| Decode.dict fieldsDecoder)
+    case List.filterMap (Tuple.second >> toError) results of
+        err :: _ ->
+            Decode.errorToString err
+                |> Decode.fail
+
+        [] ->
+            results
+                |> List.filterMap
+                    (\( n, v ) ->
+                        case v of
+                            Err _ ->
+                                Nothing
+
+                            Ok ok ->
+                                Just ( n, ok )
+                    )
+                |> Dict.fromList
+                |> Decode.succeed
 
 
-valueDecoder : Decoder Value
-valueDecoder =
-    Decode.map4 Quadruple
+columnDecoder : Dict String (List String) -> Bool -> Decoder Column
+columnDecoder columnNames isRequired =
+    Decode.map4 ColumnDefinition
         (field "type" string)
         (field "format" string)
         (maybe <| field "description" string)
-        (maybe <| field "enum" (list string))
-        |> andThen
-            (\data ->
-                case data of
-                    Quadruple "number" _ _ _ ->
-                        mapValue PFloat float
-
-                    Quadruple "integer" _ maybeDesc _ ->
-                        Decode.oneOf
-                            [ mapPrimaryKey maybeDesc
-                            , mapForeignKey maybeDesc
-                            , mapValue PInt int
-                            ]
-
-                    Quadruple "string" "timestamp without time zone" _ _ ->
-                        mapValue PTime Time.decoder
-
-                    Quadruple "string" "date" _ _ ->
-                        mapValue PDate Time.decoder
-
-                    Quadruple "string" "text" _ _ ->
-                        mapValue PText string
-
-                    Quadruple "string" _ _ (Just enum) ->
-                        mapValue (flip PEnum enum) string
-
-                    Quadruple "string" _ maybeDesc _ ->
-                        Decode.oneOf
-                            [ mapPrimaryKey maybeDesc
-                            , mapForeignKey maybeDesc
-                            , mapValue PString string
-                            ]
-
-                    Quadruple "boolean" _ _ _ ->
-                        mapValue PBool bool
-
-                    Quadruple _ _ _ _ ->
-                        Decode.map BadValue Decode.value
-            )
+        (Decode.oneOf [ field "enum" (list string), Decode.succeed [] ])
+        |> Decode.andThen (columnDecoderHelp columnNames isRequired)
 
 
-mapValue : (Maybe a -> Value) -> Decoder a -> Decoder Value
-mapValue makeValue dec =
-    Decode.map makeValue (maybe <| field "default" dec)
-
-
-mapPrimaryKey : Maybe String -> Decoder Value
-mapPrimaryKey maybeDesc =
-    case Maybe.map (Regex.contains primaryKeyRegex) maybeDesc of
-        Just True ->
-            mapValue PPrimaryKey PrimaryKey.decoder
-
-        _ ->
-            Decode.fail ""
-
-
-primaryKeyRegex : Regex
-primaryKeyRegex =
-    Regex.fromString "Primary Key"
-        |> Maybe.withDefault Regex.never
-
-
-mapForeignKey : Maybe String -> Decoder Value
-mapForeignKey maybeDesc =
+columnDecoderHelp :
+    Dict String (List String)
+    -> Bool
+    -> ColumnDefinition
+    -> Decoder Column
+columnDecoderHelp columnNames isRequired { type_, format, description, enum } =
     let
-        matchFn =
-            List.concatMap .submatches << Regex.find foreignKeyRegex
-    in
-    case Maybe.map matchFn maybeDesc of
-        Just [ Just table, Just primaryKeyName ] ->
+        mapValue cons dec =
+            Decode.map (cons >> Column isRequired)
+                (maybe (field "default" dec))
+
+        mapPrimaryKey =
+            if isPrimaryKeyDescription description then
+                mapValue PPrimaryKey PrimaryKey.decoder
+
+            else
+                Decode.fail "Not primary key"
+
+        mapForeignKey =
             let
-                params =
-                    { table = table
-                    , primaryKeyName = primaryKeyName
-                    , labelColumnName = Nothing
-                    , label = Nothing
-                    }
+                matchFn =
+                    List.concatMap .submatches << Regex.find foreignKeyRegex
             in
-            mapValue (flip PForeignKey params) PrimaryKey.decoder
+            case Maybe.map matchFn description of
+                Just [ Just table, Just primaryKeyName ] ->
+                    let
+                        colLabel =
+                            Dict.get table columnNames
+                                |> Maybe.andThen findLabelColum
+
+                        params =
+                            { table = table
+                            , primaryKeyName = primaryKeyName
+                            , labelColumnName = colLabel
+                            , label = Nothing
+                            }
+                    in
+                    mapValue (flip PForeignKey params) PrimaryKey.decoder
+
+                _ ->
+                    Decode.fail "Not foreign key"
+    in
+    case type_ of
+        "number" ->
+            mapValue PFloat Decode.float
+
+        "integer" ->
+            Decode.oneOf
+                [ mapPrimaryKey, mapForeignKey, mapValue PInt int ]
+
+        "string" ->
+            if format == "timestamp without time zone" then
+                mapValue PTime Time.decoder
+
+            else if format == "date" then
+                mapValue PDate Time.decoder
+
+            else if format == "text" then
+                mapValue PText string
+
+            else if not (List.isEmpty enum) then
+                mapValue (flip PEnum enum) string
+
+            else
+                Decode.oneOf
+                    [ mapPrimaryKey, mapForeignKey, mapValue PString string ]
+
+        "boolean" ->
+            mapValue PBool bool
 
         _ ->
-            Decode.fail ""
+            Decode.map (BadValue >> Column isRequired) Decode.value
 
 
 foreignKeyRegex : Regex
 foreignKeyRegex =
     Regex.fromString "fk table='(\\w+)' column='(\\w+)'"
         |> Maybe.withDefault Regex.never
+
+
+isPrimaryKeyDescription : Maybe String -> Bool
+isPrimaryKeyDescription mstring =
+    Maybe.map (String.contains "Primary Key") mstring |> Maybe.withDefault False
 
 
 

@@ -35,7 +35,7 @@ import Html.Keyed as Keyed
 import Html.Lazy as Lazy
 import Json.Decode as Decode
 import Postgrest.Client as PG
-import Postgrest.Schema.Definition exposing (Column, Definition)
+import Postgrest.Schema.Table exposing (Column, Table)
 import Postgrest.Value exposing (Value(..))
 import Set
 import String.Extra as String
@@ -63,18 +63,18 @@ type alias Options =
 
 
 type alias Search =
-    { definition : Definition
+    { table : Table
     , filters : Array Filter
     }
 
 
-init : Definition -> String -> Search
-init definition query =
-    { definition = definition
+init : Table -> String -> Search
+init table query =
+    { table = table
     , filters =
         String.split "&" query
             |> List.filterMap
-                (percentDecode >> Maybe.andThen (Filter.parse definition))
+                (percentDecode >> Maybe.andThen (Filter.parse table))
             |> Array.fromList
     }
 
@@ -105,7 +105,7 @@ update msg search =
         AddFilter position ->
             let
                 mfilter =
-                    search.definition
+                    search.table
                         |> Dict.toList
                         |> List.head
                         |> Maybe.andThen (\( n, c ) -> Filter.fromColumn n c)
@@ -141,7 +141,7 @@ update msg search =
 
 
 view : Bool -> Search -> Html Msg
-view open { definition, filters } =
+view open { table, filters } =
     div [ class "search", hidden <| not open ]
         [ div [ class "actions" ] [ buttonAdd Prepend ]
         , Keyed.node "div"
@@ -149,7 +149,7 @@ view open { definition, filters } =
             (Array.indexedMap
                 (\idx filter ->
                     ( String.fromInt idx
-                    , Lazy.lazy3 viewFilter definition idx filter
+                    , Lazy.lazy3 viewFilter table idx filter
                     )
                 )
                 filters
@@ -173,8 +173,8 @@ buttonAdd tagger =
         [ Html.text "Add filter", i [ class "icono-plus" ] [] ]
 
 
-viewFilter : Definition -> Int -> Filter -> Html Msg
-viewFilter definition idx filter =
+viewFilter : Table -> Int -> Filter -> Html Msg
+viewFilter table idx filter =
     let
         name =
             Filter.columnName filter
@@ -188,7 +188,7 @@ viewFilter definition idx filter =
                 , class kind
                 ]
                 [ div [ class "filter-inputs" ]
-                    (fieldSelect definition idx filter :: content)
+                    (fieldSelect table idx filter :: content)
                 , button
                     [ class "button-clear"
                     , onClick <| RemoveFilter idx
@@ -198,7 +198,7 @@ viewFilter definition idx filter =
                     [ i [ class "icono-cross" ] [] ]
                 ]
     in
-    case Dict.get name definition of
+    case Dict.get name table of
         Just { required, value } ->
             case value of
                 PString _ ->
@@ -240,14 +240,14 @@ viewFilter definition idx filter =
             Html.text ""
 
 
-fieldSelect : Definition -> Int -> Filter -> Html Msg
-fieldSelect definition idx filter =
+fieldSelect : Table -> Int -> Filter -> Html Msg
+fieldSelect table idx filter =
     let
         op =
             Filter.operation filter
 
         makeFilter selection =
-            case defaultFilter selection definition of
+            case defaultFilter selection table of
                 Just filter_ ->
                     if
                         Operation.toString (Filter.operation filter_)
@@ -268,7 +268,7 @@ fieldSelect definition idx filter =
     in
     Html.select
         [ onInput (makeFilter >> UpdateFilter idx) ]
-        (Dict.toList definition
+        (Dict.toList table
             |> List.filterMap
                 (\( s, column ) ->
                     Filter.fromColumn s column
@@ -605,9 +605,9 @@ numberOptions cons =
         ]
 
 
-defaultFilter : String -> Definition -> Maybe Filter
-defaultFilter colName definition =
-    Dict.get colName definition
+defaultFilter : String -> Table -> Maybe Filter
+defaultFilter colName table =
+    Dict.get colName table
         |> Maybe.andThen (Filter.fromColumn colName)
 
 

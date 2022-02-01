@@ -29,7 +29,7 @@ import Maybe.Extra as Maybe exposing (isNothing)
 import Postgrest.Client as PG
 import Postgrest.Field as Field exposing (Field)
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
-import Postgrest.Schema.Definition exposing (Column, Definition)
+import Postgrest.Schema.Table exposing (Column, Table)
 import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
 import Regex exposing (Regex)
 import Time.Extra as Time
@@ -74,10 +74,10 @@ primaryKeyName resource =
         |> Maybe.map Tuple.first
 
 
-decoder : Definition -> Decoder Resource
-decoder definition =
-    definition
-        |> Dict.foldl (decoderFold definition)
+decoder : Table -> Decoder Resource
+decoder table =
+    table
+        |> Dict.foldl (decoderFold table)
             (Decode.succeed Dict.empty)
 
 
@@ -114,8 +114,8 @@ setError error resource =
         |> Maybe.withDefault resource
 
 
-decoderFold : Definition -> String -> a -> Decoder Resource -> Decoder Resource
-decoderFold definition name _ prevDec =
+decoderFold : Table -> String -> a -> Decoder Resource -> Decoder Resource
+decoderFold table name _ prevDec =
     let
         insert =
             flip (Dict.insert name)
@@ -127,7 +127,7 @@ decoderFold definition name _ prevDec =
                     (insert dict << Field Nothing required False << makeColumn)
 
         foldFun dict =
-            case Dict.get name definition of
+            case Dict.get name table of
                 Just { required, value } ->
                     case value of
                         PFloat _ ->
