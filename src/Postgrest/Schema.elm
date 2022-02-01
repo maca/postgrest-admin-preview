@@ -139,8 +139,13 @@ columnDecoderHelp :
     -> Decoder Column
 columnDecoderHelp columnNames isRequired { type_, format, description, enum } =
     let
+        makeColumn val =
+            { required = isRequired
+            , value = val
+            }
+
         mapValue cons dec =
-            Decode.map (cons >> Column isRequired)
+            Decode.map (cons >> makeColumn)
                 (maybe (field "default" dec))
 
         mapPrimaryKey =
@@ -203,7 +208,7 @@ columnDecoderHelp columnNames isRequired { type_, format, description, enum } =
             mapValue PBool bool
 
         _ ->
-            Decode.map (BadValue >> Column isRequired) Decode.value
+            Decode.map (BadValue >> makeColumn) Decode.value
 
 
 foreignKeyRegex : Regex
