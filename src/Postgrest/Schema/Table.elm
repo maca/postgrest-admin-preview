@@ -8,12 +8,14 @@ module Postgrest.Schema.Table exposing
 
 import Dict exposing (Dict)
 import Dict.Extra as Dict
+import Json.Decode exposing (Decoder)
 import Postgrest.Field exposing (Field)
 import Postgrest.Value as Value exposing (Value)
 
 
 type alias Column =
     { required : Bool
+    , decoder : Decoder Value
     , value : Value
     }
 

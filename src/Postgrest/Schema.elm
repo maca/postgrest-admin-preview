@@ -17,7 +17,7 @@ import Json.Decode as Decode
         )
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey(..))
 import Postgrest.Schema.Table exposing (Column, Table)
-import Postgrest.Value exposing (Value(..))
+import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
 import Regex exposing (Regex)
 import Task exposing (Task)
 import Time.Extra as Time
@@ -61,7 +61,7 @@ columnNamesDecoder =
     field "definitions"
         (Decode.dict
             (field "properties"
-                (Decode.dict Decode.value |> Decode.map Dict.keys)
+                (Decode.dict (Decode.succeed ()) |> Decode.map Dict.keys)
             )
         )
 
@@ -139,14 +139,23 @@ columnDecoderHelp :
     -> Decoder Column
 columnDecoderHelp columnNames isRequired { type_, format, description, enum } =
     let
-        makeColumn val =
+        makeColumn valueDecoder val =
             { required = isRequired
+            , decoder = valueDecoder
             , value = val
             }
 
         mapValue cons dec =
-            Decode.map (cons >> makeColumn)
-                (maybe (field "default" dec))
+            let
+                valueDecoder =
+                    Decode.map cons (Decode.maybe dec)
+            in
+            Decode.map (makeColumn valueDecoder)
+                (Decode.oneOf
+                    [ field "default" valueDecoder
+                    , Decode.succeed (cons Nothing)
+                    ]
+                )
 
         mapPrimaryKey =
             if isPrimaryKeyDescription description then
@@ -163,18 +172,20 @@ columnDecoderHelp columnNames isRequired { type_, format, description, enum } =
             case Maybe.map matchFn description of
                 Just [ Just table, Just primaryKeyName ] ->
                     let
-                        colLabel =
-                            Dict.get table columnNames
-                                |> Maybe.andThen findLabelColum
-
                         params =
                             { table = table
                             , primaryKeyName = primaryKeyName
-                            , labelColumnName = colLabel
+                            , labelColumnName =
+                                Dict.get table columnNames
+                                    |> Maybe.andThen findLabelColum
                             , label = Nothing
                             }
                     in
-                    mapValue (flip PForeignKey params) PrimaryKey.decoder
+                    Decode.succeed
+                        { required = isRequired
+                        , decoder = Decode.succeed (PForeignKey Nothing params)
+                        , value = PForeignKey Nothing params
+                        }
 
                 _ ->
                     Decode.fail "Not foreign key"
@@ -208,7 +219,21 @@ columnDecoderHelp columnNames isRequired { type_, format, description, enum } =
             mapValue PBool bool
 
         _ ->
-            Decode.map (BadValue >> makeColumn) Decode.value
+            let
+                valueDecoder =
+                    Decode.map BadValue Decode.value
+            in
+            Decode.map (makeColumn valueDecoder) valueDecoder
+
+
+referenceDecoder : ForeignKeyParams -> Decoder String
+referenceDecoder params =
+    case params.labelColumnName of
+        Just n ->
+            Decode.at [ params.table, n ] string
+
+        Nothing ->
+            Decode.fail ""
 
 
 foreignKeyRegex : Regex

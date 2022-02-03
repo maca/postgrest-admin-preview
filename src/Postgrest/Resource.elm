@@ -76,9 +76,54 @@ primaryKeyName resource =
 
 decoder : Table -> Decoder Resource
 decoder table =
-    table
-        |> Dict.foldl (decoderFold table)
-            (Decode.succeed Dict.empty)
+    Dict.foldl decoderHelp (Decode.succeed Dict.empty) table
+
+
+decoderHelp : String -> Column -> Decoder Resource -> Decoder Resource
+decoderHelp name column result =
+    let
+        insert dict val =
+            dict
+                |> Dict.insert name (makeField column val)
+                |> Decode.succeed
+    in
+    result
+        |> Decode.andThen
+            (\dict ->
+                case column.value of
+                    PForeignKey _ params ->
+                        Decode.map2
+                            (\label value ->
+                                PForeignKey (Just value)
+                                    { params | label = label }
+                            )
+                            (referenceDecoder params)
+                            (Decode.field name PrimaryKey.decoder)
+                            |> Decode.andThen (insert dict)
+
+                    _ ->
+                        Decode.field name column.decoder
+                            |> Decode.andThen (insert dict)
+            )
+
+
+referenceDecoder : ForeignKeyParams -> Decoder (Maybe String)
+referenceDecoder params =
+    case params.labelColumnName of
+        Just n ->
+            Decode.maybe (Decode.at [ params.table, n ] string)
+
+        Nothing ->
+            Decode.succeed Nothing
+
+
+makeField : Column -> Value -> Field
+makeField column value =
+    { error = Nothing
+    , required = column.required
+    , changed = False
+    , value = value
+    }
 
 
 id : Resource -> Maybe String
@@ -112,84 +157,6 @@ setError error resource =
         |> Maybe.andThen extractColumnName
         |> Maybe.map (mapFun >> flip Dict.map resource)
         |> Maybe.withDefault resource
-
-
-decoderFold : Table -> String -> a -> Decoder Resource -> Decoder Resource
-decoderFold table name _ prevDec =
-    let
-        insert =
-            flip (Dict.insert name)
-
-        map makeColumn required dict dec =
-            Decode.field name dec
-                |> maybe
-                |> Decode.map
-                    (insert dict << Field Nothing required False << makeColumn)
-
-        foldFun dict =
-            case Dict.get name table of
-                Just { required, value } ->
-                    case value of
-                        PFloat _ ->
-                            float |> map PFloat required dict
-
-                        PInt _ ->
-                            int |> map PInt required dict
-
-                        PString _ ->
-                            string |> map PString required dict
-
-                        PText _ ->
-                            string |> map PText required dict
-
-                        PEnum _ opts ->
-                            string |> map (flip PEnum opts) required dict
-
-                        PBool _ ->
-                            bool |> map PBool required dict
-
-                        PTime _ ->
-                            Time.decoder |> map PTime required dict
-
-                        PDate _ ->
-                            Time.decoder |> map PDate required dict
-
-                        PPrimaryKey _ ->
-                            PrimaryKey.decoder |> map PPrimaryKey required dict
-
-                        PForeignKey _ params ->
-                            let
-                                insertFk l pk =
-                                    insert dict
-                                        { error = Nothing
-                                        , required = required
-                                        , changed = False
-                                        , value =
-                                            PForeignKey pk
-                                                { params | label = l }
-                                        }
-                            in
-                            Decode.map2 insertFk
-                                (maybe <| referenceDecoder params)
-                                (maybe <| Decode.field name PrimaryKey.decoder)
-
-                        BadValue _ ->
-                            Decode.fail ""
-
-                Nothing ->
-                    Decode.fail ""
-    in
-    Decode.andThen foldFun prevDec
-
-
-referenceDecoder : ForeignKeyParams -> Decoder String
-referenceDecoder params =
-    case params.labelColumnName of
-        Just n ->
-            Decode.at [ params.table, n ] string
-
-        Nothing ->
-            Decode.fail ""
 
 
 extractColumnName : String -> Maybe String
