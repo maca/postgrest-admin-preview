@@ -81,15 +81,15 @@ decoder table =
 
 decoderHelp : String -> Column -> Decoder Resource -> Decoder Resource
 decoderHelp name column result =
-    let
-        insert dict val =
-            dict
-                |> Dict.insert name (makeField column val)
-                |> Decode.succeed
-    in
     result
         |> Decode.andThen
             (\dict ->
+                let
+                    insert val =
+                        dict
+                            |> Dict.insert name (makeField column val)
+                            |> Decode.succeed
+                in
                 case column.value of
                     PForeignKey _ params ->
                         Decode.map2
@@ -99,11 +99,11 @@ decoderHelp name column result =
                             )
                             (referenceDecoder params)
                             (Decode.field name PrimaryKey.decoder)
-                            |> Decode.andThen (insert dict)
+                            |> Decode.andThen insert
 
                     _ ->
                         Decode.field name column.decoder
-                            |> Decode.andThen (insert dict)
+                            |> Decode.andThen insert
             )
 
 
