@@ -1,4 +1,13 @@
-module Search exposing (Msg, Search, init, isApplyMsg, toPGQuery, update, view)
+module Search exposing
+    ( Msg
+    , Search
+    , init
+    , isApplyMsg
+    , isBlank
+    , toPGQuery
+    , update
+    , view
+    )
 
 import Array exposing (Array)
 import Array.Extra as Array
@@ -87,6 +96,11 @@ isApplyMsg msg =
 
         _ ->
             False
+
+
+isBlank : Search -> Bool
+isBlank { filters } =
+    Array.isEmpty filters
 
 
 toPGQuery : Search -> List PG.Param

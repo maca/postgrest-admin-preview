@@ -41,14 +41,22 @@ import Html.Attributes
         ( attribute
         , class
         , classList
+        , disabled
         , href
         , id
         , target
         )
-import Html.Events as Events exposing (on, onClick, onMouseDown, onMouseUp)
+import Html.Events as Events
+    exposing
+        ( on
+        , onClick
+        , onMouseDown
+        , onMouseUp
+        )
 import Inflect as String
 import Json.Decode as Decode
 import Postgrest.Client as PG
+import Postgrest.Download as Download exposing (Download, Format(..))
 import Postgrest.Field exposing (Field)
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
 import Postgrest.Resource as Resource exposing (Resource)
@@ -90,6 +98,8 @@ type Msg
     | SelectEnter
     | SelectOn
     | SelectOff
+    | DownloadRequested Format
+    | Downloaded Download
     | ToggleSearchOpen
     | FetchFailed Error
 
@@ -155,8 +165,8 @@ mapMsg msg =
 
 
 isSearchVisible : Listing -> Bool
-isSearchVisible { searchOpen } =
-    searchOpen
+isSearchVisible { searchOpen, search } =
+    searchOpen || Search.isBlank search
 
 
 showSearch : Listing -> Listing
@@ -181,8 +191,35 @@ descendingBy column listing =
 
 fetch : Client a -> Listing -> Cmd Msg
 fetch client listing =
-    fetchHelp client listing
+    fetchTask client listing
         |> attemptWithError FetchFailed Fetched
+
+
+fetchTask : Client a -> Listing -> Task Error (List Resource)
+fetchTask client listing =
+    let
+        { search, resourcesName, page, table, order } =
+            listing
+
+        pgOrder =
+            Dict.toList table
+                |> List.filterMap (sortBy resourcesName order)
+
+        params =
+            [ PG.select <| Client.selects table
+            , PG.limit perPage
+            , PG.offset (perPage * page)
+            ]
+    in
+    case AuthScheme.toJwt client.authScheme of
+        Just token ->
+            Client.fetchMany client table resourcesName
+                |> PG.setParams (params ++ pgOrder ++ Search.toPGQuery search)
+                |> PG.toTask token
+                |> Task.mapError PGError
+
+        Nothing ->
+            Task.fail AuthError
 
 
 update : Client { a | key : Nav.Key } -> Msg -> Listing -> ( Listing, Cmd Msg )
@@ -224,7 +261,7 @@ update client msg listing =
             )
 
         Reload ->
-            ( listing, Nav.pushUrl client.key (listingPath listing) )
+            ( listing, listingPath listing |> Nav.pushUrl client.key )
 
         Scrolled ->
             ( listing
@@ -279,6 +316,16 @@ update client msg listing =
 
         SelectOn ->
             ( { listing | textSelect = On }, Cmd.none )
+
+        DownloadRequested format ->
+            ( listing
+            , Download.init format (listingPath listing)
+                |> Download.fetch client
+                |> attemptWithError FetchFailed Downloaded
+            )
+
+        Downloaded download ->
+            ( listing, Download.save listing.resourcesName download )
 
         FetchFailed _ ->
             ( listing, Cmd.none )
@@ -365,27 +412,58 @@ view listing =
             ]
             [ Html.table [] body
             ]
-        , aside [ class "listing-controls" ]
-            [ div [ class "controls" ]
-                [ button
-                    [ class "toggle-button"
-                    , class "button-clear"
-                    , classList [ ( "open", listing.searchOpen ) ]
-                    , onClick ToggleSearchOpen
+        , aside
+            [ class "listing-controls" ]
+            [ div
+                [ class "controls" ]
+                [ div
+                    [ class "downloads" ]
+                    [ button
+                        [ class "button-clear"
+                        , onClick (DownloadRequested CSV)
+                        ]
+                        [ text "Download CSV" ]
+                    , button
+                        [ class "button-clear"
+                        , onClick (DownloadRequested JSON)
+                        ]
+                        [ text "Download JSON" ]
                     ]
-                    [ i [ class "icono-play" ] []
-                    , if listing.searchOpen then
-                        text "Hide"
+                , div
+                    []
+                    [ if Search.isBlank listing.search then
+                        text ""
 
                       else
-                        text "Show"
-                    , text " Filters"
+                        toggleSearchButton listing
+                    , button
+                        [ onClick ApplyFilters
+                        , disabled (Search.isBlank listing.search)
+                        ]
+                        [ text "Apply Filters" ]
                     ]
-                , button [ onClick ApplyFilters ] [ text "Apply Filters" ]
                 ]
             , Html.map SearchChanged <|
-                Search.view listing.searchOpen listing.search
+                Search.view (isSearchVisible listing) listing.search
             ]
+        ]
+
+
+toggleSearchButton : Listing -> Html Msg
+toggleSearchButton listing =
+    button
+        [ class "toggle-button"
+        , class "button-clear"
+        , classList [ ( "open", isSearchVisible listing ) ]
+        , onClick ToggleSearchOpen
+        ]
+        [ i [ class "icono-play" ] []
+        , if isSearchVisible listing then
+            text "Hide"
+
+          else
+            text "Show"
+        , text " Filters"
         ]
 
 
@@ -592,33 +670,6 @@ pageId pageNum =
 perPage : Int
 perPage =
     50
-
-
-fetchHelp : Client a -> Listing -> Task Error (List Resource)
-fetchHelp client listing =
-    let
-        { search, resourcesName, page, table, order } =
-            listing
-
-        pgOrder =
-            Dict.toList table
-                |> List.filterMap (sortBy resourcesName order)
-
-        params =
-            [ PG.select <| Client.selects table
-            , PG.limit perPage
-            , PG.offset (perPage * page)
-            ]
-    in
-    case AuthScheme.toJwt client.authScheme of
-        Just token ->
-            Client.fetchMany client table resourcesName
-                |> PG.setParams (params ++ pgOrder ++ Search.toPGQuery search)
-                |> PG.toTask token
-                |> Task.mapError PGError
-
-        Nothing ->
-            Task.fail AuthError
 
 
 sortBy : String -> SortOrder -> ( String, Column ) -> Maybe PG.Param

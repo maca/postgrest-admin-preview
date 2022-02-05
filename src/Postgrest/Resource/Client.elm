@@ -3,17 +3,20 @@ module Postgrest.Resource.Client exposing
     , create
     , fetchMany
     , fetchOne
+    , jwtString
     , selects
     , update
     )
 
 import Dict
+import Http exposing (header)
 import Postgrest.Client as PG exposing (Endpoint, Request, Selectable)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Schema exposing (Schema)
 import Postgrest.Schema.Table as Table exposing (Column, Table)
 import Postgrest.Value as Value
-import PostgrestAdmin.AuthScheme exposing (AuthScheme)
+import PostgrestAdmin.AuthScheme as AuthScheme exposing (AuthScheme)
+import Task exposing (Task)
 import Url exposing (Url)
 import Utils.Task exposing (Error(..))
 
@@ -103,3 +106,9 @@ resourceEndpoint url resourcesName table =
     Resource.decoder table
         |> PG.endpoint
             ({ url | path = "/" ++ resourcesName } |> Url.toString)
+
+
+jwtString : Client a -> Maybe String
+jwtString { authScheme } =
+    AuthScheme.toJwt authScheme
+        |> Maybe.map PG.jwtString
