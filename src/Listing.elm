@@ -181,7 +181,7 @@ descendingBy column listing =
 
 fetch : Client a -> Listing -> Cmd Msg
 fetch client listing =
-    fetchResources client listing
+    fetchHelp client listing
         |> attemptWithError FetchFailed Fetched
 
 
@@ -224,30 +224,7 @@ update client msg listing =
             )
 
         Reload ->
-            let
-                queryParams =
-                    orderToQueryParams listing.order
-
-                baseUrl =
-                    Url.absolute [ listing.resourcesName ]
-                        (orderToQueryParams listing.order)
-
-                filterQuery =
-                    Search.toPGQuery listing.search |> PG.toQueryString
-
-                joinChar =
-                    if List.isEmpty queryParams then
-                        "?"
-
-                    else
-                        "&"
-
-                url =
-                    [ baseUrl, filterQuery ]
-                        |> List.filterMap String.nonBlank
-                        |> String.join joinChar
-            in
-            ( listing, Nav.pushUrl client.key url )
+            ( listing, Nav.pushUrl client.key (listingPath listing) )
 
         Scrolled ->
             ( listing
@@ -307,6 +284,32 @@ update client msg listing =
             ( listing, Cmd.none )
 
 
+listingPath : Listing -> String
+listingPath { order, resourcesName, search } =
+    let
+        queryParams =
+            orderToQueryParams order
+
+        baseUrl =
+            Url.absolute [ resourcesName ]
+                (orderToQueryParams order)
+
+        filterQuery =
+            Search.toPGQuery search |> PG.toQueryString
+
+        joinChar =
+            if List.isEmpty queryParams then
+                "?"
+
+            else
+                "&"
+    in
+    [ baseUrl, filterQuery ]
+        |> List.filterMap String.nonBlank
+        |> String.join joinChar
+        |> Debug.log "url"
+
+
 fetchListing : Client a -> Listing -> ( Listing, Cmd Msg )
 fetchListing client listing =
     ( listing, fetch client listing )
@@ -332,7 +335,6 @@ searchChanged msg cmd =
 
 
 
--- Cmd.map SearchChanged cmd
 -- View
 
 
@@ -592,8 +594,8 @@ perPage =
     50
 
 
-fetchResources : Client a -> Listing -> Task Error (List Resource)
-fetchResources client listing =
+fetchHelp : Client a -> Listing -> Task Error (List Resource)
+fetchHelp client listing =
     let
         { search, resourcesName, page, table, order } =
             listing
