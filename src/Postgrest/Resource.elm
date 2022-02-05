@@ -90,20 +90,23 @@ decoderHelp name column result =
                             |> Dict.insert name (makeField column val)
                             |> Decode.succeed
                 in
-                case column.value of
-                    PForeignKey _ params ->
-                        Decode.map2
-                            (\label value ->
-                                PForeignKey (Just value)
-                                    { params | label = label }
-                            )
-                            (referenceDecoder params)
-                            (Decode.field name PrimaryKey.decoder)
-                            |> Decode.andThen insert
+                Decode.oneOf
+                    [ case column.value of
+                        PForeignKey _ params ->
+                            Decode.map2
+                                (\label value ->
+                                    PForeignKey (Just value)
+                                        { params | label = label }
+                                )
+                                (referenceDecoder params)
+                                (Decode.field name PrimaryKey.decoder)
+                                |> Decode.andThen insert
 
-                    _ ->
-                        Decode.field name column.decoder
-                            |> Decode.andThen insert
+                        _ ->
+                            Decode.field name column.decoder
+                                |> Decode.andThen insert
+                    , Decode.succeed dict
+                    ]
             )
 
 
