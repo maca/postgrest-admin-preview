@@ -126,7 +126,7 @@ fromColumn name col =
         PForeignKey _ _ ->
             Nothing
 
-        BadValue _ ->
+        Unknown _ ->
             Nothing
 
 

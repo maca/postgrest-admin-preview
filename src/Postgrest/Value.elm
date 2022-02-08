@@ -40,7 +40,7 @@ type Value
     | PDate (Maybe Time.Posix)
     | PPrimaryKey (Maybe PrimaryKey)
     | PForeignKey (Maybe PrimaryKey) ForeignKeyParams
-    | BadValue Decode.Value
+    | Unknown Decode.Value
 
 
 encode : Value -> Encode.Value
@@ -80,7 +80,7 @@ encode value =
         PForeignKey mprimaryKey _ ->
             enc PrimaryKey.encode mprimaryKey
 
-        BadValue _ ->
+        Unknown _ ->
             Encode.null
 
 

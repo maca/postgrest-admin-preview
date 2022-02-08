@@ -221,7 +221,7 @@ columnDecoderHelp columnNames isRequired { type_, format, description, enum } =
         _ ->
             let
                 valueDecoder =
-                    Decode.map BadValue Decode.value
+                    Decode.map Unknown Decode.value
             in
             Decode.map (makeColumn valueDecoder) valueDecoder
 

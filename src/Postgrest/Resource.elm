@@ -29,7 +29,7 @@ import Maybe.Extra as Maybe exposing (isNothing)
 import Postgrest.Client as PG
 import Postgrest.Field as Field exposing (Field)
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
-import Postgrest.Schema.Table exposing (Column, Table)
+import Postgrest.Schema.Table as Table exposing (Column, Table)
 import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
 import Regex exposing (Regex)
 import Time.Extra as Time
@@ -84,30 +84,45 @@ decoderHelp name column result =
     result
         |> Decode.andThen
             (\dict ->
-                let
-                    insert val =
-                        dict
-                            |> Dict.insert name (makeField column val)
-                            |> Decode.succeed
-                in
                 Decode.oneOf
-                    [ case column.value of
-                        PForeignKey _ params ->
-                            Decode.map2
-                                (\label value ->
-                                    PForeignKey (Just value)
-                                        { params | label = label }
-                                )
-                                (referenceDecoder params)
-                                (Decode.field name PrimaryKey.decoder)
-                                |> Decode.andThen insert
-
-                        _ ->
-                            Decode.field name column.decoder
-                                |> Decode.andThen insert
+                    [ fieldDecoder dict name column
                     , Decode.succeed dict
                     ]
             )
+
+
+fieldDecoder : Resource -> String -> Column -> Decoder Resource
+fieldDecoder dict name column =
+    let
+        insert val =
+            dict
+                |> Dict.insert name (makeField column val)
+                |> Decode.succeed
+    in
+    case column.value of
+        PForeignKey _ params ->
+            Decode.map2
+                (\label value ->
+                    PForeignKey (Just value) { params | label = label }
+                )
+                (referenceDecoder params)
+                (Decode.field name PrimaryKey.decoder)
+                |> Decode.andThen insert
+
+        _ ->
+            Decode.field name column.decoder
+                |> Decode.andThen insert
+
+
+foreignKeyHelp insert params name =
+    Decode.map2
+        (\label value ->
+            PForeignKey (Just value)
+                { params | label = label }
+        )
+        (referenceDecoder params)
+        (Decode.field name PrimaryKey.decoder)
+        |> Decode.andThen insert
 
 
 referenceDecoder : ForeignKeyParams -> Decoder (Maybe String)

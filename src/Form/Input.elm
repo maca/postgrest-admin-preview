@@ -275,7 +275,7 @@ fromField field =
         PPrimaryKey _ ->
             Blank field
 
-        BadValue _ ->
+        Unknown _ ->
             Blank field
 
 

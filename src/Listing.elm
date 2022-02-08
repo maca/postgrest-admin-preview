@@ -622,7 +622,7 @@ viewValue { resourcesName, textSelect } { value } =
         PPrimaryKey (Just primaryKey) ->
             recordLink resourcesName textSelect primaryKey Nothing
 
-        BadValue _ ->
+        Unknown _ ->
             text "?"
 
         _ ->
