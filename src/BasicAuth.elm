@@ -321,7 +321,7 @@ requiresAuthentication : BasicAuth -> Bool
 requiresAuthentication auth =
     case auth of
         Ready _ ->
-            False
+            True
 
         Active _ ->
             True
