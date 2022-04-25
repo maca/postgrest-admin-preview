@@ -1,5 +1,6 @@
 {
     "type": "application",
+    "licence": "mit",
     "source-directories": [
         "src"
     ],
