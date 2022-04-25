@@ -476,7 +476,7 @@ listHeader resourcesName =
                 [ class "button"
                 , href <| Url.absolute [ resourcesName, "new" ] []
                 ]
-                [ text <| "New " ++ String.singularize resourcesName ]
+                [ text "New Record" ]
             ]
         ]
 

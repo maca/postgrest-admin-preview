@@ -1,6 +1,7 @@
 module Utils.Task exposing
     ( Error(..)
     , attemptWithError
+    , errorToString
     , fail
     , handleJsonResponse
     , toError
@@ -74,3 +75,23 @@ toError result =
 
         _ ->
             Nothing
+
+
+errorToString : Error -> String
+errorToString error =
+    case error of
+        PGError (PG.BadStatus 403 _ _) ->
+            "You are not authorized to perform this action"
+
+        HttpError _ ->
+            "Something went wrong with the connection, please try again later"
+
+        DecodeError err ->
+            Decode.errorToString err
+
+        _ ->
+            let
+                _ =
+                    Debug.log "Err" error
+            in
+            "Something went wrong, we'll fix soon"

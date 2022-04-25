@@ -22,7 +22,7 @@ import Route exposing (Route)
 import String.Extra as String
 import Url exposing (Url)
 import Url.Parser as Parser exposing ((</>), Parser)
-import Utils.Task exposing (Error(..), attemptWithError, fail)
+import Utils.Task exposing (Error(..), attemptWithError, errorToString, fail)
 
 
 port loginSuccess : String -> Cmd msg
@@ -54,7 +54,7 @@ type alias Model =
         { route : Route
         , key : Nav.Key
         , notification : Notification
-        , decodingError : Maybe Decode.Error
+        , error : Maybe Error
         }
 
 
@@ -82,7 +82,7 @@ init decoder flags url key =
             , key = key
             , schema = Dict.fromList []
             , notification = Notification.none
-            , decodingError = Nothing
+            , error = Nothing
             , host = config.url
             , authScheme = config.authScheme
             }
@@ -103,7 +103,7 @@ init decoder flags url key =
                 model =
                     makeModel Config.default
             in
-            ( { model | decodingError = Just error }, Cmd.none )
+            ( { model | error = Just (DecodeError error) }, Cmd.none )
 
 
 
@@ -250,11 +250,8 @@ failed error ({ authScheme } as model) =
         AuthError ->
             { model | authScheme = AuthScheme.fail authScheme }
 
-        DecodeError err ->
-            { model | decodingError = Just err }
-
         _ ->
-            model
+            { model | error = Just error }
 
 
 
@@ -265,12 +262,12 @@ view : Model -> Browser.Document Msg
 view model =
     { title = "Admin"
     , body =
-        case model.decodingError of
-            Just err ->
+        case model.error of
+            Just error ->
                 [ h1 [] [ text "Init failed" ]
                 , pre
                     [ class "parse-errors" ]
-                    [ text (Decode.errorToString err) ]
+                    [ text (errorToString error) ]
                 ]
 
             Nothing ->
