@@ -15,6 +15,7 @@ import Json.Decode as Decode
         , maybe
         , string
         )
+import Postgrest.Constraint as Constraint exposing (Constraint)
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey(..))
 import Postgrest.Value exposing (Value(..))
 import Regex exposing (Regex)
@@ -30,7 +31,8 @@ type alias ColumnNames =
 
 
 type alias Column =
-    { required : Bool
+    { constraint : Constraint
+    , required : Bool
     , decoder : Decoder Value
     , value : Value
     }
@@ -150,7 +152,10 @@ columnDecoderHelp : ColumnNames -> Bool -> ColumnDefinition -> Decoder Column
 columnDecoderHelp columnNames isRequired { type_, format, description, enum } =
     let
         makeColumn valueDecoder val =
-            { required = isRequired
+            { constraint =
+                Maybe.map (columnConstraint columnNames) description
+                    |> Maybe.withDefault Constraint.none
+            , required = isRequired
             , decoder = valueDecoder
             , value = val
             }
@@ -166,47 +171,13 @@ columnDecoderHelp columnNames isRequired { type_, format, description, enum } =
                     , Decode.succeed (cons Nothing)
                     ]
                 )
-
-        mapPrimaryKey =
-            if isPrimaryKeyDescription description then
-                mapValue PPrimaryKey PrimaryKey.decoder
-
-            else
-                Decode.fail "Not primary key"
-
-        mapForeignKey =
-            let
-                matchFn =
-                    List.concatMap .submatches << Regex.find foreignKeyRegex
-            in
-            case Maybe.map matchFn description of
-                Just [ Just table, Just primaryKeyName ] ->
-                    let
-                        params =
-                            { table = table
-                            , primaryKeyName = primaryKeyName
-                            , labelColumnName =
-                                Dict.get table columnNames
-                                    |> Maybe.andThen findLabelColum
-                            , label = Nothing
-                            }
-                    in
-                    Decode.succeed
-                        { required = isRequired
-                        , decoder = Decode.succeed (PForeignKey Nothing params)
-                        , value = PForeignKey Nothing params
-                        }
-
-                _ ->
-                    Decode.fail "Not foreign key"
     in
     case type_ of
         "number" ->
             mapValue PFloat Decode.float
 
         "integer" ->
-            Decode.oneOf
-                [ mapPrimaryKey, mapForeignKey, mapValue PInt int ]
+            mapValue PInt int
 
         "string" ->
             if format == "timestamp without time zone" then
@@ -222,8 +193,7 @@ columnDecoderHelp columnNames isRequired { type_, format, description, enum } =
                 mapValue (flip PEnum enum) string
 
             else
-                Decode.oneOf
-                    [ mapPrimaryKey, mapForeignKey, mapValue PString string ]
+                mapValue PString string
 
         "boolean" ->
             mapValue PBool bool
@@ -236,15 +206,43 @@ columnDecoderHelp columnNames isRequired { type_, format, description, enum } =
             Decode.map (makeColumn valueDecoder) valueDecoder
 
 
+columnConstraint : ColumnNames -> String -> Constraint
+columnConstraint columnNames description =
+    case extractForeignKey description of
+        [ tableName, primaryKeyName ] ->
+            Constraint.foreignKey
+                { table = tableName
+                , primaryKeyName = primaryKeyName
+                , labelColumnName =
+                    Dict.get tableName columnNames
+                        |> Maybe.andThen findLabelColum
+                , label = Nothing
+                }
+
+        _ ->
+            if isPrimaryKeyDescription description then
+                Constraint.primaryKey
+
+            else
+                Constraint.none
+
+
 foreignKeyRegex : Regex
 foreignKeyRegex =
     Regex.fromString "fk table='(\\w+)' column='(\\w+)'"
         |> Maybe.withDefault Regex.never
 
 
-isPrimaryKeyDescription : Maybe String -> Bool
-isPrimaryKeyDescription mstring =
-    Maybe.map (String.contains "Primary Key") mstring |> Maybe.withDefault False
+isPrimaryKeyDescription : String -> Bool
+isPrimaryKeyDescription description =
+    String.contains "Primary Key" description
+
+
+extractForeignKey : String -> List String
+extractForeignKey description =
+    Regex.find foreignKeyRegex description
+        |> List.concatMap .submatches
+        |> List.filterMap identity
 
 
 

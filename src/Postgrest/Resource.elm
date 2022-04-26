@@ -34,9 +34,10 @@ type alias Resource =
 fromTable : Table -> Resource
 fromTable table =
     Dict.map
-        (\_ { required, value } ->
-            { error = Nothing
-            , required = required
+        (\_ { required, value, constraint } ->
+            { required = required
+            , constraint = constraint
+            , error = Nothing
             , changed = False
             , value = value
             }
@@ -131,8 +132,9 @@ referenceDecoder params =
 
 makeField : Column -> Value -> Field
 makeField column value =
-    { error = Nothing
+    { constraint = column.constraint
     , required = column.required
+    , error = Nothing
     , changed = False
     , value = value
     }

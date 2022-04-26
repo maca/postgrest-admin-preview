@@ -1,11 +1,13 @@
 module Postgrest.Field exposing (Field, setError, update, validate)
 
 import Postgrest.Client as PG
+import Postgrest.Constraint as Constraint exposing (Constraint)
 import Postgrest.Value as Value exposing (Value(..))
 
 
 type alias Field =
-    { error : Maybe String
+    { constraint : Constraint
+    , error : Maybe String
     , required : Bool
     , changed : Bool
     , value : Value
@@ -14,8 +16,7 @@ type alias Field =
 
 update : Value -> Field -> Field
 update value field =
-    validate
-        { field | value = value, changed = True }
+    validate { field | value = value, changed = True }
 
 
 validate : Field -> Field
