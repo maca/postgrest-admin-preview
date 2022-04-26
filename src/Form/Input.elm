@@ -31,6 +31,7 @@ import Html.Attributes
 import Html.Events exposing (onInput)
 import Maybe.Extra as Maybe
 import Postgrest.Client as PG exposing (PostgrestErrorJSON)
+import Postgrest.Constraint exposing (Constraint(..))
 import Postgrest.Field as Field exposing (Field)
 import Postgrest.PrimaryKey as PrimaryKey
 import Postgrest.Resource as Resource exposing (Resource)
@@ -112,40 +113,36 @@ update client msg record =
             in
             ( Dict.insert name association record, Cmd.none )
 
-        AutocompleteInput name field ({ foreignKeyParams } as ac) userInput ->
-            let
-                mresource =
-                    findResource ac userInput
+        AutocompleteInput name field autocomplete userInput ->
+            case field.constraint of
+                ForeignKey prevParams ->
+                    let
+                        label =
+                            findResource autocomplete userInput
+                                |> Maybe.andThen
+                                    (resourceLabel autocomplete.foreignKeyParams)
 
-                mprimaryKey =
-                    Maybe.andThen Resource.primaryKey mresource
+                        params =
+                            { prevParams | label = label }
 
-                label =
-                    Maybe.andThen (resourceLabel foreignKeyParams) mresource
+                        field_ =
+                            { field | constraint = ForeignKey params }
 
-                foreignKeyParams_ =
-                    { foreignKeyParams | label = label }
+                        association =
+                            Association field_ autocomplete
+                    in
+                    ( Dict.insert name association record
+                    , fetchResources client name field_ <|
+                        { autocomplete
+                            | userInput = Maybe.withDefault userInput label
+                            , foreignKeyParams = params
+                            , blocked = False
+                            , results = []
+                        }
+                    )
 
-                value =
-                    PForeignKey mprimaryKey foreignKeyParams_
-
-                field_ =
-                    Field.update value field
-
-                association =
-                    Association field_ autocomplete
-
-                autocomplete =
-                    { ac
-                        | userInput = Maybe.withDefault userInput label
-                        , foreignKeyParams = foreignKeyParams_
-                        , blocked = False
-                        , results = []
-                    }
-            in
-            ( Dict.insert name association record
-            , fetchResources client name field_ autocomplete
-            )
+                _ ->
+                    ( record, Cmd.none )
 
         ListingFetched name field autocomplete result ->
             case result of

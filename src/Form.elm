@@ -20,6 +20,7 @@ import Html.Attributes exposing (autocomplete, class, disabled, novalidate)
 import Html.Events exposing (onSubmit)
 import Notification
 import Postgrest.Client as PG
+import Postgrest.Field exposing (Field)
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
@@ -161,7 +162,7 @@ id record =
     toResource record |> Resource.id
 
 
-primaryKey : Form -> Maybe PrimaryKey
+primaryKey : Form -> Maybe Field
 primaryKey record =
     toResource record |> Resource.primaryKey
 
@@ -284,17 +285,15 @@ view ((Form params record) as form) =
 
 recordLabel : Form -> Maybe String
 recordLabel record =
-    let
-        mlabel =
-            List.filterMap (recordLabelHelp record) recordIdentifiers
-                |> List.head
-    in
-    case mlabel of
-        Just _ ->
-            mlabel
+    case
+        List.filterMap (recordLabelHelp record) recordIdentifiers
+            |> List.head
+    of
+        Just label ->
+            Just label
 
         Nothing ->
-            primaryKey record |> Maybe.map PrimaryKey.toString
+            Resource.id (toResource record)
 
 
 recordLabelHelp : Form -> String -> Maybe String

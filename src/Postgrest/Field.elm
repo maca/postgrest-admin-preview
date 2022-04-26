@@ -1,6 +1,7 @@
 module Postgrest.Field exposing
     ( Field
     , compareTuple
+    , isPrimaryKey
     , setError
     , update
     , validate
@@ -19,6 +20,11 @@ type alias Field =
     , changed : Bool
     , value : Value
     }
+
+
+isPrimaryKey : Field -> Bool
+isPrimaryKey { constraint } =
+    constraint == Constraint.primaryKey
 
 
 update : Value -> Field -> Field

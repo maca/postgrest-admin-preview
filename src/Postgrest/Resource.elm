@@ -142,7 +142,7 @@ makeField column value =
 
 id : Resource -> Maybe String
 id resource =
-    primaryKey resource |> Maybe.map PrimaryKey.toString
+    primaryKey resource |> Maybe.andThen (.value >> Value.toString)
 
 
 fieldToString : String -> Resource -> Maybe String
@@ -150,10 +150,10 @@ fieldToString key resource =
     Dict.get key resource |> Maybe.andThen (.value >> Value.toString)
 
 
-primaryKey : Resource -> Maybe PrimaryKey
+primaryKey : Resource -> Maybe Field
 primaryKey resource =
     Dict.values resource
-        |> List.filterMap (.value >> Value.toPrimaryKey)
+        |> List.filter Field.isPrimaryKey
         |> List.head
 
 
