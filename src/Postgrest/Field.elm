@@ -1,4 +1,10 @@
-module Postgrest.Field exposing (Field, compareTuple, setError, update, validate)
+module Postgrest.Field exposing
+    ( Field
+    , compareTuple
+    , setError
+    , update
+    , validate
+    )
 
 import List.Extra as List
 import Postgrest.Client as PG
@@ -55,12 +61,6 @@ compareTuple ( name, column ) ( name_, column_ ) =
             compare (columnNameIndex name) (columnNameIndex name_)
 
 
-columnNameIndex : String -> Int
-columnNameIndex name =
-    List.elemIndex name recordIdentifiers
-        |> Maybe.withDefault (floor (1 / 0))
-
-
 setError : PG.PostgrestErrorJSON -> Field -> Field
 setError { code } field =
     case code of
@@ -69,6 +69,16 @@ setError { code } field =
 
         _ ->
             field
+
+
+
+-- Utils
+
+
+columnNameIndex : String -> Int
+columnNameIndex name =
+    List.elemIndex name recordIdentifiers
+        |> Maybe.withDefault (floor (1 / 0))
 
 
 recordIdentifiers : List String

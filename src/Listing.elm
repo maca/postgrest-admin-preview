@@ -56,13 +56,13 @@ import Html.Events as Events
 import Inflect as String
 import Json.Decode as Decode
 import Postgrest.Client as PG
+import Postgrest.Constraint as Constraint
 import Postgrest.Download as Download exposing (Download, Format(..))
 import Postgrest.Field as Field exposing (Field)
-import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
 import Postgrest.Schema exposing (Column, Table)
-import Postgrest.Value exposing (Value(..))
+import Postgrest.Value as Value exposing (Value(..))
 import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 import Search exposing (Search)
@@ -569,7 +569,7 @@ row : Listing -> List String -> Resource -> Html Msg
 row ({ resourcesName, textSelect } as listing) names record =
     let
         toTd =
-            viewValue listing >> List.singleton >> td []
+            fieldToHtml listing >> List.singleton >> td []
 
         id =
             Resource.id record |> Maybe.withDefault ""
@@ -588,20 +588,33 @@ row ({ resourcesName, textSelect } as listing) names record =
             ]
 
 
-viewValue : Listing -> Field -> Html Msg
-viewValue { resourcesName, textSelect } { value } =
+fieldToHtml : Listing -> Field -> Html Msg
+fieldToHtml { resourcesName, textSelect } { constraint, value } =
+    case constraint of
+        Constraint.PrimaryKey ->
+            recordLink resourcesName textSelect value Nothing
+
+        Constraint.ForeignKey { table, label } ->
+            recordLink table textSelect value label
+
+        Constraint.None ->
+            valueToHtml value
+
+
+valueToHtml : Value -> Html Msg
+valueToHtml value =
     case value of
         PFloat (Just float) ->
-            text <| String.fromFloat float
+            text (String.fromFloat float)
 
         PInt (Just int) ->
-            text <| String.fromInt int
+            text (String.fromInt int)
 
         PString (Just string) ->
             text string
 
         PEnum (Just string) _ ->
-            text <| String.humanize string
+            text (String.humanize string)
 
         PBool (Just True) ->
             text "true"
@@ -610,16 +623,13 @@ viewValue { resourcesName, textSelect } { value } =
             text "false"
 
         PTime (Just time) ->
-            text <| Time.format time
+            text (Time.format time)
 
         PDate (Just time) ->
-            text <| Time.toDateString time
+            text (Time.toDateString time)
 
-        PForeignKey (Just primaryKey) { table, label } ->
-            recordLink table textSelect primaryKey label
-
-        PPrimaryKey (Just primaryKey) ->
-            recordLink resourcesName textSelect primaryKey Nothing
+        PText _ ->
+            text "..."
 
         Unknown _ ->
             text "?"
@@ -628,18 +638,18 @@ viewValue { resourcesName, textSelect } { value } =
             text ""
 
 
-recordLink : String -> TextSelect -> PrimaryKey -> Maybe String -> Html Msg
-recordLink resourcesName textSelect primaryKey mtext =
+recordLink : String -> TextSelect -> Value -> Maybe String -> Html Msg
+recordLink resourcesName textSelect value mtext =
     let
         id =
-            PrimaryKey.toString primaryKey
+            Value.toString value |> Maybe.withDefault ""
     in
     a
         [ href <| Url.absolute [ resourcesName, id ] []
         , target "_self"
         , clickResource resourcesName textSelect id
         ]
-        [ text <| Maybe.withDefault id mtext ]
+        [ Maybe.map text mtext |> Maybe.withDefault (valueToHtml value) ]
 
 
 clickResource : String -> TextSelect -> String -> Html.Attribute Msg
