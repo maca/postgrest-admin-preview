@@ -3,7 +3,6 @@ module Postgrest.Schema.Table exposing
     , Table
     , columnValue
     , primaryKeyName
-    , toResource
     )
 
 import Dict exposing (Dict)
@@ -22,20 +21,6 @@ type alias Column =
 
 type alias Table =
     Dict String Column
-
-
-toResource : Table -> Dict String Field
-toResource table =
-    Dict.map (\_ col -> columnToField col) table
-
-
-columnToField : Column -> Field
-columnToField { required, value } =
-    { error = Nothing
-    , required = required
-    , changed = False
-    , value = value
-    }
 
 
 primaryKeyName : Table -> Maybe String

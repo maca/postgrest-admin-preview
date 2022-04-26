@@ -5,6 +5,7 @@ module Postgrest.Resource exposing
     , encode
     , errors
     , fieldToString
+    , fromTable
     , hasErrors
     , id
     , primaryKey
@@ -37,6 +38,19 @@ import Time.Extra as Time
 
 type alias Resource =
     Dict String Field
+
+
+fromTable : Table -> Resource
+fromTable table =
+    Dict.map
+        (\_ { required, value } ->
+            { error = Nothing
+            , required = required
+            , changed = False
+            , value = value
+            }
+        )
+        table
 
 
 hasErrors : Resource -> Bool

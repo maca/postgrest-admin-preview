@@ -117,13 +117,13 @@ toResource (Form _ fields) =
 
 fromResource : Params -> Resource -> Form
 fromResource params resource =
-    Form params <| Dict.map (\_ input -> Input.fromField input) resource
+    Dict.map (\_ input -> Input.fromField input) resource
+        |> Form params
 
 
 fromTable : Params -> Table -> Form
 fromTable params table =
-    Table.toResource table
-        |> fromResource params
+    Resource.fromTable table |> fromResource params
 
 
 changed : Form -> Bool

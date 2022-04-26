@@ -30,6 +30,10 @@ type alias Schema =
     Dict String Table
 
 
+type alias ColumnNames =
+    Dict String (List String)
+
+
 type alias ColumnDefinition =
     { type_ : String
     , format : String
@@ -56,7 +60,7 @@ decoder =
         |> Decode.andThen schemaDecoder
 
 
-columnNamesDecoder : Decoder (Dict String (List String))
+columnNamesDecoder : Decoder ColumnNames
 columnNamesDecoder =
     field "definitions"
         (Decode.dict
@@ -66,7 +70,7 @@ columnNamesDecoder =
         )
 
 
-schemaDecoder : Dict String (List String) -> Decoder Schema
+schemaDecoder : ColumnNames -> Decoder Schema
 schemaDecoder columnNames =
     field "definitions"
         (Decode.dict
@@ -81,7 +85,7 @@ schemaDecoder columnNames =
 
 
 columnsDecoder :
-    Dict String (List String)
+    ColumnNames
     -> List String
     -> List ( String, Decode.Value )
     -> Decoder Table
@@ -122,7 +126,7 @@ columnsDecoder columnNames requiredCols definitions =
                 |> Decode.succeed
 
 
-columnDecoder : Dict String (List String) -> Bool -> Decoder Column
+columnDecoder : ColumnNames -> Bool -> Decoder Column
 columnDecoder columnNames isRequired =
     Decode.map4 ColumnDefinition
         (field "type" string)
@@ -132,11 +136,7 @@ columnDecoder columnNames isRequired =
         |> Decode.andThen (columnDecoderHelp columnNames isRequired)
 
 
-columnDecoderHelp :
-    Dict String (List String)
-    -> Bool
-    -> ColumnDefinition
-    -> Decoder Column
+columnDecoderHelp : ColumnNames -> Bool -> ColumnDefinition -> Decoder Column
 columnDecoderHelp columnNames isRequired { type_, format, description, enum } =
     let
         makeColumn valueDecoder val =
