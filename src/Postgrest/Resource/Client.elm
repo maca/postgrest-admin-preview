@@ -10,8 +10,10 @@ module Postgrest.Resource.Client exposing
 
 import Dict
 import Postgrest.Client as PG exposing (Endpoint, Request, Selectable)
+import Postgrest.Field exposing (Field)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Schema exposing (Column, Constraint(..), Schema, Table)
+import Postgrest.Value as Value
 import PostgrestAdmin.AuthScheme as AuthScheme exposing (AuthScheme)
 import Url exposing (Url)
 import Utils.Task exposing (Error(..))

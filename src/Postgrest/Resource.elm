@@ -21,8 +21,14 @@ import Json.Encode as Encode
 import Maybe.Extra as Maybe exposing (isNothing)
 import Postgrest.Client as PG
 import Postgrest.Field as Field exposing (Field)
-import Postgrest.Schema exposing (Column, Constraint(..), Table)
-import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
+import Postgrest.Schema
+    exposing
+        ( Column
+        , Constraint(..)
+        , ForeignKeyParams
+        , Table
+        )
+import Postgrest.Value as Value exposing (Value(..))
 import Regex exposing (Regex)
 
 
@@ -73,9 +79,9 @@ encode resource =
             Encode.null
 
 
-primaryKeyName : Dict String { a | value : Value } -> Maybe String
+primaryKeyName : Dict String { a | constraint : Constraint } -> Maybe String
 primaryKeyName resource =
-    Dict.find (\_ v -> Value.isPrimaryKey v.value) resource
+    Dict.find (\_ column -> Field.isPrimaryKey column) resource
         |> Maybe.map Tuple.first
 
 

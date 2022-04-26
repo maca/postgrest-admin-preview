@@ -22,7 +22,7 @@ type alias Field =
     }
 
 
-isPrimaryKey : Field -> Bool
+isPrimaryKey : { a | constraint : Constraint } -> Bool
 isPrimaryKey { constraint } =
     constraint == PrimaryKey
 

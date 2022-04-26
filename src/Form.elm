@@ -20,6 +20,7 @@ import Html.Attributes exposing (autocomplete, class, disabled, novalidate)
 import Html.Events exposing (onSubmit)
 import Notification
 import Postgrest.Client as PG
+import Postgrest.Field as Field
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
 import Postgrest.Schema exposing (Table)
@@ -305,34 +306,9 @@ recordLabelHelp (Form _ fields) fieldName =
 
 sortInputs : ( String, Input ) -> ( String, Input ) -> Order
 sortInputs ( name, input ) ( name_, input_ ) =
-    sortValues ( name, Input.toValue input ) ( name_, Input.toValue input_ )
-
-
-sortValues : ( String, Value ) -> ( String, Value ) -> Order
-sortValues ( name, a ) ( _, b ) =
-    case ( a, b ) of
-        ( PPrimaryKey _, _ ) ->
-            LT
-
-        ( _, PPrimaryKey _ ) ->
-            GT
-
-        ( PForeignKey _ _, _ ) ->
-            LT
-
-        ( _, PForeignKey _ _ ) ->
-            GT
-
-        ( PString _, _ ) ->
-            recordIdentifiers
-                |> List.indexedMap (flip Tuple.pair)
-                |> Dict.fromList
-                |> Dict.get name
-                |> Maybe.map (toFloat >> flip compare (1 / 0))
-                |> Maybe.withDefault GT
-
-        _ ->
-            EQ
+    Field.compareTuple
+        ( name, Input.toField input )
+        ( name_, Input.toField input_ )
 
 
 

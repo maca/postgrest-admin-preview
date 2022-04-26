@@ -1,13 +1,8 @@
 module Postgrest.Value exposing
-    ( ForeignKeyParams
-    , Value(..)
+    ( Value(..)
     , encode
-    , foreignKeyParams
-    , isForeignKey
     , isNothing
-    , isPrimaryKey
     , isTrue
-    , toPrimaryKey
     , toString
     , updateWithString
     )
@@ -16,17 +11,8 @@ import Iso8601
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Maybe.Extra as Maybe
-import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey(..))
 import String.Extra as String
 import Time
-
-
-type alias ForeignKeyParams =
-    { table : String
-    , primaryKeyName : String
-    , labelColumnName : Maybe String
-    , label : Maybe String
-    }
 
 
 type Value
@@ -38,8 +24,6 @@ type Value
     | PBool (Maybe Bool)
     | PTime (Maybe Time.Posix)
     | PDate (Maybe Time.Posix)
-    | PPrimaryKey (Maybe PrimaryKey)
-    | PForeignKey (Maybe PrimaryKey) ForeignKeyParams
     | Unknown Decode.Value
 
 
@@ -74,12 +58,6 @@ encode value =
         PDate mtime ->
             enc Encode.string (Maybe.map Iso8601.fromTime mtime)
 
-        PPrimaryKey mprimaryKey ->
-            enc PrimaryKey.encode mprimaryKey
-
-        PForeignKey mprimaryKey _ ->
-            enc PrimaryKey.encode mprimaryKey
-
         Unknown _ ->
             Encode.null
 
@@ -109,12 +87,6 @@ isNothing value =
             False
 
         PDate (Just _) ->
-            False
-
-        PPrimaryKey (Just _) ->
-            False
-
-        PForeignKey (Just _) _ ->
             False
 
         _ ->
@@ -160,36 +132,6 @@ updateWithString string value =
             other
 
 
-isPrimaryKey : Value -> Bool
-isPrimaryKey value =
-    case value of
-        PPrimaryKey _ ->
-            True
-
-        _ ->
-            False
-
-
-isForeignKey : Value -> Bool
-isForeignKey value =
-    case value of
-        PForeignKey _ _ ->
-            True
-
-        _ ->
-            False
-
-
-toPrimaryKey : Value -> Maybe PrimaryKey
-toPrimaryKey value =
-    case value of
-        PPrimaryKey mprimaryKey ->
-            mprimaryKey
-
-        _ ->
-            Nothing
-
-
 isTrue : Value -> Maybe Bool
 isTrue value =
     case value of
@@ -229,23 +171,6 @@ toString value =
 
         PDate mtime ->
             Maybe.map (Iso8601.fromTime >> String.slice 0 10) mtime
-
-        PPrimaryKey mprimaryKey ->
-            Maybe.map PrimaryKey.toString mprimaryKey
-
-        PForeignKey mprimaryKey { label } ->
-            Maybe.map PrimaryKey.toString mprimaryKey
-                |> Maybe.or label
-
-        _ ->
-            Nothing
-
-
-foreignKeyParams : Value -> Maybe ForeignKeyParams
-foreignKeyParams value =
-    case value of
-        PForeignKey _ params ->
-            Just params
 
         _ ->
             Nothing

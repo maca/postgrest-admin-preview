@@ -120,12 +120,6 @@ fromColumn name col =
         PEnum _ choices ->
             Just <| oneOf name choices Set.empty
 
-        PPrimaryKey _ ->
-            Nothing
-
-        PForeignKey _ _ ->
-            Nothing
-
         Unknown _ ->
             Nothing
 

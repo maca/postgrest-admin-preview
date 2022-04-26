@@ -32,11 +32,10 @@ import Html.Events exposing (onInput)
 import Maybe.Extra as Maybe
 import Postgrest.Client as PG exposing (PostgrestErrorJSON)
 import Postgrest.Field as Field exposing (Field)
-import Postgrest.PrimaryKey as PrimaryKey
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
-import Postgrest.Schema exposing (Constraint(..))
-import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
+import Postgrest.Schema exposing (Constraint(..), ForeignKeyParams)
+import Postgrest.Value as Value exposing (Value(..))
 import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 import Result
@@ -103,15 +102,21 @@ update client msg record =
             ( Dict.insert name (updateInput value input) record, Cmd.none )
 
         AutocompleteInput name field autocomplete "" ->
-            let
-                value =
-                    PForeignKey Nothing autocomplete.foreignKeyParams
+            case field.constraint of
+                ForeignKey prevParams ->
+                    let
+                        constraint =
+                            ForeignKey autocomplete.foreignKeyParams
 
-                association =
-                    Association (Field.update value field)
-                        { autocomplete | userInput = "", blocked = False }
-            in
-            ( Dict.insert name association record, Cmd.none )
+                        association =
+                            Association
+                                { field | constraint = constraint }
+                                autocomplete
+                    in
+                    ( Dict.insert name association record, Cmd.none )
+
+                _ ->
+                    ( record, Cmd.none )
 
         AutocompleteInput name field autocomplete userInput ->
             case field.constraint of
@@ -261,17 +266,15 @@ fromField field =
         PDate _ ->
             Date field
 
-        PForeignKey _ params ->
-            Association field
-                { userInput = params.label |> Maybe.withDefault ""
-                , results = []
-                , blocked = False
-                , foreignKeyParams = params
-                }
-
-        PPrimaryKey _ ->
-            Blank field
-
+        -- PForeignKey _ params ->
+        --     Association field
+        --         { userInput = params.label |> Maybe.withDefault ""
+        --         , results = []
+        --         , blocked = False
+        --         , foreignKeyParams = params
+        --         }
+        -- PPrimaryKey _ ->
+        --     Blank field
         Unknown _ ->
             Blank field
 
@@ -389,7 +392,9 @@ displayAutocompleteInput ({ foreignKeyParams } as autocomplete) field name =
     in
     div [ class "autocomplete-input" ]
         [ datalist
-        , div [ class "association-link" ] [ associationLink field ]
+        , div
+            [ class "association-link" ]
+            [ associationLink foreignKeyParams field ]
         , Html.input
             [ onInput inputCallback
             , id name
@@ -402,20 +407,19 @@ displayAutocompleteInput ({ foreignKeyParams } as autocomplete) field name =
         ]
 
 
-associationLink : Field -> Html Msg
-associationLink { value } =
-    case value of
-        PForeignKey (Just primaryKey) { table } ->
-            let
-                id =
-                    PrimaryKey.toString primaryKey
-            in
-            a
-                [ href <| Url.absolute [ table, id ] [], target "_blank" ]
-                [ text id ]
+associationLink : ForeignKeyParams -> Field -> Html Msg
+associationLink params { value, constraint } =
+    if Value.isNothing value then
+        text "-"
 
-        _ ->
-            text "-"
+    else
+        let
+            id =
+                Value.toString value |> Maybe.withDefault ""
+        in
+        a
+            [ href <| Url.absolute [ params.table, id ] [], target "_blank" ]
+            [ text id ]
 
 
 autocompleteOption : ForeignKeyParams -> Resource -> Html Msg
@@ -540,8 +544,8 @@ fetchResources client name field ({ foreignKeyParams } as autocomplete) =
                     List.filterMap identity [ idQuery, labelQuery ]
             in
             if List.isEmpty queries then
-                fail Failed <|
-                    AutocompleteError foreignKeyParams autocomplete.userInput
+                AutocompleteError autocomplete.userInput
+                    |> fail Failed
 
             else
                 case AuthScheme.toJwt client.authScheme of

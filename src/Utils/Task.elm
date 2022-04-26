@@ -10,7 +10,6 @@ module Utils.Task exposing
 import Http
 import Json.Decode as Decode exposing (Decoder)
 import Postgrest.Client as PG
-import Postgrest.Value exposing (ForeignKeyParams)
 import Task exposing (Task)
 
 
@@ -19,7 +18,7 @@ type Error
     | DecodeError Decode.Error
     | PGError PG.Error
     | BadSchema String
-    | AutocompleteError ForeignKeyParams String
+    | AutocompleteError String
     | AuthError
 
 
