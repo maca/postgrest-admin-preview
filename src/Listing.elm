@@ -681,16 +681,16 @@ perPage =
 
 
 sortBy : String -> SortOrder -> ( String, Column ) -> Maybe PG.Param
-sortBy resourcesName sort ( name, { value } ) =
+sortBy resourcesName sort ( name, { constraint } ) =
     let
         colName =
-            case value of
-                PForeignKey _ params ->
+            case constraint of
+                ForeignKey params ->
                     params.labelColumnName
                         |> Maybe.map
-                            (\cn ->
-                                [ resourcesName, params.table, cn ]
-                                    |> String.join "_"
+                            (\columnName ->
+                                String.join "_"
+                                    [ resourcesName, params.table, columnName ]
                             )
                         |> Maybe.withDefault name
 
