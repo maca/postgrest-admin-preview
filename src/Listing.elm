@@ -46,13 +46,7 @@ import Html.Attributes
         , id
         , target
         )
-import Html.Events as Events
-    exposing
-        ( on
-        , onClick
-        , onMouseDown
-        , onMouseUp
-        )
+import Html.Events as Events exposing (on, onClick, onMouseDown, onMouseUp)
 import Inflect as String
 import Json.Decode as Decode
 import Postgrest.Client as PG
@@ -498,7 +492,8 @@ tableHeader { order } name =
                 , i [ class "icono-play" ] []
                 ]
     in
-    th []
+    th
+        []
         [ case order of
             Asc col ->
                 if col == name then

@@ -83,6 +83,11 @@ errorToString error =
         PGError (PG.BadStatus 403 _ _) ->
             "You are not authorized to perform this action"
 
+        PGError (PG.BadStatus _ _ { details }) ->
+            details
+                |> Maybe.map (\msg -> "The server responded with error: " ++ msg)
+                |> Maybe.withDefault genericError
+
         HttpError _ ->
             "Something went wrong with the connection, please try again later"
 
@@ -90,4 +95,9 @@ errorToString error =
             Decode.errorToString err
 
         _ ->
-            "Something went wrong, we'll fix soon"
+            genericError
+
+
+genericError : String
+genericError =
+    "Something went wrong, we'll fix soon"

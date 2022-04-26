@@ -34,11 +34,7 @@ update value field =
 
 validate : Field -> Field
 validate field =
-    if
-        field.required
-            && Value.isNothing field.value
-            && (not <| Value.isPrimaryKey field.value)
-    then
+    if field.required && Value.isNothing field.value then
         { field | error = Just "This field is required" }
 
     else
