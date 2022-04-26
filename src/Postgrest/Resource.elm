@@ -21,8 +21,7 @@ import Json.Encode as Encode
 import Maybe.Extra as Maybe exposing (isNothing)
 import Postgrest.Client as PG
 import Postgrest.Field as Field exposing (Field)
-import Postgrest.PrimaryKey as PrimaryKey
-import Postgrest.Schema exposing (Column, Table)
+import Postgrest.Schema exposing (Column, Constraint(..), Table)
 import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
 import Regex exposing (Regex)
 
@@ -98,46 +97,39 @@ decoderHelp name column result =
 
 
 fieldDecoder : Resource -> String -> Column -> Decoder Resource
-fieldDecoder dict name column =
+fieldDecoder resource name column =
     let
-        insert val =
-            dict
-                |> Dict.insert name (makeField column val)
-                |> Decode.succeed
+        insert constraint value =
+            Dict.insert name
+                { constraint = constraint
+                , required = column.required
+                , error = Nothing
+                , changed = False
+                , value = value
+                }
+                resource
     in
-    case column.value of
-        PForeignKey _ params ->
+    case column.constraint of
+        ForeignKey params ->
             Decode.map2
-                (\label value ->
-                    PForeignKey (Just value) { params | label = label }
-                )
-                (referenceDecoder params)
-                (Decode.field name PrimaryKey.decoder)
-                |> Decode.andThen insert
+                (\label -> insert (ForeignKey { params | label = label }))
+                (referenceLabelDecoder params)
+                (Decode.field name column.decoder)
 
         _ ->
-            Decode.field name column.decoder
-                |> Decode.andThen insert
+            Decode.map
+                (insert column.constraint)
+                (Decode.field name column.decoder)
 
 
-referenceDecoder : ForeignKeyParams -> Decoder (Maybe String)
-referenceDecoder params =
+referenceLabelDecoder : ForeignKeyParams -> Decoder (Maybe String)
+referenceLabelDecoder params =
     case params.labelColumnName of
-        Just n ->
-            Decode.maybe (Decode.at [ params.table, n ] string)
+        Just columnName ->
+            Decode.maybe (Decode.at [ params.table, columnName ] string)
 
         Nothing ->
             Decode.succeed Nothing
-
-
-makeField : Column -> Value -> Field
-makeField column value =
-    { constraint = column.constraint
-    , required = column.required
-    , error = Nothing
-    , changed = False
-    , value = value
-    }
 
 
 id : Resource -> Maybe String
