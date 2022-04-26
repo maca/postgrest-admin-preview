@@ -16,7 +16,6 @@ import Json.Decode as Decode
         , string
         )
 import Postgrest.Constraint as Constraint exposing (Constraint)
-import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey(..))
 import Postgrest.Value exposing (Value(..))
 import Regex exposing (Regex)
 import Task exposing (Task)

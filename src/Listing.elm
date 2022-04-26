@@ -57,7 +57,7 @@ import Inflect as String
 import Json.Decode as Decode
 import Postgrest.Client as PG
 import Postgrest.Download as Download exposing (Download, Format(..))
-import Postgrest.Field exposing (Field)
+import Postgrest.Field as Field exposing (Field)
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
@@ -389,7 +389,7 @@ view listing =
     let
         fields =
             Dict.toList listing.table
-                |> List.sortWith sortColumns
+                |> List.sortWith Field.compareTuple
                 |> List.map Tuple.first
 
         body =
@@ -751,48 +751,3 @@ orderToQueryParams order =
 
         Unordered ->
             []
-
-
-
--- Sort
-
-
-sortColumns : ( String, Column ) -> ( String, Column ) -> Order
-sortColumns ( name, column ) ( name_, column_ ) =
-    sortValues ( name, column.value ) ( name_, column_.value )
-
-
-sortValues : ( String, Value ) -> ( String, Value ) -> Order
-sortValues ( name, a ) ( _, b ) =
-    case ( a, b ) of
-        ( PPrimaryKey _, _ ) ->
-            LT
-
-        ( _, PPrimaryKey _ ) ->
-            GT
-
-        ( PForeignKey _ _, _ ) ->
-            LT
-
-        ( _, PForeignKey _ _ ) ->
-            GT
-
-        ( PString _, _ ) ->
-            recordIdentifiers
-                |> List.indexedMap (flip Tuple.pair)
-                |> Dict.fromList
-                |> Dict.get name
-                |> Maybe.map (toFloat >> flip compare (1 / 0))
-                |> Maybe.withDefault GT
-
-        _ ->
-            EQ
-
-
-
--- Utils
-
-
-recordIdentifiers : List String
-recordIdentifiers =
-    [ "title", "name", "full name", "email", "first name", "last name" ]

@@ -1,5 +1,6 @@
-module Postgrest.Field exposing (Field, setError, update, validate)
+module Postgrest.Field exposing (Field, compareTuple, setError, update, validate)
 
+import List.Extra as List
 import Postgrest.Client as PG
 import Postgrest.Constraint as Constraint exposing (Constraint)
 import Postgrest.Value as Value exposing (Value(..))
@@ -32,6 +33,34 @@ validate field =
         { field | error = Nothing }
 
 
+compareTuple :
+    ( String, { a | constraint : Constraint } )
+    -> ( String, { a | constraint : Constraint } )
+    -> Order
+compareTuple ( name, column ) ( name_, column_ ) =
+    case ( column.constraint, column_.constraint ) of
+        ( Constraint.PrimaryKey, _ ) ->
+            LT
+
+        ( _, Constraint.PrimaryKey ) ->
+            GT
+
+        ( Constraint.ForeignKey _, _ ) ->
+            LT
+
+        ( _, Constraint.ForeignKey _ ) ->
+            GT
+
+        _ ->
+            compare (columnNameIndex name) (columnNameIndex name_)
+
+
+columnNameIndex : String -> Int
+columnNameIndex name =
+    List.elemIndex name recordIdentifiers
+        |> Maybe.withDefault (floor (1 / 0))
+
+
 setError : PG.PostgrestErrorJSON -> Field -> Field
 setError { code } field =
     case code of
@@ -40,3 +69,8 @@ setError { code } field =
 
         _ ->
             field
+
+
+recordIdentifiers : List String
+recordIdentifiers =
+    [ "id", "email", "title", "name", "full name", "first name", "last name" ]
