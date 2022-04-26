@@ -1,4 +1,12 @@
-module Postgrest.Schema exposing (Column, Schema, Table, decoder, getSchema)
+module Postgrest.Schema exposing
+    ( Column
+    , Constraint(..)
+    , ForeignKeyParams
+    , Schema
+    , Table
+    , decoder
+    , getSchema
+    )
 
 import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
@@ -15,7 +23,6 @@ import Json.Decode as Decode
         , maybe
         , string
         )
-import Postgrest.Constraint as Constraint exposing (Constraint)
 import Postgrest.Value exposing (Value(..))
 import Regex exposing (Regex)
 import Task exposing (Task)
@@ -34,6 +41,20 @@ type alias Column =
     , required : Bool
     , decoder : Decoder Value
     , value : Value
+    }
+
+
+type Constraint
+    = NoConstraint
+    | PrimaryKey
+    | ForeignKey ForeignKeyParams
+
+
+type alias ForeignKeyParams =
+    { table : String
+    , primaryKeyName : String
+    , labelColumnName : Maybe String
+    , label : Maybe String
     }
 
 
@@ -153,7 +174,7 @@ columnDecoderHelp columnNames isRequired { type_, format, description, enum } =
         makeColumn valueDecoder val =
             { constraint =
                 Maybe.map (columnConstraint columnNames) description
-                    |> Maybe.withDefault Constraint.none
+                    |> Maybe.withDefault NoConstraint
             , required = isRequired
             , decoder = valueDecoder
             , value = val
@@ -209,7 +230,7 @@ columnConstraint : ColumnNames -> String -> Constraint
 columnConstraint columnNames description =
     case extractForeignKey description of
         [ tableName, primaryKeyName ] ->
-            Constraint.foreignKey
+            ForeignKey
                 { table = tableName
                 , primaryKeyName = primaryKeyName
                 , labelColumnName =
@@ -220,10 +241,10 @@ columnConstraint columnNames description =
 
         _ ->
             if isPrimaryKeyDescription description then
-                Constraint.primaryKey
+                PrimaryKey
 
             else
-                Constraint.none
+                NoConstraint
 
 
 foreignKeyRegex : Regex

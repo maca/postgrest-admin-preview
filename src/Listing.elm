@@ -56,12 +56,11 @@ import Html.Events as Events
 import Inflect as String
 import Json.Decode as Decode
 import Postgrest.Client as PG
-import Postgrest.Constraint as Constraint
 import Postgrest.Download as Download exposing (Download, Format(..))
 import Postgrest.Field as Field exposing (Field)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
-import Postgrest.Schema exposing (Column, Table)
+import Postgrest.Schema exposing (Column, Constraint(..), Table)
 import Postgrest.Value as Value exposing (Value(..))
 import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
@@ -591,13 +590,13 @@ row ({ resourcesName, textSelect } as listing) names record =
 fieldToHtml : Listing -> Field -> Html Msg
 fieldToHtml { resourcesName, textSelect } { constraint, value } =
     case constraint of
-        Constraint.PrimaryKey ->
+        PrimaryKey ->
             recordLink resourcesName textSelect value Nothing
 
-        Constraint.ForeignKey { table, label } ->
+        ForeignKey { table, label } ->
             recordLink table textSelect value label
 
-        Constraint.None ->
+        NoConstraint ->
             valueToHtml value
 
 

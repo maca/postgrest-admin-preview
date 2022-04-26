@@ -9,7 +9,7 @@ module Postgrest.Field exposing
 
 import List.Extra as List
 import Postgrest.Client as PG
-import Postgrest.Constraint as Constraint exposing (Constraint)
+import Postgrest.Schema exposing (Constraint(..))
 import Postgrest.Value as Value exposing (Value(..))
 
 
@@ -24,7 +24,7 @@ type alias Field =
 
 isPrimaryKey : Field -> Bool
 isPrimaryKey { constraint } =
-    constraint == Constraint.primaryKey
+    constraint == PrimaryKey
 
 
 update : Value -> Field -> Field
@@ -51,16 +51,16 @@ compareTuple :
     -> Order
 compareTuple ( name, column ) ( name_, column_ ) =
     case ( column.constraint, column_.constraint ) of
-        ( Constraint.PrimaryKey, _ ) ->
+        ( PrimaryKey, _ ) ->
             LT
 
-        ( _, Constraint.PrimaryKey ) ->
+        ( _, PrimaryKey ) ->
             GT
 
-        ( Constraint.ForeignKey _, _ ) ->
+        ( ForeignKey _, _ ) ->
             LT
 
-        ( _, Constraint.ForeignKey _ ) ->
+        ( _, ForeignKey _ ) ->
             GT
 
         _ ->

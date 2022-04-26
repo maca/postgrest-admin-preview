@@ -31,11 +31,11 @@ import Html.Attributes
 import Html.Events exposing (onInput)
 import Maybe.Extra as Maybe
 import Postgrest.Client as PG exposing (PostgrestErrorJSON)
-import Postgrest.Constraint exposing (Constraint(..))
 import Postgrest.Field as Field exposing (Field)
 import Postgrest.PrimaryKey as PrimaryKey
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
+import Postgrest.Schema exposing (Constraint(..))
 import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
 import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
