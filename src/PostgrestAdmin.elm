@@ -161,7 +161,7 @@ update msg model =
                     ( model, Nav.load href )
 
         UrlChanged url ->
-            navigate { model | route = getRoute url model }
+            navigate { model | route = getRoute url model, error = Nothing }
 
         Failed err ->
             ( failed err model, Cmd.none )
