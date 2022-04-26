@@ -9,14 +9,12 @@ module Postgrest.Resource.Client exposing
     )
 
 import Dict
-import Http exposing (header)
 import Postgrest.Client as PG exposing (Endpoint, Request, Selectable)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Schema exposing (Schema)
-import Postgrest.Schema.Table as Table exposing (Column, Table)
+import Postgrest.Schema.Table as Table exposing (Table)
 import Postgrest.Value as Value
 import PostgrestAdmin.AuthScheme as AuthScheme exposing (AuthScheme)
-import Task exposing (Task)
 import Url exposing (Url)
 import Utils.Task exposing (Error(..))
 

@@ -16,24 +16,15 @@ module Postgrest.Resource exposing
 import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
 import Dict.Extra as Dict
-import Json.Decode as Decode
-    exposing
-        ( Decoder
-        , bool
-        , float
-        , int
-        , maybe
-        , string
-        )
+import Json.Decode as Decode exposing (Decoder, maybe, string)
 import Json.Encode as Encode
 import Maybe.Extra as Maybe exposing (isNothing)
 import Postgrest.Client as PG
 import Postgrest.Field as Field exposing (Field)
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
-import Postgrest.Schema.Table as Table exposing (Column, Table)
+import Postgrest.Schema.Table exposing (Column, Table)
 import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
 import Regex exposing (Regex)
-import Time.Extra as Time
 
 
 type alias Resource =
@@ -126,17 +117,6 @@ fieldDecoder dict name column =
         _ ->
             Decode.field name column.decoder
                 |> Decode.andThen insert
-
-
-foreignKeyHelp insert params name =
-    Decode.map2
-        (\label value ->
-            PForeignKey (Just value)
-                { params | label = label }
-        )
-        (referenceDecoder params)
-        (Decode.field name PrimaryKey.decoder)
-        |> Decode.andThen insert
 
 
 referenceDecoder : ForeignKeyParams -> Decoder (Maybe String)

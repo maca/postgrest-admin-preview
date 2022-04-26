@@ -90,8 +90,4 @@ errorToString error =
             Decode.errorToString err
 
         _ ->
-            let
-                _ =
-                    Debug.log "Err" error
-            in
             "Something went wrong, we'll fix soon"

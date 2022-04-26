@@ -354,7 +354,6 @@ listingPath { order, resourcesName, search } =
     [ baseUrl, filterQuery ]
         |> List.filterMap String.nonBlank
         |> String.join joinChar
-        |> Debug.log "url"
 
 
 fetchListing : Client a -> Listing -> ( Listing, Cmd Msg )

@@ -17,7 +17,7 @@ import Json.Decode as Decode
         )
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey(..))
 import Postgrest.Schema.Table exposing (Column, Table)
-import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
+import Postgrest.Value exposing (Value(..))
 import Regex exposing (Regex)
 import Task exposing (Task)
 import Time.Extra as Time
@@ -224,16 +224,6 @@ columnDecoderHelp columnNames isRequired { type_, format, description, enum } =
                     Decode.map Unknown Decode.value
             in
             Decode.map (makeColumn valueDecoder) valueDecoder
-
-
-referenceDecoder : ForeignKeyParams -> Decoder String
-referenceDecoder params =
-    case params.labelColumnName of
-        Just n ->
-            Decode.at [ params.table, n ] string
-
-        Nothing ->
-            Decode.fail ""
 
 
 foreignKeyRegex : Regex

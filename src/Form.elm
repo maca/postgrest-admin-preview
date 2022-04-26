@@ -23,11 +23,10 @@ import Postgrest.Client as PG
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
-import Postgrest.Schema.Table as Table exposing (Column, Table)
+import Postgrest.Schema.Table exposing (Table)
 import Postgrest.Value exposing (Value(..))
 import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
-import Regex exposing (Regex)
 import String.Extra as String
 import Task exposing (Task)
 import Url.Builder as Url
@@ -167,37 +166,30 @@ primaryKey record =
     toResource record |> Resource.primaryKey
 
 
-setError : PG.PostgrestErrorJSON -> Form -> Form
-setError error ((Form params fields) as form) =
-    let
-        mapFun columnName key input =
-            if key == columnName then
-                Input.setError error input
 
-            else
-                input
-    in
-    error.message
-        |> Maybe.andThen extractColumnName
-        |> Maybe.map (mapFun >> flip Dict.map fields >> Form params)
-        |> Maybe.withDefault form
-
-
-extractColumnName : String -> Maybe String
-extractColumnName string =
-    Regex.find columnRegex string
-        |> List.head
-        |> Maybe.andThen (.submatches >> List.head)
-        |> Maybe.withDefault Nothing
-
-
-columnRegex : Regex
-columnRegex =
-    Regex.fromString "column \"(\\w+)\""
-        |> Maybe.withDefault Regex.never
-
-
-
+-- setError : PG.PostgrestErrorJSON -> Form -> Form
+-- setError error ((Form params fields) as form) =
+--     let
+--         mapFun columnName key input =
+--             if key == columnName then
+--                 Input.setError error input
+--             else
+--                 input
+--     in
+--     error.message
+--         |> Maybe.andThen extractColumnName
+--         |> Maybe.map (mapFun >> flip Dict.map fields >> Form params)
+--         |> Maybe.withDefault form
+-- extractColumnName : String -> Maybe String
+-- extractColumnName string =
+--     Regex.find columnRegex string
+--         |> List.head
+--         |> Maybe.andThen (.submatches >> List.head)
+--         |> Maybe.withDefault Nothing
+-- columnRegex : Regex
+-- columnRegex =
+--     Regex.fromString "column \"(\\w+)\""
+--         |> Maybe.withDefault Regex.never
 -- Http
 
 
@@ -215,7 +207,7 @@ fetch client (Form { table, resourcesName } _) rid =
 
 
 save : Client a -> Form -> Cmd Msg
-save client ((Form params _) as form) =
+save client form =
     case id form of
         Just rid ->
             updateRecord client form rid

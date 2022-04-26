@@ -323,13 +323,13 @@ requiresAuthentication auth =
         Ready _ ->
             True
 
-        Active x ->
+        Active _ ->
             True
 
         Success _ _ ->
             False
 
-        Failure _ error ->
+        Failure _ _ ->
             True
 
 

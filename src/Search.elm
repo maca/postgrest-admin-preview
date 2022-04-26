@@ -44,7 +44,7 @@ import Html.Keyed as Keyed
 import Html.Lazy as Lazy
 import Json.Decode as Decode
 import Postgrest.Client as PG
-import Postgrest.Schema.Table exposing (Column, Table)
+import Postgrest.Schema.Table exposing (Table)
 import Postgrest.Value exposing (Value(..))
 import Set
 import String.Extra as String
