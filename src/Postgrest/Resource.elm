@@ -21,7 +21,7 @@ import Json.Encode as Encode
 import Maybe.Extra as Maybe exposing (isNothing)
 import Postgrest.Client as PG
 import Postgrest.Field as Field exposing (Field)
-import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
+import Postgrest.PrimaryKey as PrimaryKey
 import Postgrest.Schema exposing (Column, Table)
 import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
 import Regex exposing (Regex)

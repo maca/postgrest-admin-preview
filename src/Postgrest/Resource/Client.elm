@@ -11,8 +11,7 @@ module Postgrest.Resource.Client exposing
 import Dict
 import Postgrest.Client as PG exposing (Endpoint, Request, Selectable)
 import Postgrest.Resource as Resource exposing (Resource)
-import Postgrest.Schema exposing (Schema, Table)
-import Postgrest.Value as Value
+import Postgrest.Schema exposing (Column, Constraint(..), Schema, Table)
 import PostgrestAdmin.AuthScheme as AuthScheme exposing (AuthScheme)
 import Url exposing (Url)
 import Utils.Task exposing (Error(..))
@@ -83,19 +82,22 @@ update { host } table resourcesName id resource =
 
 
 selects : Table -> List Selectable
-selects table_ =
-    let
-        resources { table, labelColumnName } =
+selects table =
+    Dict.values table
+        |> List.filterMap associationJoin
+        |> (++) (Dict.keys table |> List.map PG.attribute)
+
+
+associationJoin : Column -> Maybe Selectable
+associationJoin { constraint } =
+    case constraint of
+        ForeignKey { table, labelColumnName } ->
             labelColumnName
                 |> Maybe.map
-                    (\n -> PG.resource table <| PG.attributes [ n, "id" ])
+                    (\n -> PG.resource table (PG.attributes [ n, "id" ]))
 
-        filteMapFun { value } =
-            Value.foreignKeyParams value |> Maybe.andThen resources
-    in
-    Dict.values table_
-        |> List.filterMap filteMapFun
-        |> (++) (Dict.keys table_ |> List.map PG.attribute)
+        _ ->
+            Nothing
 
 
 resourceEndpoint : Url -> String -> Table -> Endpoint Resource

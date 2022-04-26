@@ -20,8 +20,6 @@ import Html.Attributes exposing (autocomplete, class, disabled, novalidate)
 import Html.Events exposing (onSubmit)
 import Notification
 import Postgrest.Client as PG
-import Postgrest.Field exposing (Field)
-import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
 import Postgrest.Schema exposing (Table)
@@ -160,11 +158,6 @@ mapMsg msg =
 id : Form -> Maybe String
 id record =
     toResource record |> Resource.id
-
-
-primaryKey : Form -> Maybe Field
-primaryKey record =
-    toResource record |> Resource.primaryKey
 
 
 
