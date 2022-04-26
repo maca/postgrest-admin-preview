@@ -1,4 +1,4 @@
-module Postgrest.Schema exposing (Schema, decoder, getSchema)
+module Postgrest.Schema exposing (Column, Schema, Table, decoder, getSchema)
 
 import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
@@ -16,7 +16,6 @@ import Json.Decode as Decode
         , string
         )
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey(..))
-import Postgrest.Schema.Table exposing (Column, Table)
 import Postgrest.Value exposing (Value(..))
 import Regex exposing (Regex)
 import Task exposing (Task)
@@ -26,12 +25,23 @@ import Url.Builder as Url
 import Utils.Task exposing (Error(..), fail, handleJsonResponse, toError)
 
 
-type alias Schema =
-    Dict String Table
-
-
 type alias ColumnNames =
     Dict String (List String)
+
+
+type alias Column =
+    { required : Bool
+    , decoder : Decoder Value
+    , value : Value
+    }
+
+
+type alias Table =
+    Dict String Column
+
+
+type alias Schema =
+    Dict String Table
 
 
 type alias ColumnDefinition =

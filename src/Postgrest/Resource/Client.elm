@@ -11,8 +11,7 @@ module Postgrest.Resource.Client exposing
 import Dict
 import Postgrest.Client as PG exposing (Endpoint, Request, Selectable)
 import Postgrest.Resource as Resource exposing (Resource)
-import Postgrest.Schema exposing (Schema)
-import Postgrest.Schema.Table as Table exposing (Table)
+import Postgrest.Schema exposing (Schema, Table)
 import Postgrest.Value as Value
 import PostgrestAdmin.AuthScheme as AuthScheme exposing (AuthScheme)
 import Url exposing (Url)
@@ -31,7 +30,7 @@ fetchOne : Client a -> Table -> String -> String -> Request Resource
 fetchOne { host } table resourcesName id =
     let
         pkName =
-            Table.primaryKeyName table |> Maybe.withDefault ""
+            Resource.primaryKeyName table |> Maybe.withDefault ""
     in
     resourceEndpoint host resourcesName table
         |> PG.getOne

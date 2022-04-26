@@ -51,7 +51,7 @@ import Parser
         , token
         )
 import Postgrest.Client as PG
-import Postgrest.Schema.Table exposing (Column, Table, columnValue)
+import Postgrest.Schema exposing (Column, Table)
 import Postgrest.Value exposing (Value(..))
 import Set exposing (Set)
 import Time exposing (posixToMillis, toHour, utc)
@@ -95,7 +95,7 @@ operation (Filter _ op) =
 
 fromColumn : String -> Column -> Maybe Filter
 fromColumn name col =
-    case columnValue col of
+    case .value col of
         PString _ ->
             Just <| text name equals ""
 
@@ -442,7 +442,7 @@ combineHelp (Filter name op) ((Filter name_ op_) as f_) =
 
 filterCons : Table -> (OperandConst -> Operation) -> String -> Maybe Filter
 filterCons table operationCons name =
-    case Dict.get name table |> Maybe.map columnValue of
+    case Dict.get name table |> Maybe.map .value of
         Just (PString _) ->
             Just <| Filter name <| operationCons Operand.text
 
@@ -474,7 +474,7 @@ filterCons table operationCons name =
 
 enumCons : Table -> (List String -> Operation) -> String -> Maybe Filter
 enumCons table operationCons name =
-    case Dict.get name table |> Maybe.map columnValue of
+    case Dict.get name table |> Maybe.map .value of
         Just (PEnum _ choices) ->
             if operationCons choices == IsNull Nothing then
                 Just <| Filter name <| OneOf <| Operand.enum choices Set.empty

@@ -2,7 +2,7 @@ module Route exposing (Route(..), toForm, toListing)
 
 import Form exposing (Form)
 import Listing exposing (Listing)
-import Postgrest.Schema.Table exposing (Table)
+import Postgrest.Schema exposing (Table)
 
 
 type Route

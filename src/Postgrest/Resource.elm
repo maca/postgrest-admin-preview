@@ -22,7 +22,7 @@ import Maybe.Extra as Maybe exposing (isNothing)
 import Postgrest.Client as PG
 import Postgrest.Field as Field exposing (Field)
 import Postgrest.PrimaryKey as PrimaryKey exposing (PrimaryKey)
-import Postgrest.Schema.Table exposing (Column, Table)
+import Postgrest.Schema exposing (Column, Table)
 import Postgrest.Value as Value exposing (ForeignKeyParams, Value(..))
 import Regex exposing (Regex)
 
@@ -73,7 +73,7 @@ encode resource =
             Encode.null
 
 
-primaryKeyName : Resource -> Maybe String
+primaryKeyName : Dict String { a | value : Value } -> Maybe String
 primaryKeyName resource =
     Dict.find (\_ v -> Value.isPrimaryKey v.value) resource
         |> Maybe.map Tuple.first
