@@ -11,7 +11,6 @@ module Form exposing
     , view
     )
 
-import Basics.Extra exposing (flip)
 import Browser.Navigation as Nav
 import Dict exposing (Dict)
 import Form.Input as Input exposing (Input)

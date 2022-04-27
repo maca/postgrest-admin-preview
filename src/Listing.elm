@@ -588,8 +588,8 @@ fieldToHtml { resourcesName, textSelect } { constraint, value } =
         PrimaryKey ->
             recordLink resourcesName textSelect value Nothing
 
-        ForeignKey { table, label } ->
-            recordLink table textSelect value label
+        ForeignKey { tableName, label } ->
+            recordLink tableName textSelect value label
 
         NoConstraint ->
             valueToHtml value
@@ -685,7 +685,10 @@ sortBy resourcesName sort ( name, { constraint } ) =
                         |> Maybe.map
                             (\columnName ->
                                 String.join "_"
-                                    [ resourcesName, params.table, columnName ]
+                                    [ resourcesName
+                                    , params.tableName
+                                    , columnName
+                                    ]
                             )
                         |> Maybe.withDefault name
 

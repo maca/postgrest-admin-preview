@@ -10,10 +10,8 @@ module Postgrest.Resource.Client exposing
 
 import Dict
 import Postgrest.Client as PG exposing (Endpoint, Request, Selectable)
-import Postgrest.Field exposing (Field)
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Schema exposing (Column, Constraint(..), Schema, Table)
-import Postgrest.Value as Value
 import PostgrestAdmin.AuthScheme as AuthScheme exposing (AuthScheme)
 import Url exposing (Url)
 import Utils.Task exposing (Error(..))
@@ -59,13 +57,7 @@ create { host } table resourcesName resource =
         |> PG.setParams [ PG.select <| selects table ]
 
 
-update :
-    Client a
-    -> Table
-    -> String
-    -> String
-    -> Resource
-    -> Request Resource
+update : Client a -> Table -> String -> String -> Resource -> Request Resource
 update { host } table resourcesName id resource =
     let
         pkName =
@@ -93,10 +85,10 @@ selects table =
 associationJoin : Column -> Maybe Selectable
 associationJoin { constraint } =
     case constraint of
-        ForeignKey { table, labelColumnName } ->
+        ForeignKey { tableName, labelColumnName } ->
             labelColumnName
                 |> Maybe.map
-                    (\n -> PG.resource table (PG.attributes [ n, "id" ]))
+                    (\n -> PG.resource tableName (PG.attributes [ n, "id" ]))
 
         _ ->
             Nothing
@@ -105,8 +97,7 @@ associationJoin { constraint } =
 resourceEndpoint : Url -> String -> Table -> Endpoint Resource
 resourceEndpoint url resourcesName table =
     Resource.decoder table
-        |> PG.endpoint
-            ({ url | path = "/" ++ resourcesName } |> Url.toString)
+        |> PG.endpoint ({ url | path = "/" ++ resourcesName } |> Url.toString)
 
 
 jwtString : Client a -> Maybe String

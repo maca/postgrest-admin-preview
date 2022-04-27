@@ -30,33 +30,33 @@ type Value
 encode : Value -> Encode.Value
 encode value =
     let
-        enc e =
-            Maybe.map e >> Maybe.withDefault Encode.null
+        encodeWith encoder =
+            Maybe.map encoder >> Maybe.withDefault Encode.null
     in
     case value of
-        PString mstring ->
-            enc Encode.string mstring
+        PString maybe ->
+            encodeWith Encode.string maybe
 
-        PText mstring ->
-            enc Encode.string mstring
+        PText maybe ->
+            encodeWith Encode.string maybe
 
-        PEnum mstring _ ->
-            enc Encode.string mstring
+        PEnum maybe _ ->
+            encodeWith Encode.string maybe
 
-        PFloat mfloat ->
-            enc Encode.float mfloat
+        PFloat maybe ->
+            encodeWith Encode.float maybe
 
-        PInt mint ->
-            enc Encode.int mint
+        PInt maybe ->
+            encodeWith Encode.int maybe
 
-        PBool mbool ->
-            enc Encode.bool mbool
+        PBool maybe ->
+            encodeWith Encode.bool maybe
 
-        PTime mtime ->
-            enc Encode.string (Maybe.map Iso8601.fromTime mtime)
+        PTime maybe ->
+            encodeWith Encode.string (Maybe.map Iso8601.fromTime maybe)
 
-        PDate mtime ->
-            enc Encode.string (Maybe.map Iso8601.fromTime mtime)
+        PDate maybe ->
+            encodeWith Encode.string (Maybe.map Iso8601.fromTime maybe)
 
         Unknown _ ->
             Encode.null
@@ -128,8 +128,8 @@ updateWithString string value =
         PDate _ ->
             PDate <| Result.toMaybe <| Iso8601.toTime string
 
-        other ->
-            other
+        Unknown _ ->
+            value
 
 
 isTrue : Value -> Maybe Bool
@@ -145,20 +145,20 @@ isTrue value =
 toString : Value -> Maybe String
 toString value =
     case value of
-        PString mstring ->
-            mstring
+        PString maybe ->
+            maybe
 
-        PText mstring ->
-            mstring
+        PText maybe ->
+            maybe
 
-        PEnum mstring _ ->
-            mstring
+        PEnum maybe _ ->
+            maybe
 
-        PFloat mfloat ->
-            Maybe.map String.fromFloat mfloat
+        PFloat maybe ->
+            Maybe.map String.fromFloat maybe
 
-        PInt mint ->
-            Maybe.map String.fromInt mint
+        PInt maybe ->
+            Maybe.map String.fromInt maybe
 
         PBool (Just True) ->
             Just "true"
@@ -166,11 +166,11 @@ toString value =
         PBool (Just False) ->
             Just "false"
 
-        PTime mtime ->
-            Maybe.map (Iso8601.fromTime >> String.slice 0 19) mtime
+        PTime maybe ->
+            Maybe.map (Iso8601.fromTime >> String.slice 0 19) maybe
 
-        PDate mtime ->
-            Maybe.map (Iso8601.fromTime >> String.slice 0 10) mtime
+        PDate maybe ->
+            Maybe.map (Iso8601.fromTime >> String.slice 0 10) maybe
 
         _ ->
             Nothing

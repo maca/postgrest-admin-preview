@@ -51,7 +51,7 @@ type Constraint
 
 
 type alias ForeignKeyParams =
-    { table : String
+    { tableName : String
     , primaryKeyName : String
     , labelColumnName : Maybe String
     , label : Maybe String
@@ -231,7 +231,7 @@ columnConstraint columnNames description =
     case extractForeignKey description of
         [ tableName, primaryKeyName ] ->
             ForeignKey
-                { table = tableName
+                { tableName = tableName
                 , primaryKeyName = primaryKeyName
                 , labelColumnName =
                     Dict.get tableName columnNames

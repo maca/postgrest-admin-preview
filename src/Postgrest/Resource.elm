@@ -132,7 +132,7 @@ referenceLabelDecoder : ForeignKeyParams -> Decoder (Maybe String)
 referenceLabelDecoder params =
     case params.labelColumnName of
         Just columnName ->
-            Decode.maybe (Decode.at [ params.table, columnName ] string)
+            Decode.maybe (Decode.at [ params.tableName, columnName ] string)
 
         Nothing ->
             Decode.succeed Nothing

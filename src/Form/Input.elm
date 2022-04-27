@@ -52,19 +52,13 @@ type alias Autocomplete =
     { results : List Resource
     , userInput : String
     , blocked : Bool
-    , foreignKeyParams : ForeignKeyParams
     }
 
 
 type Msg
-    = Changed String Input String
-    | AutocompleteInput String Field Autocomplete String
-    | ListingFetched String Field Autocomplete AutocompleteResult
+    = Changed ( String, Input ) String
+    | ListingFetched String (Result Error (List Resource))
     | Failed Error
-
-
-type alias AutocompleteResult =
-    Result Error (List Resource)
 
 
 type Input
@@ -92,38 +86,25 @@ mapMsg msg =
 update : Client a -> Msg -> Fields -> ( Fields, Cmd Msg )
 update client msg record =
     case msg of
-        Changed name input userInput ->
+        Changed ( name, Association field autocomplete ) "" ->
             let
-                value =
-                    toField input
-                        |> .value
-                        |> Value.updateWithString userInput
+                input =
+                    Association (Field.updateWithString "" field)
+                        { autocomplete
+                            | userInput = ""
+                            , blocked = False
+                        }
             in
-            ( Dict.insert name (updateInput value input) record, Cmd.none )
+            ( Dict.insert name input record
+            , Cmd.none
+            )
 
-        AutocompleteInput name field autocomplete "" ->
+        Changed ( name, Association field autocomplete ) userInput ->
             case field.constraint of
-                ForeignKey prevParams ->
-                    let
-                        constraint =
-                            ForeignKey autocomplete.foreignKeyParams
-
-                        association =
-                            Association
-                                { field | constraint = constraint }
-                                autocomplete
-                    in
-                    ( Dict.insert name association record, Cmd.none )
-
-                _ ->
-                    ( record, Cmd.none )
-
-        AutocompleteInput name field autocomplete userInput ->
-            case field.constraint of
-                ForeignKey prevParams ->
+                ForeignKey params ->
                     let
                         resource =
-                            findResource autocomplete userInput
+                            findResource params autocomplete userInput
 
                         value =
                             Maybe.andThen Resource.primaryKey resource
@@ -131,87 +112,88 @@ update client msg record =
                                 |> Maybe.withDefault field.value
 
                         label =
-                            Maybe.andThen
-                                (resourceLabel autocomplete.foreignKeyParams)
-                                resource
+                            Maybe.andThen (resourceLabel params) resource
 
-                        params =
-                            { prevParams | label = label }
+                        constraint =
+                            ForeignKey { params | label = label }
 
-                        field_ =
-                            Field.update value
-                                { field | constraint = ForeignKey params }
-
-                        association =
-                            Association field_ autocomplete
+                        input_ =
+                            Association
+                                (Field.update value
+                                    { field | constraint = constraint }
+                                )
+                                { autocomplete
+                                    | userInput =
+                                        Maybe.withDefault userInput label
+                                    , blocked = False
+                                }
                     in
-                    ( Dict.insert name association record
-                    , fetchResources client name field_ <|
-                        { autocomplete
-                            | userInput = Maybe.withDefault userInput label
-                            , foreignKeyParams = params
-                            , blocked = False
-                            , results = []
-                        }
+                    ( Dict.insert name input_ record
+                    , fetchResources client name params userInput
                     )
 
                 _ ->
                     ( record, Cmd.none )
 
-        ListingFetched name field autocomplete result ->
-            case result of
-                Ok [] ->
-                    let
-                        association =
-                            Association field
-                                { autocomplete | results = [], blocked = True }
-                    in
-                    ( Dict.insert name association record
-                    , Cmd.none
-                    )
+        Changed ( name, input ) userInput ->
+            let
+                updateFun =
+                    Field.updateWithString userInput
+            in
+            ( Dict.insert name (mapField updateFun input) record
+            , Cmd.none
+            )
 
-                Ok results ->
+        ListingFetched name (Ok results) ->
+            case Dict.get name record of
+                Just (Association field params) ->
                     let
-                        autocomplete_ =
-                            { autocomplete | results = results }
-                    in
-                    ( Dict.insert name (Association field autocomplete_) record
-                    , Cmd.none
-                    )
+                        input =
+                            Association field <|
+                                if List.isEmpty results then
+                                    { params | results = [], blocked = True }
 
-                Err _ ->
+                                else
+                                    { params | results = results }
+                    in
+                    ( Dict.insert name input record, Cmd.none )
+
+                _ ->
                     ( record, Cmd.none )
+
+        ListingFetched _ (Err _) ->
+            ( record, Cmd.none )
 
         Failed _ ->
             ( record, Cmd.none )
 
 
-updateInput : Value -> Input -> Input
-updateInput value input =
+mapField : (Field -> Field) -> Input -> Input
+mapField updateField input =
     case input of
         Text field ->
-            Text <| Field.update value field
+            Text (updateField field)
 
         TextArea field ->
-            TextArea <| Field.update value field
+            TextArea (updateField field)
 
         Select field opts ->
-            Select (Field.update value field) opts
+            Select (updateField field) opts
 
         Number field ->
-            Number <| Field.update value field
+            Number (updateField field)
 
         Checkbox field ->
-            Checkbox <| Field.update value field
+            Checkbox (updateField field)
 
         DateTime field ->
-            DateTime <| Field.update value field
+            DateTime (updateField field)
 
         Date field ->
-            Date <| Field.update value field
+            Date (updateField field)
 
         Association field autocomplete ->
-            Association (Field.update value field) autocomplete
+            Association (updateField field) autocomplete
 
         Blank _ ->
             input
@@ -254,12 +236,11 @@ fromField field =
         PrimaryKey ->
             Blank field
 
-        ForeignKey params ->
+        ForeignKey { label } ->
             Association field
-                { userInput = params.label |> Maybe.withDefault ""
+                { userInput = Maybe.withDefault "" label
                 , results = []
                 , blocked = False
-                , foreignKeyParams = params
                 }
 
         NoConstraint ->
@@ -356,7 +337,8 @@ view name input =
                 |> wrapInput input name
 
         Association field params ->
-            displayAutocompleteInput params field |> wrapInput input name
+            displayAutocompleteInput params field input
+                |> wrapInput input name
 
         Blank _ ->
             text ""
@@ -377,49 +359,51 @@ wrapInput input name buildInput =
         ]
 
 
-displayAutocompleteInput : Autocomplete -> Field -> String -> Html Msg
-displayAutocompleteInput ({ foreignKeyParams } as autocomplete) field name =
-    let
-        prevLength =
-            String.length autocomplete.userInput
+displayAutocompleteInput : Autocomplete -> Field -> Input -> String -> Html Msg
+displayAutocompleteInput autocomplete field input name =
+    case field.constraint of
+        ForeignKey foreignKeyParams ->
+            let
+                prevLength =
+                    String.length autocomplete.userInput
 
-        inputCallback string =
-            AutocompleteInput name field autocomplete <|
-                if
-                    autocomplete.blocked
-                        && (String.length string >= prevLength)
-                then
-                    autocomplete.userInput
+                inputCallback string =
+                    Changed ( name, input ) <|
+                        if
+                            autocomplete.blocked
+                                && (String.length string >= prevLength)
+                        then
+                            autocomplete.userInput
 
-                else
-                    string
-    in
-    div [ class "autocomplete-input" ]
-        [ Html.datalist
-            [ id foreignKeyParams.table ]
-            (-- if Value.isNothing field.value then
-             List.map (autocompleteOption foreignKeyParams)
-                autocomplete.results
-             -- else
-             --     []
-            )
-        , div
-            [ class "association-link" ]
-            [ associationLink foreignKeyParams field ]
-        , Html.input
-            [ onInput inputCallback
-            , id name
-            , list foreignKeyParams.table
-            , required field.required
-            , Html.Attributes.type_ "text"
-            , Html.Attributes.value autocomplete.userInput
-            ]
-            []
-        ]
+                        else
+                            string
+            in
+            div [ class "autocomplete-input" ]
+                [ Html.datalist
+                    [ id foreignKeyParams.tableName ]
+                    (List.map (autocompleteOption foreignKeyParams)
+                        autocomplete.results
+                    )
+                , div
+                    [ class "association-link" ]
+                    [ associationLink foreignKeyParams field ]
+                , Html.input
+                    [ onInput inputCallback
+                    , id name
+                    , list foreignKeyParams.tableName
+                    , required field.required
+                    , Html.Attributes.type_ "text"
+                    , Html.Attributes.value autocomplete.userInput
+                    ]
+                    []
+                ]
+
+        _ ->
+            text ""
 
 
 associationLink : ForeignKeyParams -> Field -> Html Msg
-associationLink params { value, constraint } =
+associationLink params { value } =
     if Value.isNothing value then
         text "-"
 
@@ -429,7 +413,9 @@ associationLink params { value, constraint } =
                 Value.toString value |> Maybe.withDefault ""
         in
         a
-            [ href <| Url.absolute [ params.table, id ] [], target "_blank" ]
+            [ href (Url.absolute [ params.tableName, id ] [])
+            , target "_blank"
+            ]
             [ text id ]
 
 
@@ -457,7 +443,7 @@ resourceLabel { labelColumnName } resource =
 displayInput : String -> Input -> Maybe String -> String -> Html Msg
 displayInput type_ input mstring name =
     Html.input
-        [ onInput <| Changed name input
+        [ onInput (Changed ( name, input ))
         , id name
         , required <| isRequired input
         , Html.Attributes.type_ type_
@@ -477,7 +463,7 @@ displayTextArea input mstring name =
         , attribute "data-replicated-value" content
         ]
         [ Html.textarea
-            [ onInput <| Changed name input
+            [ onInput (Changed ( name, input ))
             , id name
             , required <| isRequired input
             , Html.Attributes.value content
@@ -502,7 +488,7 @@ displaySelect options input mstring name =
                 [ text <| String.humanize opt ]
     in
     Html.select
-        [ onInput <| Changed name input
+        [ onInput (Changed ( name, input ))
         , id name
         , required <| isRequired input
         , Html.Attributes.value <| Maybe.withDefault "" mstring
@@ -513,7 +499,7 @@ displaySelect options input mstring name =
 displayCheckbox : Input -> Maybe Bool -> String -> Html Msg
 displayCheckbox input mchecked name =
     Html.input
-        [ onInput <| Changed name input
+        [ onInput (Changed ( name, input ))
         , id name
         , Html.Attributes.type_ "checkbox"
         , Maybe.map checked mchecked |> Maybe.withDefault (class "")
@@ -528,59 +514,57 @@ displayError error =
         |> Maybe.withDefault (text "")
 
 
-fetchResources : Client a -> String -> Field -> Autocomplete -> Cmd Msg
-fetchResources client name field ({ foreignKeyParams } as autocomplete) =
-    case Dict.get foreignKeyParams.table client.schema of
+fetchResources : Client a -> String -> ForeignKeyParams -> String -> Cmd Msg
+fetchResources client name { tableName, labelColumnName } userInput =
+    case Dict.get tableName client.schema of
         Just table ->
             let
                 selects =
-                    foreignKeyParams.labelColumnName
+                    labelColumnName
                         |> Maybe.map (flip (::) [ "id" ])
                         |> Maybe.withDefault [ "id" ]
                         |> PG.attributes
 
                 idQuery =
-                    String.toInt autocomplete.userInput
+                    String.toInt userInput
                         |> Maybe.map (PG.param "id" << PG.eq << PG.int)
 
-                ilike column input =
-                    PG.param column <| PG.ilike ("*" ++ input ++ "*")
+                ilike column string =
+                    PG.param column <| PG.ilike ("*" ++ string ++ "*")
 
                 labelQuery =
                     Maybe.map2 ilike
-                        foreignKeyParams.labelColumnName
-                        (String.nonBlank autocomplete.userInput)
+                        labelColumnName
+                        (String.nonBlank userInput)
 
                 queries =
                     List.filterMap identity [ idQuery, labelQuery ]
             in
             if List.isEmpty queries then
-                AutocompleteError autocomplete.userInput
+                AutocompleteError userInput
                     |> fail Failed
 
             else
                 case AuthScheme.toJwt client.authScheme of
                     Just token ->
-                        Client.fetchMany client table foreignKeyParams.table
+                        Client.fetchMany client table tableName
                             |> PG.setParams
                                 [ PG.select selects
                                 , PG.or queries
                                 , PG.limit 40
                                 ]
                             |> PG.toCmd token
-                                (ListingFetched name field autocomplete
-                                    << Result.mapError PGError
-                                )
+                                (Result.mapError PGError >> ListingFetched name)
 
                     Nothing ->
                         fail Failed AuthError
 
         Nothing ->
-            fail Failed <| BadSchema foreignKeyParams.table
+            fail Failed (BadSchema tableName)
 
 
-findResource : Autocomplete -> String -> Maybe Resource
-findResource ({ foreignKeyParams } as autocomplete) userInput =
+findResource : ForeignKeyParams -> Autocomplete -> String -> Maybe Resource
+findResource foreignKeyParams autocomplete userInput =
     let
         userInputLower =
             String.toLower userInput

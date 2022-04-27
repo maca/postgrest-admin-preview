@@ -4,6 +4,7 @@ module Postgrest.Field exposing
     , isPrimaryKey
     , setError
     , update
+    , updateWithString
     , validate
     )
 
@@ -30,6 +31,11 @@ isPrimaryKey { constraint } =
 update : Value -> Field -> Field
 update value field =
     validate { field | value = value, changed = True }
+
+
+updateWithString : String -> Field -> Field
+updateWithString string field =
+    { field | value = Value.updateWithString string field.value }
 
 
 validate : Field -> Field
