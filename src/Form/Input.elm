@@ -122,16 +122,25 @@ update client msg record =
             case field.constraint of
                 ForeignKey prevParams ->
                     let
-                        label =
+                        resource =
                             findResource autocomplete userInput
-                                |> Maybe.andThen
-                                    (resourceLabel autocomplete.foreignKeyParams)
+
+                        value =
+                            Maybe.andThen Resource.primaryKey resource
+                                |> Maybe.map .value
+                                |> Maybe.withDefault field.value
+
+                        label =
+                            Maybe.andThen
+                                (resourceLabel autocomplete.foreignKeyParams)
+                                resource
 
                         params =
                             { prevParams | label = label }
 
                         field_ =
-                            { field | constraint = ForeignKey params }
+                            Field.update value
+                                { field | constraint = ForeignKey params }
 
                         association =
                             Association field_ autocomplete
@@ -241,6 +250,24 @@ toField input =
 
 fromField : Field -> Input
 fromField field =
+    case field.constraint of
+        PrimaryKey ->
+            Blank field
+
+        ForeignKey params ->
+            Association field
+                { userInput = params.label |> Maybe.withDefault ""
+                , results = []
+                , blocked = False
+                , foreignKeyParams = params
+                }
+
+        NoConstraint ->
+            fromFieldWithValue field
+
+
+fromFieldWithValue : Field -> Input
+fromFieldWithValue field =
     case field.value of
         PString _ ->
             Text field
@@ -266,15 +293,6 @@ fromField field =
         PDate _ ->
             Date field
 
-        -- PForeignKey _ params ->
-        --     Association field
-        --         { userInput = params.label |> Maybe.withDefault ""
-        --         , results = []
-        --         , blocked = False
-        --         , foreignKeyParams = params
-        --         }
-        -- PPrimaryKey _ ->
-        --     Blank field
         Unknown _ ->
             Blank field
 
@@ -362,36 +380,29 @@ wrapInput input name buildInput =
 displayAutocompleteInput : Autocomplete -> Field -> String -> Html Msg
 displayAutocompleteInput ({ foreignKeyParams } as autocomplete) field name =
     let
-        makeDatalist =
-            Html.datalist [ id foreignKeyParams.table ]
-
-        datalist =
-            if Value.isNothing field.value then
-                List.map (autocompleteOption foreignKeyParams)
-                    autocomplete.results
-                    |> makeDatalist
-
-            else
-                makeDatalist []
-
-        tagger =
-            AutocompleteInput name field autocomplete
-
         prevLength =
             String.length autocomplete.userInput
 
         inputCallback string =
-            if
-                autocomplete.blocked
-                    && (String.length string >= prevLength)
-            then
-                tagger autocomplete.userInput
+            AutocompleteInput name field autocomplete <|
+                if
+                    autocomplete.blocked
+                        && (String.length string >= prevLength)
+                then
+                    autocomplete.userInput
 
-            else
-                tagger string
+                else
+                    string
     in
     div [ class "autocomplete-input" ]
-        [ datalist
+        [ Html.datalist
+            [ id foreignKeyParams.table ]
+            (-- if Value.isNothing field.value then
+             List.map (autocompleteOption foreignKeyParams)
+                autocomplete.results
+             -- else
+             --     []
+            )
         , div
             [ class "association-link" ]
             [ associationLink foreignKeyParams field ]

@@ -280,8 +280,7 @@ view ((Form params record) as form) =
 recordLabel : Form -> Maybe String
 recordLabel record =
     case
-        List.filterMap (recordLabelHelp record) recordIdentifiers
-            |> List.head
+        List.filterMap (recordLabelHelp record) recordIdentifiers |> List.head
     of
         Just label ->
             Just label
