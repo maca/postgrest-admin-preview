@@ -35,7 +35,7 @@ update value field =
 
 updateWithString : String -> Field -> Field
 updateWithString string field =
-    { field | value = Value.updateWithString string field.value }
+    update (Value.updateWithString string field.value) field
 
 
 validate : Field -> Field
