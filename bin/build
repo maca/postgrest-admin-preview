@@ -1,0 +1,30 @@
+#!/usr/bin/env sh
+
+set -ex
+
+
+root=$(pwd)/$(dirname "$0")/..
+build=$root/build
+host=$POSTGREST_HOST
+
+
+cd $root
+yarn install
+
+rm -rf build
+mkdir build
+
+
+yarn run postcss css/app.css --no-map \
+     -u autoprefixer \
+     -u postcss-import \
+     -u postcss-import-url \
+     -u postcss-minify \
+     -d $build/css
+
+
+yarn run elm make src/Main.elm --optimize --output=$build/elm.js
+echo "/* /index.html 200" >  $build/_redirects
+
+
+sed "s|http://localhost:8080|$host|" $root/index.html > $build/index.html
