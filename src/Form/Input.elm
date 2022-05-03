@@ -114,21 +114,18 @@ update client msg record =
                         label =
                             Maybe.andThen (resourceLabel params) resource
 
-                        constraint =
+                        fkey =
                             ForeignKey { params | label = label }
-
-                        input_ =
-                            Association
-                                (Field.update value
-                                    { field | constraint = constraint }
-                                )
-                                { autocomplete
-                                    | userInput =
-                                        Maybe.withDefault userInput label
-                                    , blocked = False
-                                }
                     in
-                    ( Dict.insert name input_ record
+                    ( Dict.insert name
+                        (Association
+                            (Field.update value { field | constraint = fkey })
+                            { autocomplete
+                                | userInput = Maybe.withDefault userInput label
+                                , blocked = False
+                            }
+                        )
+                        record
                     , fetchResources client name params userInput
                     )
 
@@ -530,7 +527,7 @@ fetchResources client name { tableName, labelColumnName } userInput =
                         |> Maybe.map (PG.param "id" << PG.eq << PG.int)
 
                 ilike column string =
-                    PG.param column <| PG.ilike ("*" ++ string ++ "*")
+                    PG.param column (PG.ilike ("*" ++ string ++ "*"))
 
                 labelQuery =
                     Maybe.map2 ilike
