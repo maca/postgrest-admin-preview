@@ -82,8 +82,8 @@ errorToString error =
         PGError (PG.BadStatus 403 _ _) ->
             "You are not authorized to perform this action"
 
-        PGError (PG.BadStatus _ _ { details }) ->
-            details
+        PGError (PG.BadStatus _ _ { message }) ->
+            message
                 |> Maybe.map (\msg -> "The server responded with error: " ++ msg)
                 |> Maybe.withDefault genericError
 

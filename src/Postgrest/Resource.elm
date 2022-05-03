@@ -69,14 +69,7 @@ changed resource =
 
 encode : Resource -> Encode.Value
 encode resource =
-    case primaryKeyName resource of
-        Just pkName ->
-            resource
-                |> Dict.remove pkName
-                |> Encode.dict identity (.value >> Value.encode)
-
-        Nothing ->
-            Encode.null
+    Encode.dict identity (.value >> Value.encode) resource
 
 
 primaryKeyName : Dict String { a | constraint : Constraint } -> Maybe String

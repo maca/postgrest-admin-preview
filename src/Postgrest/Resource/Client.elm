@@ -57,17 +57,23 @@ create { host } table resourcesName resource =
         |> PG.setParams [ PG.select <| selects table ]
 
 
-update : Client a -> Table -> String -> String -> Resource -> Request Resource
-update { host } table resourcesName id resource =
+update :
+    Client a
+    -> Table
+    -> String
+    -> ( Maybe String, String )
+    -> Resource
+    -> Request Resource
+update { host } table resourcesName ( primaryKeyName, id ) resource =
     let
-        pkName =
-            Resource.primaryKeyName resource |> Maybe.withDefault ""
-
         endpoint =
             resourceEndpoint host resourcesName table
 
         pk =
-            PG.primaryKey ( pkName, PG.string )
+            PG.primaryKey
+                ( primaryKeyName |> Maybe.withDefault ""
+                , PG.string
+                )
     in
     Resource.encode resource
         |> PG.patchByPrimaryKey endpoint pk id

@@ -21,7 +21,7 @@ import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Postgrest.Client as PG
-import PostgrestAdmin.ConfigUtils exposing (optionalFlag)
+import PostgrestAdmin.Flag as Flag
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 import String.Extra as String
 import Task exposing (Task)
@@ -87,7 +87,7 @@ config =
             |> Decode.map (\token -> Success params (Token <| PG.jwt token))
         , readyDecoder params
         ]
-        |> optionalFlag "authUrl" withAuthUrlDecoder
+        |> Flag.string "authUrl" withAuthUrlDecoder
 
 
 readyDecoder : Params -> Decoder BasicAuth

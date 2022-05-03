@@ -36,6 +36,7 @@ type alias Params =
     { resourcesName : String
     , table : Table
     , fieldNames : List String
+    , id : Maybe String
     }
 
 
@@ -114,13 +115,34 @@ toResource (Form _ fields) =
     Dict.map (\_ input -> Input.toField input) fields
 
 
+toFormFields : Form -> Resource
+toFormFields form =
+    toResource (filterFields form)
+
+
+formInputs : Form -> List ( String, Input )
+formInputs (Form _ inputs) =
+    Dict.toList inputs |> List.sortWith sortInputs
+
+
+filterFields : Form -> Form
+filterFields (Form params inputs) =
+    Form params (Dict.filter (inputIsEditable params.fieldNames) inputs)
+
+
+inputIsEditable : List String -> String -> Input -> Bool
+inputIsEditable fieldNames name input =
+    let
+        field =
+            Input.toField input
+    in
+    (List.isEmpty fieldNames && not (Field.isPrimaryKey field))
+        || List.member name fieldNames
+
+
 fromResource : Params -> Resource -> Form
 fromResource params resource =
     resource
-        |> Dict.filter
-            (\name field ->
-                not (Field.isPrimaryKey field)
-            )
         |> Dict.map (\_ input -> Input.fromField input)
         |> Form params
 
@@ -137,12 +159,12 @@ changed (Form _ fields) =
 
 errors : Form -> Dict String (Maybe String)
 errors record =
-    toResource record |> Resource.errors
+    toFormFields record |> Resource.errors
 
 
 hasErrors : Form -> Bool
 hasErrors record =
-    toResource record |> Resource.hasErrors
+    toFormFields record |> Resource.hasErrors
 
 
 mapMsg : Msg -> OuterMsg
@@ -207,10 +229,10 @@ fetch client (Form { table, resourcesName } _) rid =
 
 
 save : Client a -> Form -> Cmd Msg
-save client form =
-    case id form of
-        Just rid ->
-            updateRecord client form rid
+save client ((Form params _) as form) =
+    case params.id of
+        Just formId ->
+            updateRecord client form formId
                 |> attemptWithError Failed Updated
 
         Nothing ->
@@ -222,8 +244,13 @@ updateRecord : Client a -> Form -> String -> Task Error Resource
 updateRecord client ((Form { table, resourcesName } _) as form) rid =
     case AuthScheme.toJwt client.authScheme of
         Just token ->
-            toResource form
-                |> Client.update client table resourcesName rid
+            let
+                primaryKeyName =
+                    toResource form
+                        |> Resource.primaryKeyName
+            in
+            toFormFields form
+                |> Client.update client table resourcesName ( primaryKeyName, rid )
                 |> PG.toTask token
                 |> Task.mapError PGError
 
@@ -235,7 +262,7 @@ createRecord : Client a -> Form -> Task Error Resource
 createRecord client ((Form { table, resourcesName } _) as form) =
     case AuthScheme.toJwt client.authScheme of
         Just token ->
-            toResource form
+            toFormFields form
                 |> Client.create client table resourcesName
                 |> PG.toTask token
                 |> Task.mapError PGError
@@ -249,11 +276,11 @@ createRecord client ((Form { table, resourcesName } _) as form) =
 
 
 view : Form -> Html Msg
-view ((Form params record) as form) =
+view ((Form params _) as form) =
     let
         fields =
-            Dict.toList record
-                |> List.sortWith sortInputs
+            filterFields form
+                |> formInputs
                 |> List.map
                     (\( name, input ) ->
                         Input.view name input |> Html.map Changed

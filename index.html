@@ -28,7 +28,10 @@
       flags: {
         host: "http://localhost:8080",
         authUrl: "http://localhost:8080/rpc/login",
-        jwt: sessionStorage.getItem("jwt")
+        jwt: sessionStorage.getItem("jwt"),
+        formFields : {
+          documents : ["id", "document_collection_id", "title", "description" ]
+        }
       }
     })
 

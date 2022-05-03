@@ -2,7 +2,7 @@ port module PostgrestAdmin exposing (Model, Msg, application, applicationParams)
 
 import Browser
 import Browser.Navigation as Nav
-import Dict
+import Dict exposing (Dict)
 import Dict.Extra as Dict
 import Form exposing (Form(..))
 import Html exposing (Html, a, aside, div, h1, li, pre, text, ul)
@@ -54,6 +54,7 @@ type alias Model =
         , key : Nav.Key
         , notification : Notification
         , error : Maybe Error
+        , formFields : Dict String (List String)
         }
 
 
@@ -84,6 +85,7 @@ init decoder flags url key =
             , error = Nothing
             , host = config.url
             , authScheme = config.authScheme
+            , formFields = config.formFields
             }
     in
     case Decode.decodeValue decoder flags of
@@ -363,7 +365,7 @@ routeParser url model =
     Parser.oneOf
         [ Parser.map Route.Root Parser.top
         , Parser.map (makeListingRoute model url) Parser.string
-        , formRouteParser
+        , formRouteParser model
         ]
 
 
@@ -386,27 +388,29 @@ makeListingRoute model url resourcesName =
         (Listing.init resourcesName url.query >> modify >> Route.Listing)
 
 
-formRouteParser : Parser (Route -> a) a
-formRouteParser =
+formRouteParser : Model -> Parser (Route -> a) a
+formRouteParser model =
     Parser.map
-        (\res id -> Route.LoadingTable res (makeFormRoute res id))
+        (\res id -> Route.LoadingTable res (makeFormRoute model res id))
         (Parser.string </> Parser.string)
 
 
-makeFormRoute : String -> String -> Table -> Route
-makeFormRoute resources id table =
+makeFormRoute : Model -> String -> String -> Table -> Route
+makeFormRoute { formFields } resourcesName id table =
     let
-        params =
-            { resourcesName = resources
-            , table = table
-            , fieldNames = []
-            }
-
-        form =
-            Form.fromTable params table
+        makeForm formId =
+            Form.fromTable
+                { resourcesName = resourcesName
+                , table = table
+                , fieldNames =
+                    Dict.get resourcesName formFields
+                        |> Maybe.withDefault []
+                , id = formId
+                }
+                table
     in
     if id == "new" then
-        Route.Form form
+        Route.Form (makeForm Nothing)
 
     else
-        Route.FormLoading form id
+        Route.FormLoading (makeForm (Just id)) id

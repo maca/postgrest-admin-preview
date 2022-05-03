@@ -3,20 +3,23 @@ module PostgrestAdmin.Config exposing
     , default
     , init
     , withBasicAuth
+    , withFormFields
     , withHost
     , withJwt
     )
 
 import BasicAuth exposing (BasicAuth)
+import Dict exposing (Dict)
 import Json.Decode as Decode exposing (Decoder)
 import PostgrestAdmin.AuthScheme as AuthScheme exposing (AuthScheme)
-import PostgrestAdmin.ConfigUtils exposing (optionalFlag)
+import PostgrestAdmin.Flag as Flag
 import Url exposing (Protocol(..), Url)
 
 
 type alias Config =
     { url : Url
     , authScheme : AuthScheme
+    , formFields : Dict String (List String)
     }
 
 
@@ -31,13 +34,15 @@ default =
         , query = Nothing
         , fragment = Nothing
         }
+    , formFields = Dict.empty
     }
 
 
 init : Decoder Config
 init =
     Decode.succeed default
-        |> optionalFlag "host" withHostDecoder
+        |> Flag.string "host" withHostDecoder
+        |> Flag.stringDict "formFields" withFormFieldsDecoder
 
 
 withHost : String -> Decoder Config -> Decoder Config
@@ -67,3 +72,13 @@ withBasicAuth authDecoder decoder =
     Decode.map2 (\auth conf -> { conf | authScheme = AuthScheme.basic auth })
         authDecoder
         decoder
+
+
+withFormFields : Dict String (List String) -> Decoder Config -> Decoder Config
+withFormFields fields decoder =
+    decoder |> Decode.andThen (withFormFieldsDecoder fields)
+
+
+withFormFieldsDecoder : Dict String (List String) -> Config -> Decoder Config
+withFormFieldsDecoder fields conf =
+    Decode.succeed { conf | formFields = fields }
