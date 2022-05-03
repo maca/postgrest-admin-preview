@@ -89,9 +89,6 @@ init decoder flags url key =
     case Decode.decodeValue decoder flags of
         Ok config ->
             let
-                _ =
-                    Debug.log "config" config
-
                 model =
                     makeModel config
             in

@@ -1,0 +1,66 @@
+#!/usr/bin/env sh
+
+
+echo -e "is the name of your \033[31;1mexisting couchdb admin\033[0m?"
+read adminName
+
+echo -e "What is the password of your \033[31;1mexisting couchdb admin\033[0m?"
+read adminPassword
+
+echo -e "\nWhat is the name of the couchdb \033[31;1muser to be created\033[0m?"
+read userName
+
+echo -e "What is the password of the couchdb \033[31;1muser to be created\033[0m?"
+read userPassword
+
+
+
+
+set -ex
+
+yarn install
+
+
+# Login as admin
+cookie=$(
+  curl -i -H Content-Type\:\ application/x-www-form-urlencoded \
+      -XPOST http\://localhost\:5984/_session -d name\=$adminName\&password\=$adminPassword \
+      | grep 'Set-Cookie' | cut -d" " -f2 | sed 's|;$||'
+)
+
+# Create `documents` database
+curl -i -XPUT \
+     -b $cookie \
+     http\://localhost\:5984/documents
+
+
+# Populate with a sample indexing schema
+curl -i -XPUT \
+curl -i -H Content-Type\:\ application/json -H Accept\:\ application/json \
+     -b $cookie \
+     --data "@./assets/schema.json" \
+     -XPUT http\://localhost\:5984/documents/schema
+
+
+# Create couchdb user
+curl -i -H Content-Type\:\ application/json -H Accept\:\ application/json \
+     -b $cookie \
+     -XPUT http\://localhost\:5984/_users/org.couchdb.user\:${userName} \
+     -d \{'
+'\ \ \"name\"\:\ \"$userName\"\,'
+'\ \ \"password\"\:\ \"$userPassword\"\,'
+'\ \ \"roles\"\:\ \[\"admin\"\]\,'
+'\ \ \"type\"\:\ \"user\"'
+'\}'
+''
+'
+
+# Set permissions for the database
+curl -i -H Content-Type\:\ application/json \
+     -b $cookie \
+     -XPUT http\://localhost\:5984/documents/_security -d \{'
+'\ \ \"admins\"\:\ \{\ \"names\"\:\ \[\]\,\ \"roles\"\:\ \[\]\ \}\,'
+'\ \ \"members\"\:\ \{\ \"names\"\:\ \[\]\,\ \"roles\"\:\ \[\"admin\"\]\ \}'
+'\}'
+''
+'
