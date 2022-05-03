@@ -35,6 +35,7 @@ import Utils.Task exposing (Error(..), attemptWithError, fail)
 type alias Params =
     { resourcesName : String
     , table : Table
+    , fieldNames : List String
     }
 
 
@@ -115,7 +116,12 @@ toResource (Form _ fields) =
 
 fromResource : Params -> Resource -> Form
 fromResource params resource =
-    Dict.map (\_ input -> Input.fromField input) resource
+    resource
+        |> Dict.filter
+            (\name field ->
+                not (Field.isPrimaryKey field)
+            )
+        |> Dict.map (\_ input -> Input.fromField input)
         |> Form params
 
 

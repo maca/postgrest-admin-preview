@@ -231,7 +231,7 @@ fromField : Field -> Input
 fromField field =
     case field.constraint of
         PrimaryKey ->
-            Blank field
+            fromFieldWithValue field
 
         ForeignKey { label } ->
             Association field

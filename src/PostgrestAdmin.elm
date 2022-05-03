@@ -399,6 +399,7 @@ makeFormRoute resources id table =
         params =
             { resourcesName = resources
             , table = table
+            , fieldNames = []
             }
 
         form =
