@@ -1,15 +1,16 @@
 module PostgrestAdmin.Config exposing
     ( Config
     , default
-    , noFlags
+    , init
     , withBasicAuth
+    , withHost
     , withJwt
-    , withUrl
     )
 
 import BasicAuth exposing (BasicAuth)
 import Json.Decode as Decode exposing (Decoder)
 import PostgrestAdmin.AuthScheme as AuthScheme exposing (AuthScheme)
+import PostgrestAdmin.ConfigUtils exposing (optionalFlag)
 import Url exposing (Protocol(..), Url)
 
 
@@ -33,22 +34,23 @@ default =
     }
 
 
-noFlags : Decoder Config
-noFlags =
+init : Decoder Config
+init =
     Decode.succeed default
+        |> optionalFlag "host" withHostDecoder
 
 
-withUrl : String -> Decoder Config -> Decoder Config
-withUrl urlStr decoder =
-    decoder |> Decode.andThen (withUrlHelp urlStr)
+withHost : String -> Decoder Config -> Decoder Config
+withHost urlStr decoder =
+    decoder |> Decode.andThen (withHostDecoder urlStr)
 
 
-withUrlHelp : String -> Config -> Decoder Config
-withUrlHelp urlStr conf =
+withHostDecoder : String -> Config -> Decoder Config
+withHostDecoder urlStr conf =
     Url.fromString urlStr
         |> Maybe.map (\u -> Decode.succeed { conf | url = u })
         |> Maybe.withDefault
-            (Decode.fail "`Config.withUrl` was given an invalid URL")
+            (Decode.fail "`Config.withHost` was given an invalid URL")
 
 
 withJwt : String -> Decoder Config -> Decoder Config

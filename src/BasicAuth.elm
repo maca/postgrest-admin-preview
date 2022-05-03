@@ -8,9 +8,9 @@ module BasicAuth exposing
     , toJwt
     , update
     , view
+    , withAuthUrl
     , withDecoder
     , withEncoder
-    , withUrl
     )
 
 import Dict exposing (Dict)
@@ -21,6 +21,7 @@ import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Postgrest.Client as PG
+import PostgrestAdmin.ConfigUtils exposing (optionalFlag)
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 import String.Extra as String
 import Task exposing (Task)
@@ -69,7 +70,7 @@ config =
             { url =
                 { protocol = Http
                 , host = "localhost"
-                , port_ = Just 4000
+                , port_ = Just 3000
                 , path = "rpc/login"
                 , query = Nothing
                 , fragment = Nothing
@@ -86,6 +87,7 @@ config =
             |> Decode.map (\token -> Success params (Token <| PG.jwt token))
         , readyDecoder params
         ]
+        |> optionalFlag "authUrl" withAuthUrlDecoder
 
 
 readyDecoder : Params -> Decoder BasicAuth
@@ -397,13 +399,13 @@ errorWrapper html =
 -- Decoders
 
 
-withUrl : String -> Decoder BasicAuth -> Decoder BasicAuth
-withUrl urlStr decoder =
-    decoder |> Decode.andThen (withUrlHelp urlStr)
+withAuthUrl : String -> Decoder BasicAuth -> Decoder BasicAuth
+withAuthUrl urlStr decoder =
+    decoder |> Decode.andThen (withAuthUrlDecoder urlStr)
 
 
-withUrlHelp : String -> BasicAuth -> Decoder BasicAuth
-withUrlHelp urlStr auth =
+withAuthUrlDecoder : String -> BasicAuth -> Decoder BasicAuth
+withAuthUrlDecoder urlStr auth =
     let
         params =
             toParams auth
@@ -412,7 +414,7 @@ withUrlHelp urlStr auth =
         |> Maybe.map
             (\url -> updateParams { params | url = url } auth |> Decode.succeed)
         |> Maybe.withDefault
-            (Decode.fail "`BasicAuth.withUrl` was given an invalid URL")
+            (Decode.fail "`BasicAuth.withAuthUrl` was given an invalid URL")
 
 
 withDecoder : Decoder Session -> Decoder BasicAuth -> Decoder BasicAuth
