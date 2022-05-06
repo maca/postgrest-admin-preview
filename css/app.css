@@ -254,12 +254,13 @@ button.filter-remove {
 /* ------------ */
 
 
-/* ------------ */
-/* Form         */
-section.resource-form {
+section.resource-form, section.resource-detail
+{
     padding: 4rem;
 }
 
+/* ------------ */
+/* Form         */
 .field .error {
     color: red;
 }
@@ -411,4 +412,11 @@ a:hover {
     color: #950000;
     background: #eedbdb;
     border-radius: 5px;
+}
+
+
+.card {
+    padding: 2rem;
+    background: #f4f4f4;
+    border-radius: 1rem;
 }

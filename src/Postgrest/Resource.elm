@@ -8,6 +8,7 @@ module Postgrest.Resource exposing
     , fromTable
     , hasErrors
     , id
+    , label
     , primaryKey
     , primaryKeyName
     , setError
@@ -111,7 +112,9 @@ fieldDecoder resource name column =
     case column.constraint of
         ForeignKey params ->
             Decode.map2
-                (\label -> insert (ForeignKey { params | label = label }))
+                (\referenceLabel ->
+                    insert (ForeignKey { params | label = referenceLabel })
+                )
                 (referenceLabelDecoder params)
                 (Decode.field name column.decoder)
 
@@ -176,3 +179,34 @@ columnRegex : Regex
 columnRegex =
     Regex.fromString "column \"(\\w+)\""
         |> Maybe.withDefault Regex.never
+
+
+label : Resource -> Maybe String
+label resource =
+    case
+        List.filterMap (labelHelp resource) resourceIdentifiers |> List.head
+    of
+        Just resourceLabel ->
+            Just resourceLabel
+
+        Nothing ->
+            id resource
+
+
+labelHelp : Resource -> String -> Maybe String
+labelHelp resource fieldName =
+    case Dict.get fieldName resource |> Maybe.map .value of
+        Just (PString resourceLabel) ->
+            resourceLabel
+
+        _ ->
+            Nothing
+
+
+
+-- To refactor
+
+
+resourceIdentifiers : List String
+resourceIdentifiers =
+    [ "title", "name", "full name", "email", "first name", "last name" ]

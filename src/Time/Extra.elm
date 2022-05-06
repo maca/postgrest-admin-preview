@@ -18,7 +18,7 @@ decoder =
 
 format : Time.Posix -> String
 format time =
-    toDateString time ++ " " ++ toTimeString time
+    toDateString time ++ " " ++ " at " ++ toTimeString time
 
 
 parse : String -> Maybe Time.Posix

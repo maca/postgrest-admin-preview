@@ -14,8 +14,8 @@ module Form exposing
 import Browser.Navigation as Nav
 import Dict exposing (Dict)
 import Form.Input as Input exposing (Input)
-import Html exposing (Html, button, fieldset, h1, section, text)
-import Html.Attributes exposing (autocomplete, class, disabled, novalidate)
+import Html exposing (Html, a, button, fieldset, h1, section, text)
+import Html.Attributes exposing (autocomplete, class, disabled, href, novalidate)
 import Html.Events exposing (onSubmit)
 import Notification
 import Postgrest.Client as PG
@@ -80,23 +80,15 @@ update client msg ((Form params fields) as form) =
             ( form, save client form )
 
         Created resource ->
-            let
-                rid =
-                    Resource.id resource |> Maybe.withDefault ""
-            in
             ( fromResource params resource
-            , Cmd.batch
-                [ Nav.pushUrl client.key <|
-                    Url.absolute [ params.resourcesName, rid ] []
-                , Notification.confirm "The record was created"
-                    |> Task.perform NotificationChanged
-                ]
+            , Notification.confirm "The record was created"
+                |> navigate client params.resourcesName (Resource.id resource)
             )
 
         Updated resource ->
             ( fromResource params resource
             , Notification.confirm "The record was updated"
-                |> Task.perform NotificationChanged
+                |> navigate client params.resourcesName params.id
             )
 
         Failed _ ->
@@ -104,6 +96,20 @@ update client msg ((Form params fields) as form) =
 
         NotificationChanged _ ->
             ( form, Cmd.none )
+
+
+navigate :
+    Client { a | key : Nav.Key }
+    -> String
+    -> Maybe String
+    -> Task Never Notification.Msg
+    -> Cmd Msg
+navigate client resourcesName resourceId notificationTask =
+    Cmd.batch
+        [ Url.absolute [ resourcesName, Maybe.withDefault "" resourceId ] []
+            |> Nav.pushUrl client.key
+        , Task.perform NotificationChanged notificationTask
+        ]
 
 
 
@@ -276,7 +282,7 @@ createRecord client ((Form { table, resourcesName } _) as form) =
 
 
 view : Form -> Html Msg
-view ((Form params _) as form) =
+view ((Form { resourcesName } _) as form) =
     let
         fields =
             filterFields form
@@ -288,11 +294,22 @@ view ((Form params _) as form) =
     in
     section
         [ class "resource-form" ]
-        [ h1 []
-            [ recordLabel form
-                |> Maybe.withDefault "New"
-                |> (++) (String.humanize params.resourcesName ++ " - ")
-                |> text
+        [ h1
+            []
+            [ text (String.humanize resourcesName ++ " - ")
+            , case
+                Maybe.map2 Tuple.pair
+                    (Resource.label (toResource form))
+                    (id form)
+              of
+                Just ( resourceLabel, resourceId ) ->
+                    a
+                        [ href (Url.absolute [ resourcesName, resourceId ] [])
+                        ]
+                        [ text resourceLabel ]
+
+                Nothing ->
+                    text "New"
             ]
         , Html.form
             [ autocomplete False
@@ -309,28 +326,6 @@ view ((Form params _) as form) =
         ]
 
 
-recordLabel : Form -> Maybe String
-recordLabel record =
-    case
-        List.filterMap (recordLabelHelp record) recordIdentifiers |> List.head
-    of
-        Just label ->
-            Just label
-
-        Nothing ->
-            Resource.id (toResource record)
-
-
-recordLabelHelp : Form -> String -> Maybe String
-recordLabelHelp (Form _ fields) fieldName =
-    case Dict.get fieldName fields |> Maybe.map Input.toValue of
-        Just (PString label) ->
-            label
-
-        _ ->
-            Nothing
-
-
 
 -- Sort
 
@@ -340,12 +335,3 @@ sortInputs ( name, input ) ( name_, input_ ) =
     Field.compareTuple
         ( name, Input.toField input )
         ( name_, Input.toField input_ )
-
-
-
--- To refactor
-
-
-recordIdentifiers : List String
-recordIdentifiers =
-    [ "title", "name", "full name", "email", "first name", "last name" ]

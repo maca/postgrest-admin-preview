@@ -3,15 +3,22 @@ module Postgrest.Field exposing
     , compareTuple
     , isPrimaryKey
     , setError
+    , toHtml
     , update
     , updateWithString
     , validate
     )
 
+import Html exposing (Html, a, text)
+import Html.Attributes exposing (href, target)
 import List.Extra as List
 import Postgrest.Client as PG
 import Postgrest.Schema exposing (Constraint(..))
 import Postgrest.Value as Value exposing (Value(..))
+import String.Extra as String
+import Time
+import Time.Extra as Time
+import Url.Builder as Url
 
 
 type alias Field =
@@ -77,6 +84,79 @@ setError { code } field =
 
         _ ->
             field
+
+
+
+-- Html
+
+
+toHtml : (String -> Html.Attribute msg) -> String -> Field -> Html msg
+toHtml onClick resourcesName { constraint, value } =
+    case constraint of
+        PrimaryKey ->
+            recordLink resourcesName onClick value Nothing
+
+        ForeignKey { tableName, label } ->
+            recordLink tableName onClick value label
+
+        NoConstraint ->
+            valueToHtml value
+
+
+valueToHtml : Value -> Html msg
+valueToHtml value =
+    case value of
+        PFloat (Just float) ->
+            text (String.fromFloat float)
+
+        PInt (Just int) ->
+            text (String.fromInt int)
+
+        PString (Just string) ->
+            text string
+
+        PEnum (Just string) _ ->
+            text (String.humanize string)
+
+        PBool (Just True) ->
+            text "true"
+
+        PBool (Just False) ->
+            text "false"
+
+        PTime (Just time) ->
+            text (Time.format time)
+
+        PDate (Just time) ->
+            text (Time.toDateString time)
+
+        PText (Just string) ->
+            text string
+
+        Unknown _ ->
+            text "?"
+
+        _ ->
+            text ""
+
+
+recordLink :
+    String
+    -> (String -> Html.Attribute msg)
+    -> Value
+    -> Maybe String
+    -> Html msg
+recordLink resourcesName onClick value mtext =
+    let
+        id =
+            Value.toString value |> Maybe.withDefault ""
+    in
+    a
+        [ href <| Url.absolute [ resourcesName, id ] []
+        , target "_self"
+        , onClick id
+        ]
+        [ Maybe.map text mtext |> Maybe.withDefault (valueToHtml value) ]
 
 
 

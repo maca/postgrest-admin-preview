@@ -2,9 +2,10 @@ port module PostgrestAdmin exposing (Model, Msg, application, applicationParams)
 
 import Browser
 import Browser.Navigation as Nav
+import Detail exposing (Detail)
 import Dict exposing (Dict)
 import Dict.Extra as Dict
-import Form exposing (Form(..))
+import Form exposing (Form)
 import Html exposing (Html, a, aside, div, h1, li, pre, text, ul)
 import Html.Attributes exposing (class, href)
 import Inflect as String
@@ -30,6 +31,7 @@ type Route
     = RouteRoot
     | RouteLoadingTable String (Table -> Route)
     | RouteListing Listing
+    | RouteDetail Detail
     | RouteFormLoading Form String
     | RouteForm Form
     | RouteNotFound
@@ -38,6 +40,7 @@ type Route
 type Msg
     = SchemaFetched Schema
     | ListingChanged Listing.Msg
+    | DetailChanged Detail.Msg
     | FormChanged Form.Msg
     | AuthChanged AuthScheme.Msg
     | NotificationChanged Notification.Msg
@@ -135,9 +138,24 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        DetailChanged childMsg ->
+            case model.route of
+                RouteDetail form ->
+                    Detail.update childMsg form
+                        |> updateRoute RouteDetail DetailChanged model
+                        |> handleChildMsg (Detail.mapMsg childMsg)
+
+                _ ->
+                    ( model, Cmd.none )
+
         FormChanged childMsg ->
             case model.route of
                 RouteForm form ->
+                    Form.update model childMsg form
+                        |> updateRoute RouteForm FormChanged model
+                        |> handleChildMsg (Form.mapMsg childMsg)
+
+                RouteFormLoading form _ ->
                     Form.update model childMsg form
                         |> updateRoute RouteForm FormChanged model
                         |> handleChildMsg (Form.mapMsg childMsg)
@@ -189,6 +207,10 @@ navigate model =
         RouteListing listing ->
             ( listing, Listing.fetch model listing )
                 |> updateRoute RouteListing ListingChanged model
+
+        RouteDetail detail ->
+            ( detail, Detail.fetch model detail )
+                |> updateRoute RouteDetail DetailChanged model
 
         RouteFormLoading form id ->
             ( model, Form.fetch model form id |> Cmd.map FormChanged )
@@ -328,6 +350,9 @@ mainContent model =
         RouteListing listing ->
             Html.map ListingChanged <| Listing.view listing
 
+        RouteDetail listing ->
+            Html.map DetailChanged <| Detail.view listing
+
         RouteFormLoading _ _ ->
             loading
 
@@ -379,6 +404,21 @@ routeParser url model =
             (Parser.string </> s "new")
         , Parser.map
             (\resourcesName id ->
+                RouteLoadingTable resourcesName
+                    (\table ->
+                        RouteDetail
+                            (Detail.init
+                                { table = table
+                                , resourcesName = resourcesName
+                                , fieldNames = fieldNames model resourcesName
+                                , id = id
+                                }
+                            )
+                    )
+            )
+            (Parser.string </> Parser.string)
+        , Parser.map
+            (\resourcesName id ->
                 editFormRoute model resourcesName id
                     |> RouteLoadingTable resourcesName
             )
@@ -426,3 +466,9 @@ makeForm { formFields } resourcesName id table =
         , id = id
         }
         table
+
+
+fieldNames : Model -> String -> List String
+fieldNames { formFields } resourcesName =
+    Dict.get resourcesName formFields
+        |> Maybe.withDefault []

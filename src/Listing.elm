@@ -13,7 +13,6 @@ module Listing exposing
     , view
     )
 
-import Basics.Extra exposing (flip)
 import Browser.Dom as Dom exposing (Viewport)
 import Browser.Navigation as Nav
 import Dict
@@ -44,18 +43,16 @@ import Html.Attributes
         , disabled
         , href
         , id
-        , target
         )
 import Html.Events as Events exposing (on, onClick, onMouseDown, onMouseUp)
 import Inflect as String
 import Json.Decode as Decode
 import Postgrest.Client as PG
 import Postgrest.Download as Download exposing (Download, Format(..))
-import Postgrest.Field as Field exposing (Field)
+import Postgrest.Field as Field
 import Postgrest.Resource as Resource exposing (Resource)
 import Postgrest.Resource.Client as Client exposing (Client)
 import Postgrest.Schema exposing (Column, Constraint(..), Table)
-import Postgrest.Value as Value exposing (Value(..))
 import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 import Search exposing (Search)
@@ -560,90 +557,32 @@ viewPage listing fields pageNum records =
 
 
 row : Listing -> List String -> Resource -> Html Msg
-row ({ resourcesName, textSelect } as listing) names record =
+row { resourcesName, textSelect } names record =
     let
-        toTd =
-            fieldToHtml listing >> List.singleton >> td []
+        onClick =
+            clickResource resourcesName textSelect
 
-        id =
-            Resource.id record |> Maybe.withDefault ""
+        cell fieldName =
+            Dict.get fieldName record
+                |> Maybe.map
+                    (\field ->
+                        td [] [ Field.toHtml onClick resourcesName field ]
+                    )
     in
-    List.filterMap (flip Dict.get record >> Maybe.map toTd) names
-        |> tr
-            [ class "listing-row"
-            , onMouseDown SelectEnter
-            , if textSelect == Enter then
-                on "mousemove" (Decode.succeed SelectOn)
+    tr
+        [ class "listing-row"
+        , onMouseDown SelectEnter
+        , if textSelect == Enter then
+            on "mousemove" (Decode.succeed SelectOn)
 
-              else
-                class ""
-            , onMouseUp SelectOff
-            , clickResource resourcesName textSelect id
-            ]
-
-
-fieldToHtml : Listing -> Field -> Html Msg
-fieldToHtml { resourcesName, textSelect } { constraint, value } =
-    case constraint of
-        PrimaryKey ->
-            recordLink resourcesName textSelect value Nothing
-
-        ForeignKey { tableName, label } ->
-            recordLink tableName textSelect value label
-
-        NoConstraint ->
-            valueToHtml value
-
-
-valueToHtml : Value -> Html Msg
-valueToHtml value =
-    case value of
-        PFloat (Just float) ->
-            text (String.fromFloat float)
-
-        PInt (Just int) ->
-            text (String.fromInt int)
-
-        PString (Just string) ->
-            text string
-
-        PEnum (Just string) _ ->
-            text (String.humanize string)
-
-        PBool (Just True) ->
-            text "true"
-
-        PBool (Just False) ->
-            text "false"
-
-        PTime (Just time) ->
-            text (Time.format time)
-
-        PDate (Just time) ->
-            text (Time.toDateString time)
-
-        PText _ ->
-            text "..."
-
-        Unknown _ ->
-            text "?"
-
-        _ ->
-            text ""
-
-
-recordLink : String -> TextSelect -> Value -> Maybe String -> Html Msg
-recordLink resourcesName textSelect value mtext =
-    let
-        id =
-            Value.toString value |> Maybe.withDefault ""
-    in
-    a
-        [ href <| Url.absolute [ resourcesName, id ] []
-        , target "_self"
-        , clickResource resourcesName textSelect id
+          else
+            class ""
+        , onMouseUp SelectOff
+        , Resource.id record
+            |> Maybe.withDefault ""
+            |> clickResource resourcesName textSelect
         ]
-        [ Maybe.map text mtext |> Maybe.withDefault (valueToHtml value) ]
+        (List.filterMap cell names)
 
 
 clickResource : String -> TextSelect -> String -> Html.Attribute Msg
