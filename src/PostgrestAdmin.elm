@@ -258,6 +258,9 @@ fetch model =
         RouteFormLoading form id ->
             Form.fetch model form id |> Cmd.map FormChanged
 
+        RouteDetail detail ->
+            Detail.fetch model detail |> Cmd.map DetailChanged
+
         RouteForm form ->
             case Form.id form of
                 Just id ->
@@ -457,7 +460,7 @@ newFormRoute model resourcesName table =
 
 makeForm : Model -> String -> Maybe String -> Table -> Form
 makeForm { formFields } resourcesName id table =
-    Form.fromTable
+    Form.init
         { resourcesName = resourcesName
         , table = table
         , fieldNames =

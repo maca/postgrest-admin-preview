@@ -6,8 +6,11 @@ import Html
         ( Html
         , a
         , article
+        , button
         , div
         , h1
+        , h2
+        , p
         , section
         , table
         , td
@@ -16,6 +19,7 @@ import Html
         , tr
         )
 import Html.Attributes exposing (class, href)
+import Html.Events exposing (onClick)
 import Postgrest.Client as PG
 import Postgrest.Field as Field exposing (Field)
 import Postgrest.Resource as Resource exposing (Resource)
@@ -32,34 +36,59 @@ import Utils.Task exposing (Error(..), attemptWithError, fail)
 
 type Msg
     = Fetched Resource
+    | Deleted
+    | DeleteModalOpened
+    | DeleteModalClosed
     | Failed Error
 
 
-type alias Params =
-    { table : Table
-    , resourcesName : String
-    , fieldNames : List String
-    , id : String
+type alias Params a =
+    { a
+        | table : Table
+        , resourcesName : String
+        , fieldNames : List String
+        , id : String
     }
 
 
 type Detail
-    = Detail Params (Maybe Resource)
+    = Detail
+        (Params
+            { confirmDelete : Bool
+            , resource : Maybe Resource
+            }
+        )
 
 
-init : Params -> Detail
+init : Params {} -> Detail
 init params =
-    Detail params Nothing
+    Detail
+        { table = params.table
+        , resourcesName = params.resourcesName
+        , fieldNames = params.fieldNames
+        , id = params.id
+        , confirmDelete = False
+        , resource = Nothing
+        }
 
 
 update : Msg -> Detail -> ( Detail, Cmd Msg )
-update msg (Detail params maybeResource) =
+update msg (Detail params) =
     case msg of
         Fetched resource ->
-            ( Detail params (Just resource), Cmd.none )
+            ( Detail { params | resource = Just resource }, Cmd.none )
+
+        DeleteModalOpened ->
+            ( Detail { params | confirmDelete = True }, Cmd.none )
+
+        DeleteModalClosed ->
+            ( Detail { params | confirmDelete = False }, Cmd.none )
+
+        Deleted ->
+            ( Detail params, Cmd.none )
 
         Failed _ ->
-            ( Detail params maybeResource, Cmd.none )
+            ( Detail params, Cmd.none )
 
 
 mapMsg : Msg -> OuterMsg
@@ -77,8 +106,8 @@ mapMsg msg =
 
 
 fetch : Client a -> Detail -> Cmd Msg
-fetch client (Detail { table, resourcesName, id } maybeResource) =
-    case maybeResource of
+fetch client (Detail { table, resourcesName, id, resource }) =
+    case resource of
         Just _ ->
             Cmd.none
 
@@ -99,16 +128,16 @@ fetch client (Detail { table, resourcesName, id } maybeResource) =
 
 
 view : Detail -> Html Msg
-view (Detail { resourcesName } maybeResource) =
-    case maybeResource of
+view (Detail params) =
+    case params.resource of
         Just resource ->
             section
                 [ class "resource-detail" ]
                 [ h1
                     []
                     [ Resource.label resource
-                        |> Maybe.withDefault "New"
-                        |> (++) (String.humanize resourcesName ++ " - ")
+                        |> Maybe.withDefault ""
+                        |> (++) (String.humanize params.resourcesName ++ " - ")
                         |> text
                     ]
                 , article
@@ -116,10 +145,38 @@ view (Detail { resourcesName } maybeResource) =
                     [ table
                         []
                         (sortedFields resource
-                            |> List.map (tableRow resourcesName)
+                            |> List.map (tableRow params.resourcesName)
                         )
-                    , actions resourcesName resource
+                    , actions params.resourcesName resource
                     ]
+                , if params.confirmDelete then
+                    div
+                        [ class "modal-background" ]
+                        [ div
+                            [ class "modal-dialog" ]
+                            [ h2 []
+                                [ text """Are you sure you want to delete the
+                                          record?"""
+                                ]
+                            , p [] [ text "This action cannot be undone." ]
+                            , div
+                                [ class "actions" ]
+                                [ button
+                                    [ class "button button-danger"
+                                    , onClick Deleted
+                                    ]
+                                    [ text "Delete" ]
+                                , button
+                                    [ class "button"
+                                    , onClick DeleteModalClosed
+                                    ]
+                                    [ text "Cancel" ]
+                                ]
+                            ]
+                        ]
+
+                  else
+                    text ""
                 ]
 
         Nothing ->
@@ -131,12 +188,18 @@ actions resourcesName resource =
     case Resource.id resource of
         Just id ->
             div
-                []
+                [ class "action" ]
                 [ a
                     [ href (Url.absolute [ resourcesName, id, "edit" ] [])
                     , class "button"
                     ]
                     [ text "Edit" ]
+                , button
+                    [ onClick DeleteModalOpened
+                    , class "button"
+                    , class "button-danger"
+                    ]
+                    [ text "Delete" ]
                 ]
 
         Nothing ->

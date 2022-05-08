@@ -4,8 +4,8 @@ module Form exposing
     , Params
     , errors
     , fetch
-    , fromTable
     , id
+    , init
     , mapMsg
     , update
     , view
@@ -56,6 +56,15 @@ type alias Fields =
 
 type Form
     = Form Params Fields
+
+
+init : Params -> Table -> Form
+init params table =
+    Resource.fromTable table |> fromResource params
+
+
+
+-- Update
 
 
 update : Client { a | key : Nav.Key } -> Msg -> Form -> ( Form, Cmd Msg )
@@ -151,11 +160,6 @@ fromResource params resource =
     resource
         |> Dict.map (\_ input -> Input.fromField input)
         |> Form params
-
-
-fromTable : Params -> Table -> Form
-fromTable params table =
-    Resource.fromTable table |> fromResource params
 
 
 changed : Form -> Bool
