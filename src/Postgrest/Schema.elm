@@ -59,7 +59,9 @@ type alias ForeignKeyParams =
 
 
 type alias Table =
-    Dict String Column
+    { name : String
+    , columns : Dict String Column
+    }
 
 
 type alias Schema =
@@ -104,126 +106,113 @@ columnNamesDecoder =
 
 schemaDecoder : ColumnNames -> Decoder Schema
 schemaDecoder columnNames =
-    field "definitions"
-        (Decode.dict
-            (field "required" (Decode.list Decode.string)
-                |> Decode.andThen
-                    (\req ->
-                        field "properties" (Decode.keyValuePairs Decode.value)
-                            |> Decode.andThen (columnsDecoder columnNames req)
-                    )
-            )
-        )
+    field "definitions" (Decode.keyValuePairs Decode.value)
+        |> Decode.andThen (decodeResults (tableDecoder columnNames))
 
 
-columnsDecoder :
-    ColumnNames
-    -> List String
-    -> List ( String, Decode.Value )
-    -> Decoder Table
-columnsDecoder columnNames requiredCols definitions =
-    let
-        results =
-            definitions
-                |> List.map
-                    (\( name, val ) ->
-                        let
-                            isRequired =
-                                List.member name requiredCols
-                        in
-                        ( name
-                        , Decode.decodeValue
-                            (columnDecoder columnNames isRequired)
-                            val
+tableDecoder : ColumnNames -> String -> Decoder Table
+tableDecoder columnNames tableName =
+    field "required" (Decode.list Decode.string)
+        |> Decode.andThen
+            (\requiredColumns ->
+                field "properties" (Decode.keyValuePairs Decode.value)
+                    |> Decode.andThen
+                        (decodeResults
+                            (columnDecoder columnNames requiredColumns)
                         )
-                    )
-    in
-    case List.filterMap (Tuple.second >> toError) results of
-        err :: _ ->
-            Decode.errorToString err
-                |> Decode.fail
-
-        [] ->
-            results
-                |> List.filterMap
-                    (\( n, v ) ->
-                        case v of
-                            Err _ ->
-                                Nothing
-
-                            Ok ok ->
-                                Just ( n, ok )
-                    )
-                |> Dict.fromList
-                |> Decode.succeed
+            )
+        |> Decode.map (\columns -> { columns = columns, name = tableName })
 
 
-columnDecoder : ColumnNames -> Bool -> Decoder Column
-columnDecoder columnNames isRequired =
+columnDecoder : ColumnNames -> List String -> String -> Decoder Column
+columnDecoder columnNames requiredColumns columnName =
     Decode.map4 ColumnDefinition
         (field "type" string)
         (field "format" string)
         (maybe <| field "description" string)
         (Decode.oneOf [ field "enum" (list string), Decode.succeed [] ])
-        |> Decode.andThen (columnDecoderHelp columnNames isRequired)
+        |> Decode.andThen
+            (\{ type_, format, description, enum } ->
+                let
+                    makeColumn valueDecoder val =
+                        { constraint =
+                            Maybe.map (columnConstraint columnNames) description
+                                |> Maybe.withDefault NoConstraint
+                        , required = List.member columnName requiredColumns
+                        , decoder = valueDecoder
+                        , value = val
+                        }
+
+                    mapValue cons dec =
+                        let
+                            valueDecoder =
+                                Decode.map cons (Decode.maybe dec)
+                        in
+                        Decode.map (makeColumn valueDecoder)
+                            (Decode.oneOf
+                                [ field "default" valueDecoder
+                                , Decode.succeed (cons Nothing)
+                                ]
+                            )
+                in
+                case type_ of
+                    "number" ->
+                        mapValue PFloat Decode.float
+
+                    "integer" ->
+                        mapValue PInt int
+
+                    "string" ->
+                        if format == "timestamp without time zone" then
+                            mapValue PTime Time.decoder
+
+                        else if format == "date" then
+                            mapValue PDate Time.decoder
+
+                        else if format == "text" then
+                            mapValue PText string
+
+                        else if not (List.isEmpty enum) then
+                            mapValue (flip PEnum enum) string
+
+                        else
+                            mapValue PString string
+
+                    "boolean" ->
+                        mapValue PBool bool
+
+                    _ ->
+                        let
+                            valueDecoder =
+                                Decode.map Unknown Decode.value
+                        in
+                        Decode.map (makeColumn valueDecoder) valueDecoder
+            )
 
 
-columnDecoderHelp : ColumnNames -> Bool -> ColumnDefinition -> Decoder Column
-columnDecoderHelp columnNames isRequired { type_, format, description, enum } =
+decodeResults :
+    (String -> Decoder value)
+    -> List ( String, Decode.Value )
+    -> Decoder (Dict String value)
+decodeResults valueDecoder values =
     let
-        makeColumn valueDecoder val =
-            { constraint =
-                Maybe.map (columnConstraint columnNames) description
-                    |> Maybe.withDefault NoConstraint
-            , required = isRequired
-            , decoder = valueDecoder
-            , value = val
-            }
-
-        mapValue cons dec =
-            let
-                valueDecoder =
-                    Decode.map cons (Decode.maybe dec)
-            in
-            Decode.map (makeColumn valueDecoder)
-                (Decode.oneOf
-                    [ field "default" valueDecoder
-                    , Decode.succeed (cons Nothing)
-                    ]
+        results =
+            List.map
+                (\( name, value ) ->
+                    Decode.decodeValue (valueDecoder name) value
+                        |> Result.map (Tuple.pair name)
                 )
+                values
     in
-    case type_ of
-        "number" ->
-            mapValue PFloat Decode.float
+    case List.filterMap toError results of
+        err :: _ ->
+            Decode.fail (Decode.errorToString err)
 
-        "integer" ->
-            mapValue PInt int
-
-        "string" ->
-            if format == "timestamp without time zone" then
-                mapValue PTime Time.decoder
-
-            else if format == "date" then
-                mapValue PDate Time.decoder
-
-            else if format == "text" then
-                mapValue PText string
-
-            else if not (List.isEmpty enum) then
-                mapValue (flip PEnum enum) string
-
-            else
-                mapValue PString string
-
-        "boolean" ->
-            mapValue PBool bool
-
-        _ ->
-            let
-                valueDecoder =
-                    Decode.map Unknown Decode.value
-            in
-            Decode.map (makeColumn valueDecoder) valueDecoder
+        [] ->
+            results
+                |> List.filterMap (Result.map Just >> Result.withDefault Nothing)
+                |> Dict.fromList
+                |> Decode.succeed
 
 
 columnConstraint : ColumnNames -> String -> Constraint

@@ -119,7 +119,7 @@ update msg search =
         AddFilter position ->
             let
                 mfilter =
-                    search.table
+                    search.table.columns
                         |> Dict.toList
                         |> List.head
                         |> Maybe.andThen (\( n, c ) -> Filter.fromColumn n c)
@@ -212,7 +212,7 @@ viewFilter table idx filter =
                     [ i [ class "icono-cross" ] [] ]
                 ]
     in
-    case Dict.get name table of
+    case Dict.get name table.columns of
         Just { required, value } ->
             case value of
                 PString _ ->
@@ -282,7 +282,7 @@ fieldSelect table idx filter =
     in
     Html.select
         [ onInput (makeFilter >> UpdateFilter idx) ]
-        (Dict.toList table
+        (Dict.toList table.columns
             |> List.filterMap
                 (\( s, column ) ->
                     Filter.fromColumn s column
@@ -621,7 +621,7 @@ numberOptions cons =
 
 defaultFilter : String -> Table -> Maybe Filter
 defaultFilter colName table =
-    Dict.get colName table
+    Dict.get colName table.columns
         |> Maybe.andThen (Filter.fromColumn colName)
 
 

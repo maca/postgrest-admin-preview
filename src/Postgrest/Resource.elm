@@ -48,7 +48,7 @@ fromTable table =
             , value = value
             }
         )
-        table
+        table.columns
 
 
 hasErrors : Resource -> Bool
@@ -81,7 +81,7 @@ primaryKeyName resource =
 
 decoder : Table -> Decoder Resource
 decoder table =
-    Dict.foldl decoderHelp (Decode.succeed Dict.empty) table
+    Dict.foldl decoderHelp (Decode.succeed Dict.empty) table.columns
 
 
 decoderHelp : String -> Column -> Decoder Resource -> Decoder Resource

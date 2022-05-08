@@ -192,7 +192,7 @@ fetchTask client listing =
             listing
 
         pgOrder =
-            Dict.toList table
+            Dict.toList table.columns
                 |> List.filterMap (sortBy resourcesName order)
 
         params =
@@ -378,7 +378,7 @@ view : Listing -> Html Msg
 view listing =
     let
         fields =
-            Dict.toList listing.table
+            Dict.toList listing.table.columns
                 |> List.sortWith Field.compareTuple
                 |> List.map Tuple.first
 

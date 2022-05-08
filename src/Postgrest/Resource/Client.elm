@@ -29,7 +29,7 @@ fetchOne : Client a -> Table -> String -> String -> Request Resource
 fetchOne { host } table resourcesName id =
     let
         pkName =
-            Resource.primaryKeyName table |> Maybe.withDefault ""
+            Resource.primaryKeyName table.columns |> Maybe.withDefault ""
     in
     resourceEndpoint host resourcesName table
         |> PG.getOne
@@ -83,9 +83,9 @@ update { host } table resourcesName ( primaryKeyName, id ) resource =
 
 selects : Table -> List Selectable
 selects table =
-    Dict.values table
+    Dict.values table.columns
         |> List.filterMap associationJoin
-        |> (++) (Dict.keys table |> List.map PG.attribute)
+        |> (++) (Dict.keys table.columns |> List.map PG.attribute)
 
 
 associationJoin : Column -> Maybe Selectable

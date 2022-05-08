@@ -314,7 +314,7 @@ columnFilter : Table -> String -> Parser (Maybe Filter)
 columnFilter table separator =
     let
         colNames =
-            Dict.keys table
+            Dict.keys table.columns
                 |> List.map (\s -> succeed (always s) |= token s)
     in
     succeed (\name f -> f name)
@@ -436,7 +436,7 @@ combineHelp (Filter name op) ((Filter name_ op_) as f_) =
 
 filterCons : Table -> (OperandConst -> Operation) -> String -> Maybe Filter
 filterCons table operationCons name =
-    case Dict.get name table |> Maybe.map .value of
+    case Dict.get name table.columns |> Maybe.map .value of
         Just (PString _) ->
             Just <| Filter name <| operationCons Operand.text
 
@@ -468,7 +468,7 @@ filterCons table operationCons name =
 
 enumCons : Table -> (List String -> Operation) -> String -> Maybe Filter
 enumCons table operationCons name =
-    case Dict.get name table |> Maybe.map .value of
+    case Dict.get name table.columns |> Maybe.map .value of
         Just (PEnum _ choices) ->
             if operationCons choices == IsNull Nothing then
                 Just <| Filter name <| OneOf <| Operand.enum choices Set.empty
