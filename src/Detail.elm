@@ -20,18 +20,15 @@ import Html
         )
 import Html.Attributes exposing (class, href)
 import Html.Events exposing (onClick)
-import Postgrest.Client as PG
 import Postgrest.Field as Field exposing (Field)
 import Postgrest.Record as Record exposing (Record)
 import Postgrest.Record.Client as Client exposing (Client)
 import Postgrest.Schema exposing (Table)
 import Postgrest.Value exposing (Value(..))
-import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 import String.Extra as String
-import Task
 import Url.Builder as Url
-import Utils.Task exposing (Error(..), attemptWithError, fail)
+import Utils.Task exposing (Error(..), attemptWithError)
 
 
 type Msg
@@ -42,29 +39,20 @@ type Msg
     | Failed Error
 
 
-type alias Params a =
-    { a
-        | table : Table
-        , resourcesName : String
-        , id : String
-    }
-
-
 type Detail
     = Detail
-        (Params
-            { confirmDelete : Bool
-            , record : Maybe Record
-            }
-        )
+        { table : Table
+        , id : String
+        , record : Maybe Record
+        , confirmDelete : Bool
+        }
 
 
-init : Params {} -> Detail
-init params =
+init : Table -> String -> Detail
+init table id =
     Detail
-        { table = params.table
-        , resourcesName = params.resourcesName
-        , id = params.id
+        { table = table
+        , id = id
         , confirmDelete = False
         , record = Nothing
         }
@@ -104,48 +92,30 @@ mapMsg msg =
 
 
 fetch : Client a -> Detail -> Cmd Msg
-fetch client (Detail { table, resourcesName, id, record }) =
-    case record of
-        Just _ ->
-            Cmd.none
-
-        Nothing ->
-            case AuthScheme.toJwt client.authScheme of
-                Just token ->
-                    Client.fetchOne client table resourcesName id
-                        |> PG.toTask token
-                        |> Task.mapError PGError
-                        |> attemptWithError Failed Fetched
-
-                Nothing ->
-                    fail Failed AuthError
-
-
-
--- View
+fetch client (Detail { table, id }) =
+    Client.fetch client table id
+        |> attemptWithError Failed Fetched
 
 
 view : Detail -> Html Msg
 view (Detail params) =
     case params.record of
-        Just record ->
+        Just ({ tableName } as record) ->
             section
                 [ class "record-detail" ]
                 [ h1
                     []
                     [ Record.label record
                         |> Maybe.withDefault ""
-                        |> (++) (String.humanize params.resourcesName ++ " - ")
+                        |> (++) (String.humanize tableName ++ " - ")
                         |> text
                     ]
                 , article
                     [ class "card" ]
                     [ table
                         []
-                        (sortedFields record
-                            |> List.map (tableRow params.resourcesName)
-                        )
-                    , actions params.resourcesName record
+                        (sortedFields record |> List.map (tableRow tableName))
+                    , actions record
                     ]
                 , if params.confirmDelete then
                     div
@@ -181,14 +151,14 @@ view (Detail params) =
             text "loading"
 
 
-actions : String -> Record -> Html Msg
-actions resourcesName record =
+actions : Record -> Html Msg
+actions record =
     case Record.id record of
         Just id ->
             div
                 [ class "action" ]
                 [ a
-                    [ href (Url.absolute [ resourcesName, id, "edit" ] [])
+                    [ href (Url.absolute [ record.tableName, id, "edit" ] [])
                     , class "button"
                     ]
                     [ text "Edit" ]
@@ -206,13 +176,10 @@ actions resourcesName record =
 
 tableRow : String -> ( String, Field ) -> Html Msg
 tableRow resourcesName ( name, field ) =
-    tr []
-        [ th
-            []
-            [ text (String.humanize name) ]
-        , td
-            []
-            [ Field.toHtml (always (class "")) resourcesName field ]
+    tr
+        []
+        [ th [] [ text (String.humanize name) ]
+        , td [] [ Field.toHtml (always (class "")) resourcesName field ]
         ]
 
 

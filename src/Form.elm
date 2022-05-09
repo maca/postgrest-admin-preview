@@ -18,18 +18,16 @@ import Html exposing (Html, a, button, fieldset, h1, section, text)
 import Html.Attributes exposing (autocomplete, class, disabled, href, novalidate)
 import Html.Events exposing (onSubmit)
 import Notification
-import Postgrest.Client as PG
 import Postgrest.Field as Field
 import Postgrest.Record as Record exposing (Record)
 import Postgrest.Record.Client as Client exposing (Client)
 import Postgrest.Schema exposing (Table)
 import Postgrest.Value exposing (Value(..))
-import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 import String.Extra as String
 import Task exposing (Task)
 import Url.Builder as Url
-import Utils.Task exposing (Error(..), attemptWithError, fail)
+import Utils.Task exposing (Error(..), attemptWithError)
 
 
 type alias Params =
@@ -40,11 +38,9 @@ type alias Params =
     }
 
 
-
 type Msg
     = Fetched Record
-    | Created Record
-    | Updated Record
+    | Saved Record
     | Changed Input.Msg
     | NotificationChanged Notification.Msg
     | Submitted
@@ -87,18 +83,15 @@ update client msg ((Form params fields) as form) =
                     )
 
         Submitted ->
-            ( form, save client form )
-
-        Created resource ->
-            ( fromRecord params resource
-            , Notification.confirm "The record was created"
-                |> navigate client params.resourcesName (Record.id resource)
+            ( form
+            , Client.save client params.table (id form) (toFormFields form)
+                |> attemptWithError Failed Saved
             )
 
-        Updated resource ->
+        Saved resource ->
             ( fromRecord params resource
-            , Notification.confirm "The record was updated"
-                |> navigate client params.resourcesName params.id
+            , Notification.confirm "The record was saved"
+                |> navigate client params.resourcesName (Record.id resource)
             )
 
         Failed _ ->
@@ -127,11 +120,10 @@ navigate client resourcesName resourceId notificationTask =
 
 
 toRecord : Form -> Record
-toRecord (Form {resourcesName} fields) =
-   { tableName = resourcesName
-   , fields = Dict.map (\_ input -> Input.toField input) fields
-   }
-
+toRecord (Form { resourcesName } fields) =
+    { tableName = resourcesName
+    , fields = Dict.map (\_ input -> Input.toField input) fields
+    }
 
 
 toFormFields : Form -> Record
@@ -203,86 +195,13 @@ id record =
 
 
 
--- setError : PG.PostgrestErrorJSON -> Form -> Form
--- setError error ((Form params fields) as form) =
---     let
---         mapFun columnName key input =
---             if key == columnName then
---                 Input.setError error input
---             else
---                 input
---     in
---     error.message
---         |> Maybe.andThen extractColumnName
---         |> Maybe.map (mapFun >> flip Dict.map fields >> Form params)
---         |> Maybe.withDefault form
--- extractColumnName : String -> Maybe String
--- extractColumnName string =
---     Regex.find columnRegex string
---         |> List.head
---         |> Maybe.andThen (.submatches >> List.head)
---         |> Maybe.withDefault Nothing
--- columnRegex : Regex
--- columnRegex =
---     Regex.fromString "column \"(\\w+)\""
---         |> Maybe.withDefault Regex.never
 -- Http
 
 
 fetch : Client a -> Form -> String -> Cmd Msg
-fetch client (Form { table, resourcesName } _) rid =
-    case AuthScheme.toJwt client.authScheme of
-        Just token ->
-            Client.fetchOne client table resourcesName rid
-                |> PG.toTask token
-                |> Task.mapError PGError
-                |> attemptWithError Failed Fetched
-
-        Nothing ->
-            fail Failed AuthError
-
-
-save : Client a -> Form -> Cmd Msg
-save client ((Form params _) as form) =
-    case params.id of
-        Just formId ->
-            updateRecord client form formId
-                |> attemptWithError Failed Updated
-
-        Nothing ->
-            createRecord client form
-                |> attemptWithError Failed Created
-
-
-updateRecord : Client a -> Form -> String -> Task Error Record
-updateRecord client ((Form { table, resourcesName } _) as form) rid =
-    case AuthScheme.toJwt client.authScheme of
-        Just token ->
-            let
-                primaryKeyName =
-                    toRecord form
-                        |> Record.primaryKeyName
-            in
-            toFormFields form
-                |> Client.update client table resourcesName ( primaryKeyName, rid )
-                |> PG.toTask token
-                |> Task.mapError PGError
-
-        Nothing ->
-            Task.fail AuthError
-
-
-createRecord : Client a -> Form -> Task Error Record
-createRecord client ((Form { table, resourcesName } _) as form) =
-    case AuthScheme.toJwt client.authScheme of
-        Just token ->
-            toFormFields form
-                |> Client.create client table resourcesName
-                |> PG.toTask token
-                |> Task.mapError PGError
-
-        Nothing ->
-            Task.fail AuthError
+fetch client (Form { table } _) recordId =
+    Client.fetch client table recordId
+        |> attemptWithError Failed Fetched
 
 
 

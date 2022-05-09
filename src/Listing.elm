@@ -203,7 +203,7 @@ fetchTask client listing =
     in
     case AuthScheme.toJwt client.authScheme of
         Just token ->
-            Client.fetchMany client table resourcesName
+            Client.fetchMany client table
                 |> PG.setParams (params ++ pgOrder ++ Search.toPGQuery search)
                 |> PG.toTask token
                 |> Task.mapError PGError

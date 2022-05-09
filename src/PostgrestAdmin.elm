@@ -410,12 +410,7 @@ routeParser url model =
                 RouteLoadingTable resourcesName
                     (\table ->
                         RouteDetail
-                            (Detail.init
-                                { table = table
-                                , resourcesName = resourcesName
-                                , id = id
-                                }
-                            )
+                            (Detail.init table id)
                     )
             )
             (Parser.string </> Parser.string)
@@ -462,15 +457,7 @@ makeForm { formFields } resourcesName id table =
     Form.init
         { resourcesName = resourcesName
         , table = table
-        , fieldNames =
-            Dict.get resourcesName formFields
-                |> Maybe.withDefault []
+        , fieldNames = Dict.get resourcesName formFields |> Maybe.withDefault []
         , id = id
         }
         table
-
-
-fieldNames : Model -> String -> List String
-fieldNames { formFields } resourcesName =
-    Dict.get resourcesName formFields
-        |> Maybe.withDefault []

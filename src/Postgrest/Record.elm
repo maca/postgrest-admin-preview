@@ -12,13 +12,11 @@ module Postgrest.Record exposing
     , primaryKeyName
     )
 
-import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
 import Dict.Extra as Dict
 import Json.Decode as Decode exposing (Decoder, maybe, string)
 import Json.Encode as Encode
 import Maybe.Extra as Maybe exposing (isNothing)
-import Postgrest.Client as PG
 import Postgrest.Field as Field exposing (Field)
 import Postgrest.Schema
     exposing
@@ -28,7 +26,6 @@ import Postgrest.Schema
         , Table
         )
 import Postgrest.Value as Value exposing (Value(..))
-import Regex exposing (Regex)
 
 
 type alias Record =
@@ -52,6 +49,23 @@ fromTable { name, columns } =
             )
             columns
     }
+
+
+id : Record -> Maybe String
+id record =
+    primaryKey record |> Maybe.andThen (.value >> Value.toString)
+
+
+fieldToString : String -> Record -> Maybe String
+fieldToString key record =
+    Dict.get key record.fields |> Maybe.andThen (.value >> Value.toString)
+
+
+primaryKey : Record -> Maybe Field
+primaryKey record =
+    Dict.values record.fields
+        |> List.filter Field.isPrimaryKey
+        |> List.head
 
 
 hasErrors : Record -> Bool
@@ -130,53 +144,6 @@ referenceLabelDecoder params =
 
         Nothing ->
             Decode.succeed Nothing
-
-
-id : Record -> Maybe String
-id record =
-    primaryKey record |> Maybe.andThen (.value >> Value.toString)
-
-
-fieldToString : String -> Record -> Maybe String
-fieldToString key record =
-    Dict.get key record.fields |> Maybe.andThen (.value >> Value.toString)
-
-
-primaryKey : Record -> Maybe Field
-primaryKey record =
-    Dict.values record.fields
-        |> List.filter Field.isPrimaryKey
-        |> List.head
-
-
-
--- setError : PG.PostgrestErrorJSON -> Record -> Record
--- setError error record =
---     let
---         mapFun columnName key field =
---             if key == columnName then
---                 Field.setError error field
---             else
---                 field
---     in
---     error.message
---         |> Maybe.andThen extractColumnName
---         |> Maybe.map (mapFun >> flip Dict.map record)
---         |> Maybe.withDefault record
-
-
-extractColumnName : String -> Maybe String
-extractColumnName string =
-    Regex.find columnRegex string
-        |> List.head
-        |> Maybe.andThen (.submatches >> List.head)
-        |> Maybe.withDefault Nothing
-
-
-columnRegex : Regex
-columnRegex =
-    Regex.fromString "column \"(\\w+)\""
-        |> Maybe.withDefault Regex.never
 
 
 label : Record -> Maybe String

@@ -544,7 +544,7 @@ fetchRecords client name { tableName, labelColumnName } userInput =
             else
                 case AuthScheme.toJwt client.authScheme of
                     Just token ->
-                        Client.fetchMany client table tableName
+                        Client.fetchMany client table
                             |> PG.setParams
                                 [ PG.select selects
                                 , PG.or queries
