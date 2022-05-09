@@ -41,7 +41,7 @@ type alias Params =
 type Msg
     = Fetched Record
     | Saved Record
-    | Changed Input.Msg
+    | InputChanged Input.Msg
     | NotificationChanged Notification.Msg
     | Submitted
     | Failed Error
@@ -70,13 +70,13 @@ update client msg ((Form params fields) as form) =
         Fetched resource ->
             ( fromRecord params resource, Cmd.none )
 
-        Changed inputMsg ->
+        InputChanged inputMsg ->
             Input.update client inputMsg fields
                 |> Tuple.mapFirst (Form params)
                 |> Tuple.mapSecond
                     (\cmd ->
                         Cmd.batch
-                            [ Cmd.map Changed cmd
+                            [ Cmd.map InputChanged cmd
                             , Notification.dismiss
                                 |> Task.perform NotificationChanged
                             ]
@@ -182,7 +182,7 @@ mapMsg msg =
         NotificationChanged innerMsg ->
             OuterMsg.NotificationChanged innerMsg
 
-        Changed inputMsg ->
+        InputChanged inputMsg ->
             Input.mapMsg inputMsg
 
         _ ->
@@ -216,7 +216,7 @@ view ((Form { resourcesName } _) as form) =
                 |> formInputs
                 |> List.map
                     (\( name, input ) ->
-                        Input.view name input |> Html.map Changed
+                        Input.view name input |> Html.map InputChanged
                     )
     in
     section

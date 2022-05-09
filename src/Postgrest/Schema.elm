@@ -2,6 +2,7 @@ module Postgrest.Schema exposing
     ( Column
     , Constraint(..)
     , ForeignKeyParams
+    , Reference
     , Schema
     , Table
     , decoder
@@ -61,6 +62,13 @@ type alias ForeignKeyParams =
 type alias Table =
     { name : String
     , columns : Dict String Column
+    }
+
+
+type alias Reference =
+    { foreignKeyName : String
+    , foreignKeyValue : String
+    , table : Table
     }
 
 

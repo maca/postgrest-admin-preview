@@ -10,6 +10,7 @@ module Postgrest.Record exposing
     , label
     , primaryKey
     , primaryKeyName
+    , referencedBy
     )
 
 import Dict exposing (Dict)
@@ -23,6 +24,8 @@ import Postgrest.Schema
         ( Column
         , Constraint(..)
         , ForeignKeyParams
+        , Reference
+        , Schema
         , Table
         )
 import Postgrest.Value as Value exposing (Value(..))
@@ -144,6 +147,38 @@ referenceLabelDecoder params =
 
         Nothing ->
             Decode.succeed Nothing
+
+
+referencedBy : Schema -> Record -> List Reference
+referencedBy schema { tableName, fields } =
+    Dict.foldl
+        (\name table acc ->
+            Dict.foldl
+                (\columnName column columns ->
+                    case column.constraint of
+                        ForeignKey params ->
+                            if params.tableName == tableName then
+                                { foreignKeyName = columnName
+                                , foreignKeyValue =
+                                    Dict.get params.primaryKeyName fields
+                                        |> Maybe.andThen
+                                            (.value >> Value.toString)
+                                        |> Maybe.withDefault ""
+                                , table = table
+                                }
+                                    :: columns
+
+                            else
+                                columns
+
+                        _ ->
+                            columns
+                )
+                acc
+                table.columns
+        )
+        []
+        schema
 
 
 label : Record -> Maybe String

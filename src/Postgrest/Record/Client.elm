@@ -1,5 +1,6 @@
 module Postgrest.Record.Client exposing
     ( Client
+    , delete
     , fetch
     , fetchMany
     , jwtString
@@ -100,6 +101,34 @@ update { host, authScheme } table recordId record =
                     Record.encode record
                         |> PG.patchByPrimaryKey endpoint primaryKey recordId
                         |> PG.setParams [ PG.select <| selects table ]
+                        |> PG.toTask token
+                        |> Task.mapError PGError
+
+                Nothing ->
+                    Task.fail (RequestError "No primary id in table")
+
+        Nothing ->
+            Task.fail AuthError
+
+
+delete : Client a -> Table -> Record -> Task Error String
+delete { host, authScheme } table record =
+    case AuthScheme.toJwt authScheme of
+        Just token ->
+            case
+                Maybe.map2 Tuple.pair
+                    (tablePrimaryKeyName table)
+                    (Record.id record)
+            of
+                Just ( primaryKeyName, recordId ) ->
+                    let
+                        endpoint =
+                            resourceEndpoint host table
+
+                        primaryKey =
+                            PG.primaryKey ( primaryKeyName, PG.string )
+                    in
+                    PG.deleteByPrimaryKey endpoint primaryKey recordId
                         |> PG.toTask token
                         |> Task.mapError PGError
 

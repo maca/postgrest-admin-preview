@@ -428,6 +428,17 @@ section.resource-form, section.record-detail
 .record-detail .action {
     display: flex;
 }
+
+.record-detail .associations {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 1rem;
+    gap: 1rem;
+}
+
+.record-detail .associations .association {
+    flex-grow: 1;
+}
 /* Detail */
 /* ---------- */
 
@@ -485,3 +496,13 @@ a.button:hover {
 }
 /* Modal */
 /* ---------- */
+
+
+.actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.actions button {
+    margin-left: 1.5rem;
+}

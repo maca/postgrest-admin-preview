@@ -141,7 +141,7 @@ update msg model =
         DetailChanged childMsg ->
             case model.route of
                 RouteDetail form ->
-                    Detail.update childMsg form
+                    Detail.update model childMsg form
                         |> updateRoute RouteDetail DetailChanged model
                         |> handleChildMsg (Detail.mapMsg childMsg)
 
@@ -354,7 +354,7 @@ mainContent model =
             Html.map ListingChanged <| Listing.view listing
 
         RouteDetail listing ->
-            Html.map DetailChanged <| Detail.view listing
+            Html.map DetailChanged <| Detail.view model.schema listing
 
         RouteFormLoading _ _ ->
             loading
