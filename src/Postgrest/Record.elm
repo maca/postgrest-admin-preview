@@ -1,5 +1,5 @@
-module Postgrest.Resource exposing
-    ( Resource
+module Postgrest.Record exposing
+    ( Record
     , changed
     , decoder
     , encode
@@ -33,11 +33,11 @@ import Postgrest.Value as Value exposing (Value(..))
 import Regex exposing (Regex)
 
 
-type alias Resource =
+type alias Record =
     Dict String Field
 
 
-fromTable : Table -> Resource
+fromTable : Table -> Record
 fromTable table =
     Dict.map
         (\_ { required, value, constraint } ->
@@ -51,24 +51,24 @@ fromTable table =
         table.columns
 
 
-hasErrors : Resource -> Bool
+hasErrors : Record -> Bool
 hasErrors resource =
     errors resource
         |> Dict.values
         |> List.any (not << isNothing)
 
 
-errors : Resource -> Dict String (Maybe String)
+errors : Record -> Dict String (Maybe String)
 errors resource =
     Dict.map (\_ f -> Field.validate f |> .error) resource
 
 
-changed : Resource -> Bool
+changed : Record -> Bool
 changed resource =
     Dict.values resource |> List.any .changed
 
 
-encode : Resource -> Encode.Value
+encode : Record -> Encode.Value
 encode resource =
     Encode.dict identity (.value >> Value.encode) resource
 
@@ -79,12 +79,12 @@ primaryKeyName resource =
         |> Maybe.map Tuple.first
 
 
-decoder : Table -> Decoder Resource
+decoder : Table -> Decoder Record
 decoder table =
     Dict.foldl decoderHelp (Decode.succeed Dict.empty) table.columns
 
 
-decoderHelp : String -> Column -> Decoder Resource -> Decoder Resource
+decoderHelp : String -> Column -> Decoder Record -> Decoder Record
 decoderHelp name column result =
     result
         |> Decode.andThen
@@ -96,7 +96,7 @@ decoderHelp name column result =
             )
 
 
-fieldDecoder : Resource -> String -> Column -> Decoder Resource
+fieldDecoder : Record -> String -> Column -> Decoder Record
 fieldDecoder resource name column =
     let
         insert constraint value =
@@ -134,24 +134,24 @@ referenceLabelDecoder params =
             Decode.succeed Nothing
 
 
-id : Resource -> Maybe String
+id : Record -> Maybe String
 id resource =
     primaryKey resource |> Maybe.andThen (.value >> Value.toString)
 
 
-fieldToString : String -> Resource -> Maybe String
+fieldToString : String -> Record -> Maybe String
 fieldToString key resource =
     Dict.get key resource |> Maybe.andThen (.value >> Value.toString)
 
 
-primaryKey : Resource -> Maybe Field
+primaryKey : Record -> Maybe Field
 primaryKey resource =
     Dict.values resource
         |> List.filter Field.isPrimaryKey
         |> List.head
 
 
-setError : PG.PostgrestErrorJSON -> Resource -> Resource
+setError : PG.PostgrestErrorJSON -> Record -> Record
 setError error resource =
     let
         mapFun columnName key field =
@@ -181,7 +181,7 @@ columnRegex =
         |> Maybe.withDefault Regex.never
 
 
-label : Resource -> Maybe String
+label : Record -> Maybe String
 label resource =
     case
         List.filterMap (labelHelp resource) resourceIdentifiers |> List.head
@@ -193,7 +193,7 @@ label resource =
             id resource
 
 
-labelHelp : Resource -> String -> Maybe String
+labelHelp : Record -> String -> Maybe String
 labelHelp resource fieldName =
     case Dict.get fieldName resource |> Maybe.map .value of
         Just (PString resourceLabel) ->

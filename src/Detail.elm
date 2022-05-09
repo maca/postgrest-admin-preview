@@ -22,8 +22,8 @@ import Html.Attributes exposing (class, href)
 import Html.Events exposing (onClick)
 import Postgrest.Client as PG
 import Postgrest.Field as Field exposing (Field)
-import Postgrest.Resource as Resource exposing (Resource)
-import Postgrest.Resource.Client as Client exposing (Client)
+import Postgrest.Record as Record exposing (Record)
+import Postgrest.Record.Client as Client exposing (Client)
 import Postgrest.Schema exposing (Table)
 import Postgrest.Value exposing (Value(..))
 import PostgrestAdmin.AuthScheme as AuthScheme
@@ -35,7 +35,7 @@ import Utils.Task exposing (Error(..), attemptWithError, fail)
 
 
 type Msg
-    = Fetched Resource
+    = Fetched Record
     | Deleted
     | DeleteModalOpened
     | DeleteModalClosed
@@ -55,7 +55,7 @@ type Detail
     = Detail
         (Params
             { confirmDelete : Bool
-            , resource : Maybe Resource
+            , resource : Maybe Record
             }
         )
 
@@ -135,7 +135,7 @@ view (Detail params) =
                 [ class "resource-detail" ]
                 [ h1
                     []
-                    [ Resource.label resource
+                    [ Record.label resource
                         |> Maybe.withDefault ""
                         |> (++) (String.humanize params.resourcesName ++ " - ")
                         |> text
@@ -183,9 +183,9 @@ view (Detail params) =
             text "loading"
 
 
-actions : String -> Resource -> Html Msg
+actions : String -> Record -> Html Msg
 actions resourcesName resource =
-    case Resource.id resource of
+    case Record.id resource of
         Just id ->
             div
                 [ class "action" ]
@@ -222,7 +222,7 @@ tableRow resourcesName ( name, field ) =
 -- Utils
 
 
-sortedFields : Resource -> List ( String, Field )
+sortedFields : Record -> List ( String, Field )
 sortedFields resource =
     Dict.toList resource
         |> List.sortWith Field.compareTuple

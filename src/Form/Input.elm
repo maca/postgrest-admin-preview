@@ -32,8 +32,8 @@ import Html.Events exposing (onInput)
 import Maybe.Extra as Maybe
 import Postgrest.Client as PG exposing (PostgrestErrorJSON)
 import Postgrest.Field as Field exposing (Field)
-import Postgrest.Resource as Resource exposing (Resource)
-import Postgrest.Resource.Client as Client exposing (Client)
+import Postgrest.Record as Record exposing (Record)
+import Postgrest.Record.Client as Client exposing (Client)
 import Postgrest.Schema exposing (Constraint(..), ForeignKeyParams)
 import Postgrest.Value as Value exposing (Value(..))
 import PostgrestAdmin.AuthScheme as AuthScheme
@@ -49,7 +49,7 @@ type alias Fields =
 
 
 type alias Autocomplete =
-    { results : List Resource
+    { results : List Record
     , userInput : String
     , blocked : Bool
     }
@@ -57,7 +57,7 @@ type alias Autocomplete =
 
 type Msg
     = Changed ( String, Input ) String
-    | ListingFetched String (Result Error (List Resource))
+    | ListingFetched String (Result Error (List Record))
     | Failed Error
 
 
@@ -104,10 +104,10 @@ update client msg record =
                 ForeignKey params ->
                     let
                         resource =
-                            findResource params autocomplete userInput
+                            findRecord params autocomplete userInput
 
                         value =
-                            Maybe.andThen Resource.primaryKey resource
+                            Maybe.andThen Record.primaryKey resource
                                 |> Maybe.map .value
                                 |> Maybe.withDefault field.value
 
@@ -126,7 +126,7 @@ update client msg record =
                             }
                         )
                         record
-                    , fetchResources client name params userInput
+                    , fetchRecords client name params userInput
                     )
 
                 _ ->
@@ -416,25 +416,25 @@ associationLink params { value } =
             [ text id ]
 
 
-autocompleteOption : ForeignKeyParams -> Resource -> Html Msg
+autocompleteOption : ForeignKeyParams -> Record -> Html Msg
 autocompleteOption params resource =
     option [ Html.Attributes.value <| optionText params resource ] []
 
 
-optionText : ForeignKeyParams -> Resource -> String
+optionText : ForeignKeyParams -> Record -> String
 optionText ({ primaryKeyName } as params) resource =
     let
         id =
-            Resource.fieldToString primaryKeyName resource
+            Record.fieldToString primaryKeyName resource
     in
     [ id, resourceLabel params resource ]
         |> List.filterMap identity
         |> String.join " - "
 
 
-resourceLabel : ForeignKeyParams -> Resource -> Maybe String
+resourceLabel : ForeignKeyParams -> Record -> Maybe String
 resourceLabel { labelColumnName } resource =
-    Maybe.andThen (flip Resource.fieldToString resource) labelColumnName
+    Maybe.andThen (flip Record.fieldToString resource) labelColumnName
 
 
 displayInput : String -> Input -> Maybe String -> String -> Html Msg
@@ -511,8 +511,8 @@ displayError error =
         |> Maybe.withDefault (text "")
 
 
-fetchResources : Client a -> String -> ForeignKeyParams -> String -> Cmd Msg
-fetchResources client name { tableName, labelColumnName } userInput =
+fetchRecords : Client a -> String -> ForeignKeyParams -> String -> Cmd Msg
+fetchRecords client name { tableName, labelColumnName } userInput =
     case Dict.get tableName client.schema of
         Just table ->
             let
@@ -560,8 +560,8 @@ fetchResources client name { tableName, labelColumnName } userInput =
             fail Failed (BadSchema tableName)
 
 
-findResource : ForeignKeyParams -> Autocomplete -> String -> Maybe Resource
-findResource foreignKeyParams autocomplete userInput =
+findRecord : ForeignKeyParams -> Autocomplete -> String -> Maybe Record
+findRecord foreignKeyParams autocomplete userInput =
     let
         userInputLower =
             String.toLower userInput

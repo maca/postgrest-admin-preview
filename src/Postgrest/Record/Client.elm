@@ -1,4 +1,4 @@
-module Postgrest.Resource.Client exposing
+module Postgrest.Record.Client exposing
     ( Client
     , create
     , fetchMany
@@ -10,7 +10,7 @@ module Postgrest.Resource.Client exposing
 
 import Dict
 import Postgrest.Client as PG exposing (Endpoint, Request, Selectable)
-import Postgrest.Resource as Resource exposing (Resource)
+import Postgrest.Record as Record exposing (Record)
 import Postgrest.Schema exposing (Column, Constraint(..), Schema, Table)
 import PostgrestAdmin.AuthScheme as AuthScheme exposing (AuthScheme)
 import Url exposing (Url)
@@ -25,11 +25,11 @@ type alias Client a =
     }
 
 
-fetchOne : Client a -> Table -> String -> String -> Request Resource
+fetchOne : Client a -> Table -> String -> String -> Request Record
 fetchOne { host } table resourcesName id =
     let
         pkName =
-            Resource.primaryKeyName table.columns |> Maybe.withDefault ""
+            Record.primaryKeyName table.columns |> Maybe.withDefault ""
     in
     resourceEndpoint host resourcesName table
         |> PG.getOne
@@ -39,20 +39,20 @@ fetchOne { host } table resourcesName id =
             ]
 
 
-fetchMany : Client a -> Table -> String -> Request (List Resource)
+fetchMany : Client a -> Table -> String -> Request (List Record)
 fetchMany { host } table resourcesName =
     resourceEndpoint host resourcesName table
         |> PG.getMany
         |> PG.setParams [ PG.select <| selects table ]
 
 
-create : Client a -> Table -> String -> Resource -> Request Resource
+create : Client a -> Table -> String -> Record -> Request Record
 create { host } table resourcesName resource =
     let
         endpoint =
             resourceEndpoint host resourcesName table
     in
-    Resource.encode resource
+    Record.encode resource
         |> PG.postOne endpoint
         |> PG.setParams [ PG.select <| selects table ]
 
@@ -62,8 +62,8 @@ update :
     -> Table
     -> String
     -> ( Maybe String, String )
-    -> Resource
-    -> Request Resource
+    -> Record
+    -> Request Record
 update { host } table resourcesName ( primaryKeyName, id ) resource =
     let
         endpoint =
@@ -75,7 +75,7 @@ update { host } table resourcesName ( primaryKeyName, id ) resource =
                 , PG.string
                 )
     in
-    Resource.encode resource
+    Record.encode resource
         |> PG.patchByPrimaryKey endpoint pk id
         |> PG.setParams
             [ PG.select <| selects table ]
@@ -100,9 +100,9 @@ associationJoin { constraint } =
             Nothing
 
 
-resourceEndpoint : Url -> String -> Table -> Endpoint Resource
+resourceEndpoint : Url -> String -> Table -> Endpoint Record
 resourceEndpoint url resourcesName table =
-    Resource.decoder table
+    Record.decoder table
         |> PG.endpoint ({ url | path = "/" ++ resourcesName } |> Url.toString)
 
 

@@ -20,8 +20,8 @@ import Html.Events exposing (onSubmit)
 import Notification
 import Postgrest.Client as PG
 import Postgrest.Field as Field
-import Postgrest.Resource as Resource exposing (Resource)
-import Postgrest.Resource.Client as Client exposing (Client)
+import Postgrest.Record as Record exposing (Record)
+import Postgrest.Record.Client as Client exposing (Client)
 import Postgrest.Schema exposing (Table)
 import Postgrest.Value exposing (Value(..))
 import PostgrestAdmin.AuthScheme as AuthScheme
@@ -41,9 +41,9 @@ type alias Params =
 
 
 type Msg
-    = Fetched Resource
-    | Created Resource
-    | Updated Resource
+    = Fetched Record
+    | Created Record
+    | Updated Record
     | Changed Input.Msg
     | NotificationChanged Notification.Msg
     | Submitted
@@ -60,7 +60,7 @@ type Form
 
 init : Params -> Table -> Form
 init params table =
-    Resource.fromTable table |> fromResource params
+    Record.fromTable table |> fromRecord params
 
 
 
@@ -71,7 +71,7 @@ update : Client { a | key : Nav.Key } -> Msg -> Form -> ( Form, Cmd Msg )
 update client msg ((Form params fields) as form) =
     case msg of
         Fetched resource ->
-            ( fromResource params resource, Cmd.none )
+            ( fromRecord params resource, Cmd.none )
 
         Changed inputMsg ->
             Input.update client inputMsg fields
@@ -89,13 +89,13 @@ update client msg ((Form params fields) as form) =
             ( form, save client form )
 
         Created resource ->
-            ( fromResource params resource
+            ( fromRecord params resource
             , Notification.confirm "The record was created"
-                |> navigate client params.resourcesName (Resource.id resource)
+                |> navigate client params.resourcesName (Record.id resource)
             )
 
         Updated resource ->
-            ( fromResource params resource
+            ( fromRecord params resource
             , Notification.confirm "The record was updated"
                 |> navigate client params.resourcesName params.id
             )
@@ -125,14 +125,14 @@ navigate client resourcesName resourceId notificationTask =
 -- Utils
 
 
-toResource : Form -> Resource
-toResource (Form _ fields) =
+toRecord : Form -> Record
+toRecord (Form _ fields) =
     Dict.map (\_ input -> Input.toField input) fields
 
 
-toFormFields : Form -> Resource
+toFormFields : Form -> Record
 toFormFields form =
-    toResource (filterFields form)
+    toRecord (filterFields form)
 
 
 formInputs : Form -> List ( String, Input )
@@ -155,8 +155,8 @@ inputIsEditable fieldNames name input =
         || List.member name fieldNames
 
 
-fromResource : Params -> Resource -> Form
-fromResource params resource =
+fromRecord : Params -> Record -> Form
+fromRecord params resource =
     resource
         |> Dict.map (\_ input -> Input.fromField input)
         |> Form params
@@ -169,12 +169,12 @@ changed (Form _ fields) =
 
 errors : Form -> Dict String (Maybe String)
 errors record =
-    toFormFields record |> Resource.errors
+    toFormFields record |> Record.errors
 
 
 hasErrors : Form -> Bool
 hasErrors record =
-    toFormFields record |> Resource.hasErrors
+    toFormFields record |> Record.hasErrors
 
 
 mapMsg : Msg -> OuterMsg
@@ -195,7 +195,7 @@ mapMsg msg =
 
 id : Form -> Maybe String
 id record =
-    toResource record |> Resource.id
+    toRecord record |> Record.id
 
 
 
@@ -250,14 +250,14 @@ save client ((Form params _) as form) =
                 |> attemptWithError Failed Created
 
 
-updateRecord : Client a -> Form -> String -> Task Error Resource
+updateRecord : Client a -> Form -> String -> Task Error Record
 updateRecord client ((Form { table, resourcesName } _) as form) rid =
     case AuthScheme.toJwt client.authScheme of
         Just token ->
             let
                 primaryKeyName =
-                    toResource form
-                        |> Resource.primaryKeyName
+                    toRecord form
+                        |> Record.primaryKeyName
             in
             toFormFields form
                 |> Client.update client table resourcesName ( primaryKeyName, rid )
@@ -268,7 +268,7 @@ updateRecord client ((Form { table, resourcesName } _) as form) rid =
             Task.fail AuthError
 
 
-createRecord : Client a -> Form -> Task Error Resource
+createRecord : Client a -> Form -> Task Error Record
 createRecord client ((Form { table, resourcesName } _) as form) =
     case AuthScheme.toJwt client.authScheme of
         Just token ->
@@ -303,7 +303,7 @@ view ((Form { resourcesName } _) as form) =
             [ text (String.humanize resourcesName ++ " - ")
             , case
                 Maybe.map2 Tuple.pair
-                    (Resource.label (toResource form))
+                    (Record.label (toRecord form))
                     (id form)
               of
                 Just ( resourceLabel, resourceId ) ->

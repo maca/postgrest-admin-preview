@@ -13,7 +13,7 @@ import Json.Decode as Decode exposing (Decoder, Value)
 import Listing exposing (Listing)
 import Notification exposing (Notification)
 import Postgrest.Client as PG
-import Postgrest.Resource.Client exposing (Client)
+import Postgrest.Record.Client exposing (Client)
 import Postgrest.Schema as Schema exposing (Schema, Table)
 import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.Config as Config exposing (Config)

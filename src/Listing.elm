@@ -50,8 +50,8 @@ import Json.Decode as Decode
 import Postgrest.Client as PG
 import Postgrest.Download as Download exposing (Download, Format(..))
 import Postgrest.Field as Field
-import Postgrest.Resource as Resource exposing (Resource)
-import Postgrest.Resource.Client as Client exposing (Client)
+import Postgrest.Record as Record exposing (Record)
+import Postgrest.Record.Client as Client exposing (Client)
 import Postgrest.Schema exposing (Column, Constraint(..), Table)
 import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
@@ -66,7 +66,7 @@ import Utils.Task exposing (Error(..), attemptWithError, fail)
 
 
 type Page
-    = Page (List Resource)
+    = Page (List Record)
     | Blank
 
 
@@ -77,8 +77,8 @@ type SortOrder
 
 
 type Msg
-    = ResourceLinkClicked String String
-    | Fetched (List Resource)
+    = RecordLinkClicked String String
+    | Fetched (List Record)
     | ApplyFilters
     | Sort SortOrder
     | Reload
@@ -185,7 +185,7 @@ fetch client listing =
         |> attemptWithError FetchFailed Fetched
 
 
-fetchTask : Client a -> Listing -> Task Error (List Resource)
+fetchTask : Client a -> Listing -> Task Error (List Record)
 fetchTask client listing =
     let
         { search, resourcesName, page, table, order } =
@@ -215,7 +215,7 @@ fetchTask client listing =
 update : Client { a | key : Nav.Key } -> Msg -> Listing -> ( Listing, Cmd Msg )
 update client msg listing =
     case msg of
-        ResourceLinkClicked resourcesName id ->
+        RecordLinkClicked resourcesName id ->
             ( listing
             , Nav.pushUrl client.key <| Url.absolute [ resourcesName, id ] []
             )
@@ -550,17 +550,17 @@ pagesFold listing fields acc pageNum pages =
             pagesFold listing fields (elem :: acc) (pageNum + 1) rest
 
 
-viewPage : Listing -> List String -> Int -> List Resource -> Html Msg
+viewPage : Listing -> List String -> Int -> List Record -> Html Msg
 viewPage listing fields pageNum records =
     tbody [ id <| pageId pageNum ] <|
         List.map (row listing fields) records
 
 
-row : Listing -> List String -> Resource -> Html Msg
+row : Listing -> List String -> Record -> Html Msg
 row { resourcesName, textSelect } names record =
     let
         onClick =
-            clickResource resourcesName textSelect
+            clickRecord resourcesName textSelect
 
         cell fieldName =
             Dict.get fieldName record
@@ -578,22 +578,22 @@ row { resourcesName, textSelect } names record =
           else
             class ""
         , onMouseUp SelectOff
-        , Resource.id record
+        , Record.id record
             |> Maybe.withDefault ""
-            |> clickResource resourcesName textSelect
+            |> clickRecord resourcesName textSelect
         ]
         (List.filterMap cell names)
 
 
-clickResource : String -> TextSelect -> String -> Html.Attribute Msg
-clickResource resourcesName textSelect id =
+clickRecord : String -> TextSelect -> String -> Html.Attribute Msg
+clickRecord resourcesName textSelect id =
     let
         msg =
             if textSelect == On then
                 SelectOff
 
             else
-                ResourceLinkClicked resourcesName id
+                RecordLinkClicked resourcesName id
     in
     Events.custom "click" <|
         Decode.map (EventConfig True True)
