@@ -563,7 +563,7 @@ row { resourcesName, textSelect } names record =
             clickRecord resourcesName textSelect
 
         cell fieldName =
-            Dict.get fieldName record
+            Dict.get fieldName record.fields
                 |> Maybe.map
                     (\field ->
                         td [] [ Field.toHtml onClick resourcesName field ]

@@ -46,7 +46,6 @@ type alias Params a =
     { a
         | table : Table
         , resourcesName : String
-        , fieldNames : List String
         , id : String
     }
 
@@ -55,7 +54,7 @@ type Detail
     = Detail
         (Params
             { confirmDelete : Bool
-            , resource : Maybe Record
+            , record : Maybe Record
             }
         )
 
@@ -65,18 +64,17 @@ init params =
     Detail
         { table = params.table
         , resourcesName = params.resourcesName
-        , fieldNames = params.fieldNames
         , id = params.id
         , confirmDelete = False
-        , resource = Nothing
+        , record = Nothing
         }
 
 
 update : Msg -> Detail -> ( Detail, Cmd Msg )
 update msg (Detail params) =
     case msg of
-        Fetched resource ->
-            ( Detail { params | resource = Just resource }, Cmd.none )
+        Fetched record ->
+            ( Detail { params | record = Just record }, Cmd.none )
 
         DeleteModalOpened ->
             ( Detail { params | confirmDelete = True }, Cmd.none )
@@ -106,8 +104,8 @@ mapMsg msg =
 
 
 fetch : Client a -> Detail -> Cmd Msg
-fetch client (Detail { table, resourcesName, id, resource }) =
-    case resource of
+fetch client (Detail { table, resourcesName, id, record }) =
+    case record of
         Just _ ->
             Cmd.none
 
@@ -129,13 +127,13 @@ fetch client (Detail { table, resourcesName, id, resource }) =
 
 view : Detail -> Html Msg
 view (Detail params) =
-    case params.resource of
-        Just resource ->
+    case params.record of
+        Just record ->
             section
-                [ class "resource-detail" ]
+                [ class "record-detail" ]
                 [ h1
                     []
-                    [ Record.label resource
+                    [ Record.label record
                         |> Maybe.withDefault ""
                         |> (++) (String.humanize params.resourcesName ++ " - ")
                         |> text
@@ -144,10 +142,10 @@ view (Detail params) =
                     [ class "card" ]
                     [ table
                         []
-                        (sortedFields resource
+                        (sortedFields record
                             |> List.map (tableRow params.resourcesName)
                         )
-                    , actions params.resourcesName resource
+                    , actions params.resourcesName record
                     ]
                 , if params.confirmDelete then
                     div
@@ -184,8 +182,8 @@ view (Detail params) =
 
 
 actions : String -> Record -> Html Msg
-actions resourcesName resource =
-    case Record.id resource of
+actions resourcesName record =
+    case Record.id record of
         Just id ->
             div
                 [ class "action" ]
@@ -223,6 +221,6 @@ tableRow resourcesName ( name, field ) =
 
 
 sortedFields : Record -> List ( String, Field )
-sortedFields resource =
-    Dict.toList resource
+sortedFields record =
+    Dict.toList record.fields
         |> List.sortWith Field.compareTuple

@@ -420,12 +420,12 @@ a:hover {
 
 /* ---------- */
 /* Detail */
-section.resource-form, section.resource-detail
+section.resource-form, section.record-detail
 {
     padding: 4rem;
 }
 
-resource-detail .action {
+.record-detail .action {
     display: flex;
 }
 /* Detail */

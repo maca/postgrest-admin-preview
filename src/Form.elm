@@ -40,6 +40,7 @@ type alias Params =
     }
 
 
+
 type Msg
     = Fetched Record
     | Created Record
@@ -126,8 +127,11 @@ navigate client resourcesName resourceId notificationTask =
 
 
 toRecord : Form -> Record
-toRecord (Form _ fields) =
-    Dict.map (\_ input -> Input.toField input) fields
+toRecord (Form {resourcesName} fields) =
+   { tableName = resourcesName
+   , fields = Dict.map (\_ input -> Input.toField input) fields
+   }
+
 
 
 toFormFields : Form -> Record
@@ -156,8 +160,8 @@ inputIsEditable fieldNames name input =
 
 
 fromRecord : Params -> Record -> Form
-fromRecord params resource =
-    resource
+fromRecord params record =
+    record.fields
         |> Dict.map (\_ input -> Input.fromField input)
         |> Form params
 

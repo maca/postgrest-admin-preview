@@ -9,7 +9,9 @@ module Postgrest.Record.Client exposing
     )
 
 import Dict
+import Dict.Extra as Dict
 import Postgrest.Client as PG exposing (Endpoint, Request, Selectable)
+import Postgrest.Field as Field exposing (Field)
 import Postgrest.Record as Record exposing (Record)
 import Postgrest.Schema exposing (Column, Constraint(..), Schema, Table)
 import PostgrestAdmin.AuthScheme as AuthScheme exposing (AuthScheme)
@@ -29,13 +31,15 @@ fetchOne : Client a -> Table -> String -> String -> Request Record
 fetchOne { host } table resourcesName id =
     let
         pkName =
-            Record.primaryKeyName table.columns |> Maybe.withDefault ""
+            Dict.find (\_ column -> Field.isPrimaryKey column) table.columns
+                |> Maybe.map Tuple.first
+                |> Maybe.withDefault ""
     in
     resourceEndpoint host resourcesName table
         |> PG.getOne
         |> PG.setParams
             [ PG.select <| selects table
-            , PG.param pkName <| PG.eq <| PG.string id
+            , PG.param pkName <| PG.eq (PG.string id)
             ]
 
 

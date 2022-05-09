@@ -1,6 +1,5 @@
 module Postgrest.Record exposing
     ( Record
-    , changed
     , decoder
     , encode
     , errors
@@ -11,7 +10,6 @@ module Postgrest.Record exposing
     , label
     , primaryKey
     , primaryKeyName
-    , setError
     )
 
 import Basics.Extra exposing (flip)
@@ -34,70 +32,70 @@ import Regex exposing (Regex)
 
 
 type alias Record =
-    Dict String Field
+    { tableName : String
+    , fields : Dict String Field
+    }
 
 
 fromTable : Table -> Record
-fromTable table =
-    Dict.map
-        (\_ { required, value, constraint } ->
-            { required = required
-            , constraint = constraint
-            , error = Nothing
-            , changed = False
-            , value = value
-            }
-        )
-        table.columns
+fromTable { name, columns } =
+    { tableName = name
+    , fields =
+        Dict.map
+            (\_ { required, value, constraint } ->
+                { required = required
+                , constraint = constraint
+                , error = Nothing
+                , changed = False
+                , value = value
+                }
+            )
+            columns
+    }
 
 
 hasErrors : Record -> Bool
-hasErrors resource =
-    errors resource
+hasErrors record =
+    errors record
         |> Dict.values
         |> List.any (not << isNothing)
 
 
 errors : Record -> Dict String (Maybe String)
-errors resource =
-    Dict.map (\_ f -> Field.validate f |> .error) resource
-
-
-changed : Record -> Bool
-changed resource =
-    Dict.values resource |> List.any .changed
+errors record =
+    Dict.map (\_ f -> Field.validate f |> .error) record.fields
 
 
 encode : Record -> Encode.Value
-encode resource =
-    Encode.dict identity (.value >> Value.encode) resource
+encode record =
+    Encode.dict identity (.value >> Value.encode) record.fields
 
 
-primaryKeyName : Dict String { a | constraint : Constraint } -> Maybe String
-primaryKeyName resource =
-    Dict.find (\_ column -> Field.isPrimaryKey column) resource
+primaryKeyName : Record -> Maybe String
+primaryKeyName record =
+    Dict.find (\_ column -> Field.isPrimaryKey column) record.fields
         |> Maybe.map Tuple.first
 
 
 decoder : Table -> Decoder Record
-decoder table =
-    Dict.foldl decoderHelp (Decode.succeed Dict.empty) table.columns
+decoder { name, columns } =
+    Dict.foldl decoderHelp (Decode.succeed Dict.empty) columns
+        |> Decode.map (\fields -> { tableName = name, fields = fields })
 
 
-decoderHelp : String -> Column -> Decoder Record -> Decoder Record
-decoderHelp name column result =
-    result
-        |> Decode.andThen
-            (\dict ->
-                Decode.oneOf
-                    [ fieldDecoder dict name column
-                    , Decode.succeed dict
-                    ]
-            )
+decoderHelp : String -> Column -> Decoder (Dict String Field) -> Decoder (Dict String Field)
+decoderHelp name column =
+    Decode.andThen
+        (\dict ->
+            Decode.oneOf
+                [ fieldDecoder dict name column
+                , Decode.succeed dict
+                ]
+        )
 
 
-fieldDecoder : Record -> String -> Column -> Decoder Record
-fieldDecoder resource name column =
+fieldDecoder : Dict String Field -> String -> Column -> Decoder (Dict String Field)
+fieldDecoder fields name column =
     let
         insert constraint value =
             Dict.insert name
@@ -107,7 +105,7 @@ fieldDecoder resource name column =
                 , changed = False
                 , value = value
                 }
-                resource
+                fields
     in
     case column.constraint of
         ForeignKey params ->
@@ -135,36 +133,36 @@ referenceLabelDecoder params =
 
 
 id : Record -> Maybe String
-id resource =
-    primaryKey resource |> Maybe.andThen (.value >> Value.toString)
+id record =
+    primaryKey record |> Maybe.andThen (.value >> Value.toString)
 
 
 fieldToString : String -> Record -> Maybe String
-fieldToString key resource =
-    Dict.get key resource |> Maybe.andThen (.value >> Value.toString)
+fieldToString key record =
+    Dict.get key record.fields |> Maybe.andThen (.value >> Value.toString)
 
 
 primaryKey : Record -> Maybe Field
-primaryKey resource =
-    Dict.values resource
+primaryKey record =
+    Dict.values record.fields
         |> List.filter Field.isPrimaryKey
         |> List.head
 
 
-setError : PG.PostgrestErrorJSON -> Record -> Record
-setError error resource =
-    let
-        mapFun columnName key field =
-            if key == columnName then
-                Field.setError error field
 
-            else
-                field
-    in
-    error.message
-        |> Maybe.andThen extractColumnName
-        |> Maybe.map (mapFun >> flip Dict.map resource)
-        |> Maybe.withDefault resource
+-- setError : PG.PostgrestErrorJSON -> Record -> Record
+-- setError error record =
+--     let
+--         mapFun columnName key field =
+--             if key == columnName then
+--                 Field.setError error field
+--             else
+--                 field
+--     in
+--     error.message
+--         |> Maybe.andThen extractColumnName
+--         |> Maybe.map (mapFun >> flip Dict.map record)
+--         |> Maybe.withDefault record
 
 
 extractColumnName : String -> Maybe String
@@ -182,22 +180,22 @@ columnRegex =
 
 
 label : Record -> Maybe String
-label resource =
+label record =
     case
-        List.filterMap (labelHelp resource) resourceIdentifiers |> List.head
+        List.filterMap (labelHelp record) recordIdentifiers |> List.head
     of
-        Just resourceLabel ->
-            Just resourceLabel
+        Just recordLabel ->
+            Just recordLabel
 
         Nothing ->
-            id resource
+            id record
 
 
 labelHelp : Record -> String -> Maybe String
-labelHelp resource fieldName =
-    case Dict.get fieldName resource |> Maybe.map .value of
-        Just (PString resourceLabel) ->
-            resourceLabel
+labelHelp record fieldName =
+    case Dict.get fieldName record.fields |> Maybe.map .value of
+        Just (PString recordLabel) ->
+            recordLabel
 
         _ ->
             Nothing
@@ -207,6 +205,6 @@ labelHelp resource fieldName =
 -- To refactor
 
 
-resourceIdentifiers : List String
-resourceIdentifiers =
+recordIdentifiers : List String
+recordIdentifiers =
     [ "title", "name", "full name", "email", "first name", "last name" ]

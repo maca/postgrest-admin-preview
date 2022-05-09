@@ -413,7 +413,6 @@ routeParser url model =
                             (Detail.init
                                 { table = table
                                 , resourcesName = resourcesName
-                                , fieldNames = fieldNames model resourcesName
                                 , id = id
                                 }
                             )
