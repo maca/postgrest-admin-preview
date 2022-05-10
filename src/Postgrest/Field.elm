@@ -90,7 +90,7 @@ setError { code } field =
 -- Html
 
 
-toHtml : (String -> Html.Attribute msg) -> String -> Field -> Html msg
+toHtml : (String -> String -> Html.Attribute msg) -> String -> Field -> Html msg
 toHtml onClick resourcesName { constraint, value } =
     case constraint of
         PrimaryKey ->
@@ -142,7 +142,7 @@ valueToHtml value =
 
 recordLink :
     String
-    -> (String -> Html.Attribute msg)
+    -> (String -> String -> Html.Attribute msg)
     -> Value
     -> Maybe String
     -> Html msg
@@ -154,7 +154,7 @@ recordLink resourcesName onClick value mtext =
     a
         [ href <| Url.absolute [ resourcesName, id ] []
         , target "_self"
-        , onClick id
+        , onClick resourcesName id
         ]
         [ Maybe.map text mtext |> Maybe.withDefault (valueToHtml value) ]
 

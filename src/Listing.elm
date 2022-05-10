@@ -470,14 +470,14 @@ view listing =
                     [ class "downloads" ]
                     [ button
                         [ class "button-clear"
-                        , onClick (DownloadRequested CSV)
-                        ]
-                        [ text "Download CSV" ]
-                    , button
-                        [ class "button-clear"
                         , onClick (DownloadRequested JSON)
                         ]
                         [ text "Download JSON" ]
+                    , button
+                        [ class "button-clear"
+                        , onClick (DownloadRequested CSV)
+                        ]
+                        [ text "Download CSV" ]
                     , button
                         [ class "button-clear"
                         , onClick CsvFileRequested
@@ -625,14 +625,11 @@ viewPage listing fields pageNum records =
 row : Listing -> List String -> Record -> Html Msg
 row { resourcesName, textSelect } names record =
     let
-        onClick =
-            clickRecord resourcesName textSelect
-
         cell fieldName =
             Dict.get fieldName record.fields
                 |> Maybe.map
                     (\field ->
-                        td [] [ Field.toHtml onClick resourcesName field ]
+                        td [] [ Field.toHtml (clickRecord textSelect) resourcesName field ]
                     )
     in
     tr
@@ -646,13 +643,13 @@ row { resourcesName, textSelect } names record =
         , onMouseUp SelectOff
         , Record.id record
             |> Maybe.withDefault ""
-            |> clickRecord resourcesName textSelect
+            |> clickRecord textSelect resourcesName
         ]
         (List.filterMap cell names)
 
 
-clickRecord : String -> TextSelect -> String -> Html.Attribute Msg
-clickRecord resourcesName textSelect id =
+clickRecord : TextSelect -> String -> String -> Html.Attribute Msg
+clickRecord textSelect resourcesName id =
     let
         msg =
             if textSelect == On then
