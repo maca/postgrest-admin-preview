@@ -16,6 +16,8 @@ module Listing exposing
 import Browser.Dom as Dom exposing (Viewport)
 import Browser.Navigation as Nav
 import Dict
+import File exposing (File)
+import File.Select as Select
 import Html
     exposing
         ( Html
@@ -90,6 +92,8 @@ type Msg
     | SelectOff
     | DownloadRequested Format
     | Downloaded Download
+    | CSVFileRequested
+    | CSVFileLoaded File
     | ToggleSearchOpen
     | FetchFailed Error
 
@@ -317,6 +321,12 @@ update client msg listing =
         Downloaded download ->
             ( listing, Download.save listing.resourcesName download )
 
+        CSVFileRequested ->
+            ( listing, Select.file [ "text/csv" ] CSVFileLoaded )
+
+        CSVFileLoaded file ->
+            ( listing, Cmd.none )
+
         FetchFailed _ ->
             ( listing, Cmd.none )
 
@@ -417,6 +427,11 @@ view listing =
                         , onClick (DownloadRequested JSON)
                         ]
                         [ text "Download JSON" ]
+                    , button
+                        [ class "button-clear"
+                        , onClick CSVFileRequested
+                        ]
+                        [ text "Upload CSV" ]
                     ]
                 , div
                     []

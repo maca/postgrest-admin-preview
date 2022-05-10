@@ -79,7 +79,7 @@ Sequel.migration do
       name: 'Admin',
       email: 'admin@example.com',
       role: 'app_user',
-      password: '123456'
+      password: 'password'
     )
 
 
