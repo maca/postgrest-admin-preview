@@ -6,7 +6,7 @@ import Http exposing (header)
 import Postgrest.Record.Client as Client exposing (Client)
 import Task exposing (Task)
 import Url
-import Utils.Task exposing (Error(..))
+import Utils.Task exposing (Error(..), handleResponse)
 
 
 type Format
@@ -61,7 +61,7 @@ fetch ({ host } as client) download =
                     ]
                 , url = Url.toString { host | path = url download }
                 , body = Http.emptyBody
-                , resolver = Http.bytesResolver <| handleResponse
+                , resolver = Http.bytesResolver (handleResponse Ok)
                 , timeout = Nothing
                 }
                 |> Task.map (Complete (format download) (url download))
@@ -83,22 +83,3 @@ save name download =
 
         Pending _ _ ->
             Cmd.none
-
-
-handleResponse : Http.Response a -> Result Error a
-handleResponse response =
-    case response of
-        Http.BadUrl_ urlStr ->
-            Err <| HttpError (Http.BadUrl urlStr)
-
-        Http.Timeout_ ->
-            Err <| HttpError Http.Timeout
-
-        Http.BadStatus_ { statusCode } _ ->
-            Err <| HttpError (Http.BadStatus statusCode)
-
-        Http.NetworkError_ ->
-            Err <| HttpError Http.NetworkError
-
-        Http.GoodStatus_ _ body ->
-            Ok body

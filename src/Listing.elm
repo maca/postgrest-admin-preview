@@ -15,6 +15,7 @@ module Listing exposing
 
 import Browser.Dom as Dom exposing (Viewport)
 import Browser.Navigation as Nav
+import Csv
 import Dict
 import File exposing (File)
 import File.Select as Select
@@ -49,12 +50,16 @@ import Html.Attributes
 import Html.Events as Events exposing (on, onClick, onMouseDown, onMouseUp)
 import Inflect as String
 import Json.Decode as Decode
+import Json.Encode as Encode
+import List.Extra as List
+import Notification
 import Postgrest.Client as PG
 import Postgrest.Download as Download exposing (Download, Format(..))
 import Postgrest.Field as Field
 import Postgrest.Record as Record exposing (Record)
 import Postgrest.Record.Client as Client exposing (Client)
 import Postgrest.Schema exposing (Column, Constraint(..), Table)
+import Postgrest.Upload as Upload
 import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 import Search exposing (Search)
@@ -92,9 +97,12 @@ type Msg
     | SelectOff
     | DownloadRequested Format
     | Downloaded Download
-    | CSVFileRequested
-    | CSVFileLoaded File
+    | CsvFileRequested
+    | CsvFileSelected File
+    | CsvFileLoaded String
+    | CsvFilePosted Int
     | ToggleSearchOpen
+    | NotificationChanged Notification.Msg
     | FetchFailed Error
 
 
@@ -153,6 +161,9 @@ mapMsg msg =
     case msg of
         FetchFailed err ->
             OuterMsg.RequestFailed err
+
+        NotificationChanged innerMsg ->
+            OuterMsg.NotificationChanged innerMsg
 
         _ ->
             OuterMsg.Pass
@@ -321,10 +332,50 @@ update client msg listing =
         Downloaded download ->
             ( listing, Download.save listing.resourcesName download )
 
-        CSVFileRequested ->
-            ( listing, Select.file [ "text/csv" ] CSVFileLoaded )
+        CsvFileRequested ->
+            ( listing, Select.file [ "text/csv" ] CsvFileSelected )
 
-        CSVFileLoaded file ->
+        CsvFileSelected file ->
+            ( listing
+            , Task.perform CsvFileLoaded (File.toString file)
+            )
+
+        CsvFileLoaded string ->
+            case Csv.parse string of
+                Ok { headers, records } ->
+                    let
+                        json =
+                            Encode.list
+                                (List.zip headers
+                                    >> Dict.fromList
+                                    >> Encode.dict identity Encode.string
+                                )
+                                records
+
+                        path =
+                            Url.absolute [ listing.resourcesName ] []
+                    in
+                    ( listing
+                    , Upload.post client path json
+                        |> attemptWithError FetchFailed
+                            (\_ -> CsvFilePosted (List.length records))
+                    )
+
+                Err _ ->
+                    ( listing, Cmd.none )
+
+        CsvFilePosted count ->
+            ( listing
+            , Cmd.batch
+                [ Dom.setViewportOf listing.resourcesName 0 0
+                    |> Task.attempt (always Reload)
+                , (String.fromInt count ++ " records where saved.")
+                    |> Notification.confirm
+                    |> Task.perform NotificationChanged
+                ]
+            )
+
+        NotificationChanged _ ->
             ( listing, Cmd.none )
 
         FetchFailed _ ->
@@ -429,7 +480,7 @@ view listing =
                         [ text "Download JSON" ]
                     , button
                         [ class "button-clear"
-                        , onClick CSVFileRequested
+                        , onClick CsvFileRequested
                         ]
                         [ text "Upload CSV" ]
                     ]

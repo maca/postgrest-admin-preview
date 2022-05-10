@@ -4,6 +4,7 @@ module Utils.Task exposing
     , errorToString
     , fail
     , handleJsonResponse
+    , handleResponse
     , toError
     )
 
@@ -20,6 +21,7 @@ type Error
     | BadSchema String
     | AutocompleteError String
     | RequestError String
+    | NoError
     | AuthError
 
 
@@ -44,7 +46,20 @@ fail tagger err =
 
 
 handleJsonResponse : Decoder a -> Http.Response String -> Result Error a
-handleJsonResponse decoder response =
+handleJsonResponse decoder =
+    handleResponse
+        (\body ->
+            case Decode.decodeString decoder body of
+                Err err ->
+                    Err <| DecodeError err
+
+                Ok result ->
+                    Ok result
+        )
+
+
+handleResponse : (body -> Result Error a) -> Http.Response body -> Result Error a
+handleResponse toResult response =
     case response of
         Http.BadUrl_ url ->
             Err <| HttpError (Http.BadUrl url)
@@ -59,12 +74,7 @@ handleJsonResponse decoder response =
             Err <| HttpError Http.NetworkError
 
         Http.GoodStatus_ _ body ->
-            case Decode.decodeString decoder body of
-                Err err ->
-                    Err <| DecodeError err
-
-                Ok result ->
-                    Ok result
+            toResult body
 
 
 toError : Result x a -> Maybe x

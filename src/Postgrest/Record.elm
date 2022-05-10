@@ -152,7 +152,7 @@ referenceLabelDecoder params =
 referencedBy : Schema -> Record -> List Reference
 referencedBy schema { tableName, fields } =
     Dict.foldl
-        (\name table acc ->
+        (\_ table acc ->
             Dict.foldl
                 (\columnName column columns ->
                     case column.constraint of
