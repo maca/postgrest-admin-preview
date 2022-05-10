@@ -190,8 +190,8 @@ mapMsg msg =
 
 
 id : Form -> Maybe String
-id record =
-    toRecord record |> Record.id
+id (Form params _) =
+    params.id
 
 
 

@@ -30,7 +30,14 @@
         authUrl: "http://localhost:8080/rpc/login",
         jwt: sessionStorage.getItem("jwt"),
         formFields : {
-          documents : ["id", "document_collection_id", "title", "description" ]
+          documents : [
+            "id",
+            "document_collection_id",
+            "title",
+            "file_url",
+            "collection",
+            "description"
+          ]
         }
       }
     })
