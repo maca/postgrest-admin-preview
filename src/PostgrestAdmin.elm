@@ -5,12 +5,12 @@ import Browser.Navigation as Nav
 import Detail exposing (Detail)
 import Dict exposing (Dict)
 import Dict.Extra as Dict
-import Form exposing (Form)
+import FormPage exposing (Form)
 import Html exposing (Html, a, aside, div, h1, li, pre, text, ul)
 import Html.Attributes exposing (class, href)
 import Inflect as String
 import Json.Decode as Decode exposing (Decoder, Value)
-import Listing exposing (Listing)
+import ListingPage exposing (Listing)
 import Notification exposing (Notification)
 import Postgrest.Client as PG
 import Postgrest.Record.Client exposing (Client)
@@ -39,9 +39,9 @@ type Route
 
 type Msg
     = SchemaFetched Schema
-    | ListingChanged Listing.Msg
+    | ListingChanged ListingPage.Msg
     | DetailChanged Detail.Msg
-    | FormChanged Form.Msg
+    | FormChanged FormPage.Msg
     | AuthChanged AuthScheme.Msg
     | NotificationChanged Notification.Msg
     | LinkClicked Browser.UrlRequest
@@ -131,9 +131,9 @@ update msg model =
         ListingChanged childMsg ->
             case model.route of
                 RouteListing listing ->
-                    Listing.update model childMsg listing
+                    ListingPage.update model childMsg listing
                         |> updateRoute RouteListing ListingChanged model
-                        |> handleChildMsg (Listing.mapMsg childMsg)
+                        |> handleChildMsg (ListingPage.mapMsg childMsg)
 
                 _ ->
                     ( model, Cmd.none )
@@ -151,14 +151,14 @@ update msg model =
         FormChanged childMsg ->
             case model.route of
                 RouteForm form ->
-                    Form.update model childMsg form
+                    FormPage.update model childMsg form
                         |> updateRoute RouteForm FormChanged model
-                        |> handleChildMsg (Form.mapMsg childMsg)
+                        |> handleChildMsg (FormPage.mapMsg childMsg)
 
                 RouteFormLoading form _ ->
-                    Form.update model childMsg form
+                    FormPage.update model childMsg form
                         |> updateRoute RouteForm FormChanged model
-                        |> handleChildMsg (Form.mapMsg childMsg)
+                        |> handleChildMsg (FormPage.mapMsg childMsg)
 
                 _ ->
                     ( model, Cmd.none )
@@ -205,7 +205,7 @@ navigate model =
                     ( model, fail Failed <| BadSchema resourcesName )
 
         RouteListing listing ->
-            ( listing, Listing.fetch model listing )
+            ( listing, ListingPage.fetch model listing )
                 |> updateRoute RouteListing ListingChanged model
 
         RouteDetail detail ->
@@ -213,7 +213,7 @@ navigate model =
                 |> updateRoute RouteDetail DetailChanged model
 
         RouteFormLoading form id ->
-            ( model, Form.fetch model form id |> Cmd.map FormChanged )
+            ( model, FormPage.fetch model form id |> Cmd.map FormChanged )
 
         _ ->
             ( model, Cmd.none )
@@ -253,18 +253,18 @@ fetch : Model -> Cmd Msg
 fetch model =
     case model.route of
         RouteListing listing ->
-            Listing.fetch model listing |> Cmd.map ListingChanged
+            ListingPage.fetch model listing |> Cmd.map ListingChanged
 
         RouteFormLoading form id ->
-            Form.fetch model form id |> Cmd.map FormChanged
+            FormPage.fetch model form id |> Cmd.map FormChanged
 
         RouteDetail detail ->
             Detail.fetch model detail |> Cmd.map DetailChanged
 
         RouteForm form ->
-            case Form.id form of
+            case FormPage.id form of
                 Just id ->
-                    Form.fetch model form id |> Cmd.map FormChanged
+                    FormPage.fetch model form id |> Cmd.map FormChanged
 
                 Nothing ->
                     Cmd.none
@@ -351,7 +351,7 @@ mainContent model =
             loading
 
         RouteListing listing ->
-            Html.map ListingChanged <| Listing.view listing
+            Html.map ListingChanged <| ListingPage.view listing
 
         RouteDetail listing ->
             Html.map DetailChanged <| Detail.view model.schema listing
@@ -360,7 +360,7 @@ mainContent model =
             loading
 
         RouteForm form ->
-            Html.map FormChanged <| Form.view form
+            Html.map FormChanged <| FormPage.view form
 
         RouteNotFound ->
             notFound
@@ -429,17 +429,17 @@ makeListingRoute model url resourcesName =
         modify =
             case model.route of
                 RouteListing listing ->
-                    if Listing.isSearchVisible listing then
-                        Listing.showSearch
+                    if ListingPage.isSearchVisible listing then
+                        ListingPage.showSearch
 
                     else
-                        Listing.hideSearch
+                        ListingPage.hideSearch
 
                 _ ->
-                    Listing.showSearch
+                    ListingPage.showSearch
     in
     RouteLoadingTable resourcesName
-        (Listing.init resourcesName url.query >> modify >> RouteListing)
+        (ListingPage.init resourcesName url.query >> modify >> RouteListing)
 
 
 editFormRoute : Model -> String -> String -> Table -> Route
@@ -454,7 +454,7 @@ newFormRoute model resourcesName table =
 
 makeForm : Model -> String -> Maybe String -> Table -> Form
 makeForm { formFields } resourcesName id table =
-    Form.init
+    FormPage.init
         { resourcesName = resourcesName
         , table = table
         , fieldNames = Dict.get resourcesName formFields |> Maybe.withDefault []

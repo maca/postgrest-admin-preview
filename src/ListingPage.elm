@@ -1,4 +1,4 @@
-module Listing exposing
+module ListingPage exposing
     ( Listing
     , Msg
     , ascendingBy
