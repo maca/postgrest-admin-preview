@@ -19,7 +19,7 @@ import Postgrest.Schema as Schema exposing (Schema)
 import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.Config as Config exposing (Config)
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
-import PostgrestAdmin.Route exposing (Route(..))
+import PostgrestAdmin.Route as Route exposing (MountPoint, Route(..))
 import String.Extra as String
 import Url exposing (Url)
 import Url.Parser as Parser exposing ((</>), Parser, s)
@@ -64,15 +64,16 @@ type alias Model m msg =
         , notification : Notification
         , error : Maybe Error
         , formFields : Dict String (List String)
+        , resourceRoutes : List (MountPoint m msg)
         }
 
 
-application : Decoder Config -> Program m msg
+application : Decoder (Config m msg) -> Program m msg
 application decoder =
     applicationParams decoder |> Browser.application
 
 
-applicationParams : Decoder Config -> Params m msg
+applicationParams : Decoder (Config m msg) -> Params m msg
 applicationParams decoder =
     { init = init decoder
     , update = update
@@ -84,7 +85,7 @@ applicationParams decoder =
 
 
 init :
-    Decoder Config
+    Decoder (Config m msg)
     -> Value
     -> Url.Url
     -> Nav.Key
@@ -97,9 +98,10 @@ init decoder flags url key =
             , schema = Dict.empty
             , notification = Notification.none
             , error = Nothing
-            , host = config.url
+            , host = config.host
             , authScheme = config.authScheme
             , formFields = config.formFields
+            , resourceRoutes = config.resourceRoutes
             }
     in
     case Decode.decodeValue decoder flags of
@@ -108,7 +110,7 @@ init decoder flags url key =
                 model =
                     makeModel config
             in
-            ( { model | route = getRoute url model }, fetchSchema model )
+            ( { model | route = parseRoute url model }, fetchSchema model )
 
         Err error ->
             let
@@ -131,7 +133,7 @@ update msg model =
                     fetch { model | schema = schema, route = routeCons schema }
 
                 _ ->
-                    ( model, Cmd.none )
+                    ( { model | schema = schema }, Cmd.none )
 
         RecordFetched record ->
             case model.route of
@@ -188,14 +190,12 @@ update msg model =
 
         PageResourceChanged childMsg ->
             case model.route of
-                RouteResource program (Just prevChildModel) ->
+                RouteResource program ( prevChildModel, _ ) ->
                     let
                         ( childModel, cmd ) =
                             program.update childMsg prevChildModel
                     in
-                    ( { model
-                        | route = RouteResource program (Just childModel)
-                      }
+                    ( { model | route = RouteResource program ( childModel, cmd ) }
                     , Cmd.map PageResourceChanged cmd
                     )
 
@@ -226,7 +226,7 @@ update msg model =
                     ( model, Nav.load href )
 
         UrlChanged url ->
-            fetch { model | route = getRoute url model, error = Nothing }
+            fetch { model | route = parseRoute url model, error = Nothing }
 
         Failed err ->
             ( failed err model, Cmd.none )
@@ -252,6 +252,11 @@ fetch model =
 
                 Nothing ->
                     ( model, fail Failed (BadSchema tableName) )
+
+        RouteResource _ ( _, cmd ) ->
+            ( model
+            , Cmd.map PageResourceChanged cmd
+            )
 
         RouteListing listing ->
             ( model
@@ -387,11 +392,8 @@ mainContent model =
         RouteForm form ->
             Html.map PageFormChanged (PageForm.view form)
 
-        RouteResource params (Just custom) ->
-            Html.map PageResourceChanged (params.view custom)
-
-        RouteResource _ _ ->
-            loading
+        RouteResource program ( childModel, _ ) ->
+            Html.map PageResourceChanged (program.view childModel)
 
         RouteLoadingResource _ _ ->
             loading
@@ -423,24 +425,32 @@ subscriptions _ =
 -- ROUTES
 
 
-getRoute : Url -> Model m msg -> Route m msg
-getRoute url model =
+parseRoute : Url -> Model m msg -> Route m msg
+parseRoute url model =
     Parser.parse (routeParser url model) url |> Maybe.withDefault RouteNotFound
 
 
 routeParser : Url -> Model m msg -> Parser (Route m msg -> a) a
 routeParser url model =
+    let
+        mounts =
+            List.map
+                (\{ program, parser } -> Parser.map (routeMount program) parser)
+                model.resourceRoutes
+    in
     Parser.oneOf
-        [ Parser.map RouteRoot Parser.top
-        , Parser.map (newFormRoute model)
-            (Parser.string </> s "new")
-        , Parser.map makeDetailRoute
-            (Parser.string </> Parser.string)
-        , Parser.map (editFormRoute model)
-            (Parser.string </> Parser.string </> s "edit")
-        , Parser.map (makeListingRoute model url)
-            Parser.string
-        ]
+        (List.reverse mounts
+            ++ [ Parser.map RouteRoot Parser.top
+               , Parser.map (newFormRoute model)
+                    (Parser.string </> s "new")
+               , Parser.map makeDetailRoute
+                    (Parser.string </> Parser.string)
+               , Parser.map (editFormRoute model)
+                    (Parser.string </> Parser.string </> s "edit")
+               , Parser.map (makeListingRoute model url)
+                    Parser.string
+               ]
+        )
 
 
 makeListingRoute : Model m msg -> Url -> String -> Route m msg
@@ -516,8 +526,16 @@ newFormRoute model tableName =
 
 
 makeDetailRoute : String -> String -> Route m msg
-makeDetailRoute resourcesName id =
-    RouteLoadingResource { tableName = resourcesName, id = id }
+makeDetailRoute tableName id =
+    RouteLoadingResource { tableName = tableName, id = id }
         (PageDetail.init >> RouteDetail)
+        |> always
+        |> RouteLoadingSchema
+
+
+routeMount : Route.Program m msg -> String -> String -> Route m msg
+routeMount program tableName id =
+    RouteLoadingResource { tableName = tableName, id = id }
+        (program.init >> RouteResource program)
         |> always
         |> RouteLoadingSchema
