@@ -1,4 +1,4 @@
-module FormPage exposing
+module PageForm exposing
     ( Form
     , Msg
     , Params

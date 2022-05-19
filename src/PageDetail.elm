@@ -1,4 +1,4 @@
-module Detail exposing (Detail, Msg, init, mapMsg, update, view)
+module PageDetail exposing (Detail, Msg, init, mapMsg, update, view)
 
 import Browser.Navigation as Nav
 import Dict

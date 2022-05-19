@@ -1,9 +1,9 @@
 module PostgrestAdmin.Route exposing (Route(..))
 
-import Detail exposing (Detail)
-import FormPage exposing (Form)
 import Html exposing (Html)
-import ListingPage exposing (Listing)
+import PageDetail exposing (Detail)
+import PageForm exposing (Form)
+import PageListing exposing (Listing)
 import Postgrest.Record exposing (Record)
 import Postgrest.Schema as Schema exposing (Schema, Table)
 
@@ -19,4 +19,10 @@ type Route model msg
     | RouteListing Listing
     | RouteDetail Detail
     | RouteForm Form
+    | RouteCustom
+        { view : model -> Html msg
+        , update : msg -> model -> ( model, Cmd msg )
+        , init : Record -> ( model, Cmd msg )
+        }
+        (Maybe model)
     | RouteNotFound

@@ -2,16 +2,16 @@ port module PostgrestAdmin exposing (Program, application, applicationParams)
 
 import Browser
 import Browser.Navigation as Nav
-import Detail exposing (Detail)
 import Dict exposing (Dict)
 import Dict.Extra as Dict
-import FormPage exposing (Form)
 import Html exposing (Html, a, aside, div, h1, li, pre, text, ul)
 import Html.Attributes exposing (class, href)
 import Inflect as String
 import Json.Decode as Decode exposing (Decoder, Value)
-import ListingPage exposing (Listing)
 import Notification exposing (Notification)
+import PageDetail exposing (Detail)
+import PageForm exposing (Form)
+import PageListing exposing (Listing)
 import Postgrest.Client as PG
 import Postgrest.Record as Record exposing (Record)
 import Postgrest.Record.Client as Client exposing (Client)
@@ -36,9 +36,9 @@ type alias Program model msg =
 type Msg msg
     = SchemaFetched Schema
     | RecordFetched Record
-    | ListingChanged ListingPage.Msg
-    | DetailChanged Detail.Msg
-    | FormChanged FormPage.Msg
+    | ListingChanged PageListing.Msg
+    | DetailChanged PageDetail.Msg
+    | FormChanged PageForm.Msg
     | AuthChanged AuthScheme.Msg
     | NotificationChanged Notification.Msg
     | CustomChanged msg
@@ -119,7 +119,7 @@ init decoder flags url key =
 
 
 
--- Update
+-- UPDATE
 
 
 update : Msg msg -> Model m msg -> ( Model m msg, Cmd (Msg msg) )
@@ -144,30 +144,45 @@ update msg model =
 
         ListingChanged childMsg ->
             case model.route of
-                RouteListing listing ->
-                    ListingPage.update model childMsg listing
-                        |> updateRoute RouteListing ListingChanged model
-                        |> handleChildMsg (ListingPage.mapMsg childMsg)
+                RouteListing prevListing ->
+                    let
+                        ( listing, cmd ) =
+                            PageListing.update model childMsg prevListing
+                    in
+                    handleChildMsg (PageListing.mapMsg childMsg)
+                        ( { model | route = RouteListing listing }
+                        , Cmd.map ListingChanged cmd
+                        )
 
                 _ ->
                     ( model, Cmd.none )
 
         DetailChanged childMsg ->
             case model.route of
-                RouteDetail form ->
-                    Detail.update model childMsg form
-                        |> updateRoute RouteDetail DetailChanged model
-                        |> handleChildMsg (Detail.mapMsg childMsg)
+                RouteDetail prevDetail ->
+                    let
+                        ( detail, cmd ) =
+                            PageDetail.update model childMsg prevDetail
+                    in
+                    handleChildMsg (PageDetail.mapMsg childMsg)
+                        ( { model | route = RouteDetail detail }
+                        , Cmd.map DetailChanged cmd
+                        )
 
                 _ ->
                     ( model, Cmd.none )
 
         FormChanged childMsg ->
             case model.route of
-                RouteForm form ->
-                    FormPage.update model childMsg form
-                        |> updateRoute RouteForm FormChanged model
-                        |> handleChildMsg (FormPage.mapMsg childMsg)
+                RouteForm prevForm ->
+                    let
+                        ( form, cmd ) =
+                            PageForm.update model childMsg prevForm
+                    in
+                    handleChildMsg (PageForm.mapMsg childMsg)
+                        ( { model | route = RouteForm form }
+                        , Cmd.map FormChanged cmd
+                        )
 
                 _ ->
                     ( model, Cmd.none )
@@ -227,8 +242,9 @@ navigate model =
                     ( model, fail Failed (BadSchema tableName) )
 
         RouteListing listing ->
-            ( listing, ListingPage.fetch model listing )
-                |> updateRoute RouteListing ListingChanged model
+            ( model
+            , Cmd.map ListingChanged (PageListing.fetch model listing)
+            )
 
         _ ->
             ( model, Cmd.none )
@@ -244,16 +260,8 @@ fetchSchema { host } =
         |> attemptWithError Failed SchemaFetched
 
 
-updateRoute :
-    (a -> Route m msg)
-    -> (childMsg -> Msg msg)
-    -> Model m msg
-    -> ( a, Cmd childMsg )
-    -> ( Model m msg, Cmd (Msg msg) )
-updateRoute makeRoute makeMsg model ( a, cmd ) =
-    ( { model | route = makeRoute a }
-    , Cmd.map makeMsg cmd
-    )
+
+-- MSG MAPPING
 
 
 handleChildMsg :
@@ -295,7 +303,7 @@ failed error ({ authScheme } as model) =
 
 
 
--- View
+-- VIEW
 
 
 view : Model m msg -> Browser.Document (Msg msg)
@@ -359,16 +367,22 @@ mainContent model =
             loading
 
         RouteListing listing ->
-            Html.map ListingChanged (ListingPage.view listing)
+            Html.map ListingChanged (PageListing.view listing)
 
         RouteDetail listing ->
-            Html.map DetailChanged (Detail.view model.schema listing)
+            Html.map DetailChanged (PageDetail.view model.schema listing)
 
         RouteFormLoading _ _ ->
             loading
 
         RouteForm form ->
-            Html.map FormChanged (FormPage.view form)
+            Html.map FormChanged (PageForm.view form)
+
+        RouteCustom params (Just custom) ->
+            Html.map CustomChanged (params.view custom)
+
+        RouteCustom _ _ ->
+            loading
 
         RouteNotFound ->
             notFound
@@ -385,7 +399,7 @@ loading =
 
 
 
--- Subscriptions
+-- SUBSCRIPTIONS
 
 
 subscriptions : Model m msg -> Sub (Msg msg)
@@ -394,7 +408,7 @@ subscriptions _ =
 
 
 
--- Routes
+-- ROUTES
 
 
 getRoute : Url -> Model m msg -> Route m msg
@@ -427,16 +441,16 @@ makeListingRoute model url tableName =
                         setSearchVisibility =
                             case model.route of
                                 RouteListing listing ->
-                                    if ListingPage.isSearchVisible listing then
-                                        ListingPage.showSearch
+                                    if PageListing.isSearchVisible listing then
+                                        PageListing.showSearch
 
                                     else
-                                        ListingPage.hideSearch
+                                        PageListing.hideSearch
 
                                 _ ->
-                                    ListingPage.showSearch
+                                    PageListing.showSearch
                     in
-                    ListingPage.init tableName url.query table
+                    PageListing.init tableName url.query table
                         |> setSearchVisibility
                         |> RouteListing
 
@@ -454,7 +468,7 @@ editFormRoute { formFields } resourcesName id =
                     Dict.get resourcesName formFields |> Maybe.withDefault []
             in
             RouteForm
-                (FormPage.init
+                (PageForm.init
                     { fieldNames = fieldNames
                     , id = Just id
                     , record = record
@@ -477,7 +491,7 @@ newFormRoute model tableName =
                                 |> Maybe.withDefault []
                     in
                     RouteForm
-                        (FormPage.init
+                        (PageForm.init
                             { fieldNames = fieldNames
                             , id = Nothing
                             , record = Record.fromTable table
@@ -492,6 +506,6 @@ newFormRoute model tableName =
 makeDetailRoute : Model m msg -> String -> String -> Route m msg
 makeDetailRoute { formFields } resourcesName id =
     RouteFormLoading { tableName = resourcesName, id = id }
-        (Detail.init >> RouteDetail)
+        (PageDetail.init >> RouteDetail)
         |> always
         |> RouteLoadingSchema
