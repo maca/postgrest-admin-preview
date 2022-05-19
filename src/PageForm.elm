@@ -1,6 +1,6 @@
 module PageForm exposing
-    ( Form
-    , Msg
+    ( Msg
+    , PageForm
     , Params
     , errors
     , id
@@ -48,11 +48,11 @@ type alias Fields =
     Dict String Input
 
 
-type Form
-    = Form Params Fields
+type PageForm
+    = PageForm Params Fields
 
 
-init : { fieldNames : List String, id : Maybe String, record : Record } -> Form
+init : { fieldNames : List String, id : Maybe String, record : Record } -> PageForm
 init params =
     fromRecord
         { table = Record.toTable params.record
@@ -66,12 +66,12 @@ init params =
 -- Update
 
 
-update : Client { a | key : Nav.Key } -> Msg -> Form -> ( Form, Cmd Msg )
-update client msg ((Form params fields) as form) =
+update : Client { a | key : Nav.Key } -> Msg -> PageForm -> ( PageForm, Cmd Msg )
+update client msg ((PageForm params fields) as form) =
     case msg of
         InputChanged inputMsg ->
             Input.update client inputMsg fields
-                |> Tuple.mapFirst (Form params)
+                |> Tuple.mapFirst (PageForm params)
                 |> Tuple.mapSecond
                     (\cmd ->
                         Cmd.batch
@@ -118,26 +118,26 @@ navigate client resourcesName resourceId notificationTask =
 -- Utils
 
 
-toRecord : Form -> Record
-toRecord (Form { table } fields) =
+toRecord : PageForm -> Record
+toRecord (PageForm { table } fields) =
     { table = table
     , fields = Dict.map (\_ input -> Input.toField input) fields
     }
 
 
-toFormFields : Form -> Record
+toFormFields : PageForm -> Record
 toFormFields form =
     toRecord (filterFields form)
 
 
-formInputs : Form -> List ( String, Input )
-formInputs (Form _ inputs) =
+formInputs : PageForm -> List ( String, Input )
+formInputs (PageForm _ inputs) =
     Dict.toList inputs |> List.sortWith sortInputs
 
 
-filterFields : Form -> Form
-filterFields (Form params inputs) =
-    Form params (Dict.filter (inputIsEditable params.fieldNames) inputs)
+filterFields : PageForm -> PageForm
+filterFields (PageForm params inputs) =
+    PageForm params (Dict.filter (inputIsEditable params.fieldNames) inputs)
 
 
 inputIsEditable : List String -> String -> Input -> Bool
@@ -150,24 +150,24 @@ inputIsEditable fieldNames name input =
         || List.member name fieldNames
 
 
-fromRecord : Params -> Record -> Form
+fromRecord : Params -> Record -> PageForm
 fromRecord params record =
     record.fields
         |> Dict.map (\_ input -> Input.fromField input)
-        |> Form params
+        |> PageForm params
 
 
-changed : Form -> Bool
-changed (Form _ fields) =
+changed : PageForm -> Bool
+changed (PageForm _ fields) =
     Dict.values fields |> List.any (.changed << Input.toField)
 
 
-errors : Form -> Dict String (Maybe String)
+errors : PageForm -> Dict String (Maybe String)
 errors record =
     toFormFields record |> Record.errors
 
 
-hasErrors : Form -> Bool
+hasErrors : PageForm -> Bool
 hasErrors record =
     toFormFields record |> Record.hasErrors
 
@@ -188,8 +188,8 @@ mapMsg msg =
             OuterMsg.Pass
 
 
-id : Form -> Maybe String
-id (Form params _) =
+id : PageForm -> Maybe String
+id (PageForm params _) =
     params.id
 
 
@@ -197,8 +197,8 @@ id (Form params _) =
 -- View
 
 
-view : Form -> Html Msg
-view ((Form { table } _) as form) =
+view : PageForm -> Html Msg
+view ((PageForm { table } _) as form) =
     let
         fields =
             filterFields form

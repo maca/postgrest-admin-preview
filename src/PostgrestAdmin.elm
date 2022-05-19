@@ -9,17 +9,17 @@ import Html.Attributes exposing (class, href)
 import Inflect as String
 import Json.Decode as Decode exposing (Decoder, Value)
 import Notification exposing (Notification)
-import PageDetail exposing (Detail)
-import PageForm exposing (Form)
-import PageListing exposing (Listing)
+import PageDetail
+import PageForm
+import PageListing
 import Postgrest.Client as PG
 import Postgrest.Record as Record exposing (Record)
 import Postgrest.Record.Client as Client exposing (Client)
-import Postgrest.Schema as Schema exposing (Schema, Table)
+import Postgrest.Schema as Schema exposing (Schema)
 import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.Config as Config exposing (Config)
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
-import PostgrestAdmin.Route as Route exposing (Route(..))
+import PostgrestAdmin.Route exposing (Route(..))
 import String.Extra as String
 import Url exposing (Url)
 import Url.Parser as Parser exposing ((</>), Parser, s)
@@ -36,12 +36,12 @@ type alias Program model msg =
 type Msg msg
     = SchemaFetched Schema
     | RecordFetched Record
-    | ListingChanged PageListing.Msg
-    | DetailChanged PageDetail.Msg
-    | FormChanged PageForm.Msg
+    | PageListingChanged PageListing.Msg
+    | PageDetailChanged PageDetail.Msg
+    | PageFormChanged PageForm.Msg
+    | PageResourceChanged msg
     | AuthChanged AuthScheme.Msg
     | NotificationChanged Notification.Msg
-    | CustomChanged msg
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
     | Failed Error
@@ -128,21 +128,20 @@ update msg model =
         SchemaFetched schema ->
             case model.route of
                 RouteLoadingSchema routeCons ->
-                    navigate
-                        { model | schema = schema, route = routeCons schema }
+                    fetch { model | schema = schema, route = routeCons schema }
 
                 _ ->
                     ( model, Cmd.none )
 
         RecordFetched record ->
             case model.route of
-                RouteFormLoading _ routeCons ->
-                    navigate { model | route = routeCons record }
+                RouteLoadingResource _ routeCons ->
+                    fetch { model | route = routeCons record }
 
                 _ ->
                     ( model, Cmd.none )
 
-        ListingChanged childMsg ->
+        PageListingChanged childMsg ->
             case model.route of
                 RouteListing prevListing ->
                     let
@@ -151,13 +150,13 @@ update msg model =
                     in
                     handleChildMsg (PageListing.mapMsg childMsg)
                         ( { model | route = RouteListing listing }
-                        , Cmd.map ListingChanged cmd
+                        , Cmd.map PageListingChanged cmd
                         )
 
                 _ ->
                     ( model, Cmd.none )
 
-        DetailChanged childMsg ->
+        PageDetailChanged childMsg ->
             case model.route of
                 RouteDetail prevDetail ->
                     let
@@ -166,13 +165,13 @@ update msg model =
                     in
                     handleChildMsg (PageDetail.mapMsg childMsg)
                         ( { model | route = RouteDetail detail }
-                        , Cmd.map DetailChanged cmd
+                        , Cmd.map PageDetailChanged cmd
                         )
 
                 _ ->
                     ( model, Cmd.none )
 
-        FormChanged childMsg ->
+        PageFormChanged childMsg ->
             case model.route of
                 RouteForm prevForm ->
                     let
@@ -181,8 +180,24 @@ update msg model =
                     in
                     handleChildMsg (PageForm.mapMsg childMsg)
                         ( { model | route = RouteForm form }
-                        , Cmd.map FormChanged cmd
+                        , Cmd.map PageFormChanged cmd
                         )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        PageResourceChanged childMsg ->
+            case model.route of
+                RouteResource program (Just prevChildModel) ->
+                    let
+                        ( childModel, cmd ) =
+                            program.update childMsg prevChildModel
+                    in
+                    ( { model
+                        | route = RouteResource program (Just childModel)
+                      }
+                    , Cmd.map PageResourceChanged cmd
+                    )
 
                 _ ->
                     ( model, Cmd.none )
@@ -196,9 +211,6 @@ update msg model =
                 ( { model | authScheme = authScheme }
                 , Cmd.map AuthChanged cmd
                 )
-
-        CustomChanged childMsg ->
-            ( model, Cmd.none )
 
         NotificationChanged childMsg ->
             ( { model | notification = Notification.update childMsg }
@@ -214,23 +226,23 @@ update msg model =
                     ( model, Nav.load href )
 
         UrlChanged url ->
-            navigate { model | route = getRoute url model, error = Nothing }
+            fetch { model | route = getRoute url model, error = Nothing }
 
         Failed err ->
             ( failed err model, Cmd.none )
 
 
-navigate : Model m msg -> ( Model m msg, Cmd (Msg msg) )
-navigate model =
+fetch : Model m msg -> ( Model m msg, Cmd (Msg msg) )
+fetch model =
     case model.route of
         RouteLoadingSchema routeCons ->
             if model.schema == Dict.empty then
                 ( model, fetchSchema model )
 
             else
-                navigate { model | route = routeCons model.schema }
+                fetch { model | route = routeCons model.schema }
 
-        RouteFormLoading { tableName, id } routeCons ->
+        RouteLoadingResource { tableName, id } _ ->
             case Dict.get tableName model.schema of
                 Just table ->
                     ( model
@@ -243,7 +255,7 @@ navigate model =
 
         RouteListing listing ->
             ( model
-            , Cmd.map ListingChanged (PageListing.fetch model listing)
+            , Cmd.map PageListingChanged (PageListing.fetch model listing)
             )
 
         _ ->
@@ -281,7 +293,7 @@ handleChildMsg msg ( model, cmd ) =
         OuterMsg.LoginSuccess token ->
             let
                 ( model_, cmd_ ) =
-                    navigate model
+                    fetch model
             in
             ( model_, Cmd.batch [ cmd_, loginSuccess token ] )
 
@@ -367,21 +379,21 @@ mainContent model =
             loading
 
         RouteListing listing ->
-            Html.map ListingChanged (PageListing.view listing)
+            Html.map PageListingChanged (PageListing.view listing)
 
         RouteDetail listing ->
-            Html.map DetailChanged (PageDetail.view model.schema listing)
-
-        RouteFormLoading _ _ ->
-            loading
+            Html.map PageDetailChanged (PageDetail.view model.schema listing)
 
         RouteForm form ->
-            Html.map FormChanged (PageForm.view form)
+            Html.map PageFormChanged (PageForm.view form)
 
-        RouteCustom params (Just custom) ->
-            Html.map CustomChanged (params.view custom)
+        RouteResource params (Just custom) ->
+            Html.map PageResourceChanged (params.view custom)
 
-        RouteCustom _ _ ->
+        RouteResource _ _ ->
+            loading
+
+        RouteLoadingResource _ _ ->
             loading
 
         RouteNotFound ->
@@ -422,7 +434,7 @@ routeParser url model =
         [ Parser.map RouteRoot Parser.top
         , Parser.map (newFormRoute model)
             (Parser.string </> s "new")
-        , Parser.map (makeDetailRoute model)
+        , Parser.map makeDetailRoute
             (Parser.string </> Parser.string)
         , Parser.map (editFormRoute model)
             (Parser.string </> Parser.string </> s "edit")
@@ -461,7 +473,7 @@ makeListingRoute model url tableName =
 
 editFormRoute : Model m msg -> String -> String -> Route m msg
 editFormRoute { formFields } resourcesName id =
-    RouteFormLoading { tableName = resourcesName, id = id }
+    RouteLoadingResource { tableName = resourcesName, id = id }
         (\record ->
             let
                 fieldNames =
@@ -503,9 +515,9 @@ newFormRoute model tableName =
         )
 
 
-makeDetailRoute : Model m msg -> String -> String -> Route m msg
-makeDetailRoute { formFields } resourcesName id =
-    RouteFormLoading { tableName = resourcesName, id = id }
+makeDetailRoute : String -> String -> Route m msg
+makeDetailRoute resourcesName id =
+    RouteLoadingResource { tableName = resourcesName, id = id }
         (PageDetail.init >> RouteDetail)
         |> always
         |> RouteLoadingSchema

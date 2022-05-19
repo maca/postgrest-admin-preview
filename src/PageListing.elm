@@ -1,6 +1,6 @@
 module PageListing exposing
-    ( Listing
-    , Msg
+    ( Msg
+    , PageListing
     , ascendingBy
     , descendingBy
     , fetch
@@ -112,7 +112,7 @@ type TextSelect
     | Off
 
 
-type alias Listing =
+type alias PageListing =
     { resourcesName : String
     , scrollPosition : Float
     , table : Table
@@ -132,7 +132,7 @@ type alias EventConfig =
     }
 
 
-init : String -> Maybe String -> Table -> Listing
+init : String -> Maybe String -> Table -> PageListing
 init resourcesName rawQuery table =
     let
         query =
@@ -169,38 +169,38 @@ mapMsg msg =
             OuterMsg.Pass
 
 
-isSearchVisible : Listing -> Bool
+isSearchVisible : PageListing -> Bool
 isSearchVisible { searchOpen, search } =
     searchOpen || Search.isBlank search
 
 
-showSearch : Listing -> Listing
+showSearch : PageListing -> PageListing
 showSearch listing =
     { listing | searchOpen = True }
 
 
-hideSearch : Listing -> Listing
+hideSearch : PageListing -> PageListing
 hideSearch listing =
     { listing | searchOpen = False }
 
 
-ascendingBy : String -> Listing -> Listing
+ascendingBy : String -> PageListing -> PageListing
 ascendingBy column listing =
     { listing | order = Asc column }
 
 
-descendingBy : String -> Listing -> Listing
+descendingBy : String -> PageListing -> PageListing
 descendingBy column listing =
     { listing | order = Desc column }
 
 
-fetch : Client a -> Listing -> Cmd Msg
+fetch : Client a -> PageListing -> Cmd Msg
 fetch client listing =
     fetchTask client listing
         |> attemptWithError FetchFailed Fetched
 
 
-fetchTask : Client a -> Listing -> Task Error (List Record)
+fetchTask : Client a -> PageListing -> Task Error (List Record)
 fetchTask client listing =
     let
         { search, resourcesName, page, table, order } =
@@ -227,7 +227,7 @@ fetchTask client listing =
             Task.fail AuthError
 
 
-update : Client { a | key : Nav.Key } -> Msg -> Listing -> ( Listing, Cmd Msg )
+update : Client { a | key : Nav.Key } -> Msg -> PageListing -> ( PageListing, Cmd Msg )
 update client msg listing =
     case msg of
         RecordLinkClicked resourcesName id ->
@@ -382,7 +382,7 @@ update client msg listing =
             ( listing, Cmd.none )
 
 
-listingPath : Listing -> String
+listingPath : PageListing -> String
 listingPath { order, resourcesName, search } =
     let
         queryParams =
@@ -407,12 +407,12 @@ listingPath { order, resourcesName, search } =
         |> String.join joinChar
 
 
-fetchListing : Client a -> Listing -> ( Listing, Cmd Msg )
+fetchListing : Client a -> PageListing -> ( PageListing, Cmd Msg )
 fetchListing client listing =
     ( listing, fetch client listing )
 
 
-scrollingDown : Viewport -> Listing -> Bool
+scrollingDown : Viewport -> PageListing -> Bool
 scrollingDown { viewport } { scrollPosition } =
     scrollPosition < viewport.y
 
@@ -435,7 +435,7 @@ searchChanged msg cmd =
 -- View
 
 
-view : Listing -> Html Msg
+view : PageListing -> Html Msg
 view listing =
     let
         fields =
@@ -504,7 +504,7 @@ view listing =
         ]
 
 
-toggleSearchButton : Listing -> Html Msg
+toggleSearchButton : PageListing -> Html Msg
 toggleSearchButton listing =
     button
         [ class "toggle-button"
@@ -536,13 +536,13 @@ listHeader resourcesName =
         ]
 
 
-tableHeading : Listing -> List String -> Html Msg
+tableHeading : PageListing -> List String -> Html Msg
 tableHeading listing fields =
     thead []
         [ tr [] <| List.map (tableHeader listing) fields ]
 
 
-tableHeader : Listing -> String -> Html Msg
+tableHeader : PageListing -> String -> Html Msg
 tableHeader { order } name =
     let
         defaultHeader =
@@ -592,7 +592,7 @@ tableHeader { order } name =
 
 
 pagesFold :
-    Listing
+    PageListing
     -> List String
     -> List (Html Msg)
     -> Int
@@ -616,13 +616,13 @@ pagesFold listing fields acc pageNum pages =
             pagesFold listing fields (elem :: acc) (pageNum + 1) rest
 
 
-viewPage : Listing -> List String -> Int -> List Record -> Html Msg
+viewPage : PageListing -> List String -> Int -> List Record -> Html Msg
 viewPage listing fields pageNum records =
     tbody [ id <| pageId pageNum ] <|
         List.map (row listing fields) records
 
 
-row : Listing -> List String -> Record -> Html Msg
+row : PageListing -> List String -> Record -> Html Msg
 row { resourcesName, textSelect } names record =
     let
         cell fieldName =

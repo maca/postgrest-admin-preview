@@ -1,4 +1,4 @@
-module PageDetail exposing (Detail, Msg, init, mapMsg, update, view)
+module PageDetail exposing (Msg, PageDetail, init, mapMsg, update, view)
 
 import Browser.Navigation as Nav
 import Dict
@@ -26,7 +26,7 @@ import Notification
 import Postgrest.Field as Field exposing (Field)
 import Postgrest.Record as Record exposing (Record)
 import Postgrest.Record.Client as Client exposing (Client)
-import Postgrest.Schema exposing (Constraint(..), Reference, Schema, Table)
+import Postgrest.Schema exposing (Constraint(..), Reference, Schema)
 import Postgrest.Value exposing (Value(..))
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 import String.Extra as String
@@ -44,41 +44,45 @@ type Msg
     | Failed Error
 
 
-type Detail
-    = Detail { record : Record, confirmDelete : Bool }
+type PageDetail
+    = PageDetail { record : Record, confirmDelete : Bool }
 
 
-init : Record -> Detail
+init : Record -> PageDetail
 init record =
-    Detail { record = record, confirmDelete = False }
+    PageDetail { record = record, confirmDelete = False }
 
 
-update : Client { a | key : Nav.Key } -> Msg -> Detail -> ( Detail, Cmd Msg )
-update client msg (Detail params) =
+update :
+    Client { a | key : Nav.Key }
+    -> Msg
+    -> PageDetail
+    -> ( PageDetail, Cmd Msg )
+update client msg (PageDetail params) =
     case msg of
         DeleteModalOpened ->
-            ( Detail { params | confirmDelete = True }, Cmd.none )
+            ( PageDetail { params | confirmDelete = True }, Cmd.none )
 
         DeleteModalClosed ->
-            ( Detail { params | confirmDelete = False }, Cmd.none )
+            ( PageDetail { params | confirmDelete = False }, Cmd.none )
 
         DeleteConfirmed ->
-            ( Detail params
+            ( PageDetail params
             , Client.delete client (Record.toTable params.record) params.record
                 |> attemptWithError Failed (always Deleted)
             )
 
         Deleted ->
-            ( Detail params
+            ( PageDetail params
             , Notification.confirm "The record was deleted"
                 |> navigate client.key (Record.tableName params.record)
             )
 
         NotificationChanged _ ->
-            ( Detail params, Cmd.none )
+            ( PageDetail params, Cmd.none )
 
         Failed _ ->
-            ( Detail params, Cmd.none )
+            ( PageDetail params, Cmd.none )
 
 
 navigate : Nav.Key -> String -> Task Never Notification.Msg -> Cmd Msg
@@ -106,8 +110,8 @@ mapMsg msg =
 -- View
 
 
-view : Schema -> Detail -> Html Msg
-view schema (Detail { record, confirmDelete }) =
+view : Schema -> PageDetail -> Html Msg
+view schema (PageDetail { record, confirmDelete }) =
     section
         [ class "record-detail" ]
         [ h1
@@ -183,7 +187,8 @@ actions record =
             div
                 [ class "actions" ]
                 [ a
-                    [ href (Url.absolute [ Record.tableName record, id, "edit" ] [])
+                    [ href
+                        (Url.absolute [ Record.tableName record, id, "edit" ] [])
                     , class "button"
                     ]
                     [ text "Edit" ]
