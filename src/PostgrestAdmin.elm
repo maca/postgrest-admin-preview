@@ -1,4 +1,4 @@
-port module PostgrestAdmin exposing (Model, Msg, application, applicationParams)
+port module PostgrestAdmin exposing (Program, application, applicationParams)
 
 import Browser
 import Browser.Navigation as Nav
@@ -13,11 +13,13 @@ import Json.Decode as Decode exposing (Decoder, Value)
 import ListingPage exposing (Listing)
 import Notification exposing (Notification)
 import Postgrest.Client as PG
-import Postgrest.Record.Client exposing (Client)
+import Postgrest.Record as Record exposing (Record)
+import Postgrest.Record.Client as Client exposing (Client)
 import Postgrest.Schema as Schema exposing (Schema, Table)
 import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.Config as Config exposing (Config)
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
+import PostgrestAdmin.Route as Route exposing (Route(..))
 import String.Extra as String
 import Url exposing (Url)
 import Url.Parser as Parser exposing ((</>), Parser, s)
@@ -27,41 +29,37 @@ import Utils.Task exposing (Error(..), attemptWithError, errorToString, fail)
 port loginSuccess : String -> Cmd msg
 
 
-type Route
-    = RouteRoot
-    | RouteLoadingTable String (Table -> Route)
-    | RouteListing Listing
-    | RouteDetail Detail
-    | RouteFormLoading Form String
-    | RouteForm Form
-    | RouteNotFound
+type alias Program model msg =
+    Platform.Program Decode.Value (Model model msg) (Msg msg)
 
 
-type Msg
+type Msg msg
     = SchemaFetched Schema
+    | RecordFetched Record
     | ListingChanged ListingPage.Msg
     | DetailChanged Detail.Msg
     | FormChanged FormPage.Msg
     | AuthChanged AuthScheme.Msg
     | NotificationChanged Notification.Msg
+    | CustomChanged msg
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
     | Failed Error
 
 
-type alias Params =
-    { init : Value -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
-    , view : Model -> Browser.Document Msg
-    , update : Msg -> Model -> ( Model, Cmd Msg )
-    , subscriptions : Model -> Sub Msg
-    , onUrlRequest : Browser.UrlRequest -> Msg
-    , onUrlChange : Url -> Msg
+type alias Params m msg =
+    { init : Value -> Url.Url -> Nav.Key -> ( Model m msg, Cmd (Msg msg) )
+    , view : Model m msg -> Browser.Document (Msg msg)
+    , update : Msg msg -> Model m msg -> ( Model m msg, Cmd (Msg msg) )
+    , subscriptions : Model m msg -> Sub (Msg msg)
+    , onUrlRequest : Browser.UrlRequest -> Msg msg
+    , onUrlChange : Url -> Msg msg
     }
 
 
-type alias Model =
+type alias Model m msg =
     Client
-        { route : Route
+        { route : Route m msg
         , key : Nav.Key
         , notification : Notification
         , error : Maybe Error
@@ -69,12 +67,12 @@ type alias Model =
         }
 
 
-application : Decoder Config -> Program Value Model Msg
+application : Decoder Config -> Program m msg
 application decoder =
     applicationParams decoder |> Browser.application
 
 
-applicationParams : Decoder Config -> Params
+applicationParams : Decoder Config -> Params m msg
 applicationParams decoder =
     { init = init decoder
     , update = update
@@ -85,13 +83,18 @@ applicationParams decoder =
     }
 
 
-init : Decoder Config -> Value -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
+init :
+    Decoder Config
+    -> Value
+    -> Url.Url
+    -> Nav.Key
+    -> ( Model m msg, Cmd (Msg msg) )
 init decoder flags url key =
     let
         makeModel config =
             { route = RouteRoot
             , key = key
-            , schema = Dict.fromList []
+            , schema = Dict.empty
             , notification = Notification.none
             , error = Nothing
             , host = config.url
@@ -105,10 +108,7 @@ init decoder flags url key =
                 model =
                     makeModel config
             in
-            ( { model | route = getRoute url model }
-            , Schema.getSchema model.host
-                |> attemptWithError Failed SchemaFetched
-            )
+            ( { model | route = getRoute url model }, fetchSchema model )
 
         Err error ->
             let
@@ -122,11 +122,25 @@ init decoder flags url key =
 -- Update
 
 
-update : Msg -> Model -> ( Model, Cmd Msg )
+update : Msg msg -> Model m msg -> ( Model m msg, Cmd (Msg msg) )
 update msg model =
     case msg of
         SchemaFetched schema ->
-            navigate { model | schema = schema }
+            case model.route of
+                RouteLoadingSchema routeCons ->
+                    navigate
+                        { model | schema = schema, route = routeCons schema }
+
+                _ ->
+                    ( model, Cmd.none )
+
+        RecordFetched record ->
+            case model.route of
+                RouteFormLoading _ routeCons ->
+                    navigate { model | route = routeCons record }
+
+                _ ->
+                    ( model, Cmd.none )
 
         ListingChanged childMsg ->
             case model.route of
@@ -155,11 +169,6 @@ update msg model =
                         |> updateRoute RouteForm FormChanged model
                         |> handleChildMsg (FormPage.mapMsg childMsg)
 
-                RouteFormLoading form _ ->
-                    FormPage.update model childMsg form
-                        |> updateRoute RouteForm FormChanged model
-                        |> handleChildMsg (FormPage.mapMsg childMsg)
-
                 _ ->
                     ( model, Cmd.none )
 
@@ -172,6 +181,9 @@ update msg model =
                 ( { model | authScheme = authScheme }
                 , Cmd.map AuthChanged cmd
                 )
+
+        CustomChanged childMsg ->
+            ( model, Cmd.none )
 
         NotificationChanged childMsg ->
             ( { model | notification = Notification.update childMsg }
@@ -193,45 +205,61 @@ update msg model =
             ( failed err model, Cmd.none )
 
 
-navigate : Model -> ( Model, Cmd Msg )
+navigate : Model m msg -> ( Model m msg, Cmd (Msg msg) )
 navigate model =
     case model.route of
-        RouteLoadingTable resourcesName makeRoute ->
-            case Dict.get resourcesName model.schema of
+        RouteLoadingSchema routeCons ->
+            if model.schema == Dict.empty then
+                ( model, fetchSchema model )
+
+            else
+                navigate { model | route = routeCons model.schema }
+
+        RouteFormLoading { tableName, id } routeCons ->
+            case Dict.get tableName model.schema of
                 Just table ->
-                    navigate { model | route = makeRoute table }
+                    ( model
+                    , Client.fetch model table id
+                        |> attemptWithError Failed RecordFetched
+                    )
 
                 Nothing ->
-                    ( model, fail Failed <| BadSchema resourcesName )
+                    ( model, fail Failed (BadSchema tableName) )
 
         RouteListing listing ->
             ( listing, ListingPage.fetch model listing )
                 |> updateRoute RouteListing ListingChanged model
 
-        RouteDetail detail ->
-            ( detail, Detail.fetch model detail )
-                |> updateRoute RouteDetail DetailChanged model
-
-        RouteFormLoading form id ->
-            ( model, FormPage.fetch model form id |> Cmd.map FormChanged )
-
         _ ->
             ( model, Cmd.none )
 
 
+
+-- HTTP
+
+
+fetchSchema : Model m msg -> Cmd (Msg msg)
+fetchSchema { host } =
+    Schema.fetchSchema host
+        |> attemptWithError Failed SchemaFetched
+
+
 updateRoute :
-    (a -> Route)
-    -> (childMsg -> Msg)
-    -> Model
+    (a -> Route m msg)
+    -> (childMsg -> Msg msg)
+    -> Model m msg
     -> ( a, Cmd childMsg )
-    -> ( Model, Cmd Msg )
+    -> ( Model m msg, Cmd (Msg msg) )
 updateRoute makeRoute makeMsg model ( a, cmd ) =
     ( { model | route = makeRoute a }
     , Cmd.map makeMsg cmd
     )
 
 
-handleChildMsg : OuterMsg -> ( Model, Cmd Msg ) -> ( Model, Cmd Msg )
+handleChildMsg :
+    OuterMsg
+    -> ( Model m msg, Cmd (Msg msg) )
+    -> ( Model m msg, Cmd (Msg msg) )
 handleChildMsg msg ( model, cmd ) =
     case msg of
         OuterMsg.RequestFailed err ->
@@ -243,37 +271,17 @@ handleChildMsg msg ( model, cmd ) =
             )
 
         OuterMsg.LoginSuccess token ->
-            ( model, Cmd.batch [ fetch model, loginSuccess token ] )
+            let
+                ( model_, cmd_ ) =
+                    navigate model
+            in
+            ( model_, Cmd.batch [ cmd_, loginSuccess token ] )
 
         OuterMsg.Pass ->
             ( model, cmd )
 
 
-fetch : Model -> Cmd Msg
-fetch model =
-    case model.route of
-        RouteListing listing ->
-            ListingPage.fetch model listing |> Cmd.map ListingChanged
-
-        RouteFormLoading form id ->
-            FormPage.fetch model form id |> Cmd.map FormChanged
-
-        RouteDetail detail ->
-            Detail.fetch model detail |> Cmd.map DetailChanged
-
-        RouteForm form ->
-            case FormPage.id form of
-                Just id ->
-                    FormPage.fetch model form id |> Cmd.map FormChanged
-
-                Nothing ->
-                    Cmd.none
-
-        _ ->
-            Cmd.none
-
-
-failed : Error -> Model -> Model
+failed : Error -> Model m msg -> Model m msg
 failed error ({ authScheme } as model) =
     case error of
         PGError (PG.BadStatus 401 _ _) ->
@@ -290,7 +298,7 @@ failed error ({ authScheme } as model) =
 -- View
 
 
-view : Model -> Browser.Document Msg
+view : Model m msg -> Browser.Document (Msg msg)
 view model =
     { title = "Admin"
     , body =
@@ -319,7 +327,7 @@ view model =
     }
 
 
-body : Model -> List (Html Msg)
+body : Model m msg -> List (Html (Msg msg))
 body model =
     [ Notification.view model.notification
         |> Html.map NotificationChanged
@@ -327,51 +335,51 @@ body model =
     ]
 
 
-sideMenu : Model -> Html Msg
+sideMenu : Model m msg -> Html (Msg msg)
 sideMenu model =
     aside
         [ class "resources-menu" ]
         [ ul [] (Dict.keys model.schema |> List.sort |> List.map menuItem) ]
 
 
-menuItem : String -> Html Msg
+menuItem : String -> Html (Msg msg)
 menuItem name =
     li
         []
         [ a [ href <| "/" ++ name ] [ text <| String.humanize name ] ]
 
 
-mainContent : Model -> Html Msg
+mainContent : Model m msg -> Html (Msg msg)
 mainContent model =
     case model.route of
         RouteRoot ->
             text ""
 
-        RouteLoadingTable _ _ ->
+        RouteLoadingSchema _ ->
             loading
 
         RouteListing listing ->
-            Html.map ListingChanged <| ListingPage.view listing
+            Html.map ListingChanged (ListingPage.view listing)
 
         RouteDetail listing ->
-            Html.map DetailChanged <| Detail.view model.schema listing
+            Html.map DetailChanged (Detail.view model.schema listing)
 
         RouteFormLoading _ _ ->
             loading
 
         RouteForm form ->
-            Html.map FormChanged <| FormPage.view form
+            Html.map FormChanged (FormPage.view form)
 
         RouteNotFound ->
             notFound
 
 
-notFound : Html Msg
+notFound : Html (Msg msg)
 notFound =
     text "Not found"
 
 
-loading : Html Msg
+loading : Html (Msg msg)
 loading =
     text ""
 
@@ -380,7 +388,7 @@ loading =
 -- Subscriptions
 
 
-subscriptions : Model -> Sub Msg
+subscriptions : Model m msg -> Sub (Msg msg)
 subscriptions _ =
     Sub.none
 
@@ -389,75 +397,101 @@ subscriptions _ =
 -- Routes
 
 
-getRoute : Url -> Model -> Route
+getRoute : Url -> Model m msg -> Route m msg
 getRoute url model =
     Parser.parse (routeParser url model) url |> Maybe.withDefault RouteNotFound
 
 
-routeParser : Url -> Model -> Parser (Route -> a) a
+routeParser : Url -> Model m msg -> Parser (Route m msg -> a) a
 routeParser url model =
     Parser.oneOf
         [ Parser.map RouteRoot Parser.top
-        , Parser.map (makeListingRoute model url) Parser.string
-        , Parser.map
-            (\resourcesName ->
-                newFormRoute model resourcesName
-                    |> RouteLoadingTable resourcesName
-            )
+        , Parser.map (newFormRoute model)
             (Parser.string </> s "new")
-        , Parser.map
-            (\resourcesName id ->
-                RouteLoadingTable resourcesName
-                    (\table ->
-                        RouteDetail
-                            (Detail.init table id)
-                    )
-            )
+        , Parser.map (makeDetailRoute model)
             (Parser.string </> Parser.string)
-        , Parser.map
-            (\resourcesName id ->
-                editFormRoute model resourcesName id
-                    |> RouteLoadingTable resourcesName
-            )
+        , Parser.map (editFormRoute model)
             (Parser.string </> Parser.string </> s "edit")
+        , Parser.map (makeListingRoute model url)
+            Parser.string
         ]
 
 
-makeListingRoute : Model -> Url -> String -> Route
-makeListingRoute model url resourcesName =
-    let
-        modify =
-            case model.route of
-                RouteListing listing ->
-                    if ListingPage.isSearchVisible listing then
-                        ListingPage.showSearch
+makeListingRoute : Model m msg -> Url -> String -> Route m msg
+makeListingRoute model url tableName =
+    RouteLoadingSchema
+        (\schema ->
+            case Dict.get tableName schema of
+                Just table ->
+                    let
+                        setSearchVisibility =
+                            case model.route of
+                                RouteListing listing ->
+                                    if ListingPage.isSearchVisible listing then
+                                        ListingPage.showSearch
 
-                    else
-                        ListingPage.hideSearch
+                                    else
+                                        ListingPage.hideSearch
 
-                _ ->
-                    ListingPage.showSearch
-    in
-    RouteLoadingTable resourcesName
-        (ListingPage.init resourcesName url.query >> modify >> RouteListing)
+                                _ ->
+                                    ListingPage.showSearch
+                    in
+                    ListingPage.init tableName url.query table
+                        |> setSearchVisibility
+                        |> RouteListing
 
-
-editFormRoute : Model -> String -> String -> Table -> Route
-editFormRoute model resourcesName id table =
-    RouteFormLoading (makeForm model resourcesName (Just id) table) id
-
-
-newFormRoute : Model -> String -> Table -> Route
-newFormRoute model resourcesName table =
-    RouteForm (makeForm model resourcesName Nothing table)
+                Nothing ->
+                    RouteNotFound
+        )
 
 
-makeForm : Model -> String -> Maybe String -> Table -> Form
-makeForm { formFields } resourcesName id table =
-    FormPage.init
-        { resourcesName = resourcesName
-        , table = table
-        , fieldNames = Dict.get resourcesName formFields |> Maybe.withDefault []
-        , id = id
-        }
-        table
+editFormRoute : Model m msg -> String -> String -> Route m msg
+editFormRoute { formFields } resourcesName id =
+    RouteFormLoading { tableName = resourcesName, id = id }
+        (\record ->
+            let
+                fieldNames =
+                    Dict.get resourcesName formFields |> Maybe.withDefault []
+            in
+            RouteForm
+                (FormPage.init
+                    { fieldNames = fieldNames
+                    , id = Just id
+                    , record = record
+                    }
+                )
+        )
+        |> always
+        |> RouteLoadingSchema
+
+
+newFormRoute : Model m msg -> String -> Route m msg
+newFormRoute model tableName =
+    RouteLoadingSchema
+        (\schema ->
+            case Dict.get tableName schema of
+                Just table ->
+                    let
+                        fieldNames =
+                            Dict.get tableName model.formFields
+                                |> Maybe.withDefault []
+                    in
+                    RouteForm
+                        (FormPage.init
+                            { fieldNames = fieldNames
+                            , id = Nothing
+                            , record = Record.fromTable table
+                            }
+                        )
+
+                Nothing ->
+                    RouteNotFound
+        )
+
+
+makeDetailRoute : Model m msg -> String -> String -> Route m msg
+makeDetailRoute { formFields } resourcesName id =
+    RouteFormLoading { tableName = resourcesName, id = id }
+        (Detail.init >> RouteDetail)
+        |> always
+        |> RouteLoadingSchema

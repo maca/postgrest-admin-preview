@@ -11,6 +11,8 @@ module Postgrest.Record exposing
     , primaryKey
     , primaryKeyName
     , referencedBy
+    , tableName
+    , toTable
     )
 
 import Dict exposing (Dict)
@@ -32,14 +34,14 @@ import Postgrest.Value as Value exposing (Value(..))
 
 
 type alias Record =
-    { tableName : String
+    { table : Table
     , fields : Dict String Field
     }
 
 
 fromTable : Table -> Record
-fromTable { name, columns } =
-    { tableName = name
+fromTable table =
+    { table = table
     , fields =
         Dict.map
             (\_ { required, value, constraint } ->
@@ -50,13 +52,23 @@ fromTable { name, columns } =
                 , value = value
                 }
             )
-            columns
+            table.columns
     }
+
+
+toTable : Record -> Table
+toTable record =
+    record.table
 
 
 id : Record -> Maybe String
 id record =
     primaryKey record |> Maybe.andThen (.value >> Value.toString)
+
+
+tableName : Record -> String
+tableName record =
+    record.table.name
 
 
 fieldToString : String -> Record -> Maybe String
@@ -95,9 +107,9 @@ primaryKeyName record =
 
 
 decoder : Table -> Decoder Record
-decoder { name, columns } =
-    Dict.foldl decoderHelp (Decode.succeed Dict.empty) columns
-        |> Decode.map (\fields -> { tableName = name, fields = fields })
+decoder table =
+    Dict.foldl decoderHelp (Decode.succeed Dict.empty) table.columns
+        |> Decode.map (\fields -> { table = table, fields = fields })
 
 
 decoderHelp : String -> Column -> Decoder (Dict String Field) -> Decoder (Dict String Field)
@@ -150,17 +162,17 @@ referenceLabelDecoder params =
 
 
 referencedBy : Schema -> Record -> List Reference
-referencedBy schema { tableName, fields } =
+referencedBy schema record =
     Dict.foldl
         (\_ table acc ->
             Dict.foldl
                 (\columnName column columns ->
                     case column.constraint of
-                        ForeignKey params ->
-                            if params.tableName == tableName then
+                        ForeignKey foreignKey ->
+                            if foreignKey.tableName == tableName record then
                                 { foreignKeyName = columnName
                                 , foreignKeyValue =
-                                    Dict.get params.primaryKeyName fields
+                                    Dict.get foreignKey.primaryKeyName record.fields
                                         |> Maybe.andThen
                                             (.value >> Value.toString)
                                         |> Maybe.withDefault ""

@@ -1,4 +1,4 @@
-module Detail exposing (Detail, Msg, fetch, init, mapMsg, update, view)
+module Detail exposing (Detail, Msg, init, mapMsg, update, view)
 
 import Browser.Navigation as Nav
 import Dict
@@ -36,8 +36,7 @@ import Utils.Task exposing (Error(..), attemptWithError)
 
 
 type Msg
-    = Fetched Record
-    | DeleteModalOpened
+    = DeleteModalOpened
     | DeleteModalClosed
     | DeleteConfirmed
     | Deleted
@@ -46,30 +45,17 @@ type Msg
 
 
 type Detail
-    = Detail
-        { table : Table
-        , id : String
-        , record : Maybe Record
-        , confirmDelete : Bool
-        }
+    = Detail { record : Record, confirmDelete : Bool }
 
 
-init : Table -> String -> Detail
-init table id =
-    Detail
-        { table = table
-        , id = id
-        , confirmDelete = False
-        , record = Nothing
-        }
+init : Record -> Detail
+init record =
+    Detail { record = record, confirmDelete = False }
 
 
 update : Client { a | key : Nav.Key } -> Msg -> Detail -> ( Detail, Cmd Msg )
 update client msg (Detail params) =
     case msg of
-        Fetched record ->
-            ( Detail { params | record = Just record }, Cmd.none )
-
         DeleteModalOpened ->
             ( Detail { params | confirmDelete = True }, Cmd.none )
 
@@ -77,20 +63,15 @@ update client msg (Detail params) =
             ( Detail { params | confirmDelete = False }, Cmd.none )
 
         DeleteConfirmed ->
-            case params.record of
-                Just record ->
-                    ( Detail params
-                    , Client.delete client params.table record
-                        |> attemptWithError Failed (always Deleted)
-                    )
-
-                Nothing ->
-                    ( Detail params, Cmd.none )
+            ( Detail params
+            , Client.delete client (Record.toTable params.record) params.record
+                |> attemptWithError Failed (always Deleted)
+            )
 
         Deleted ->
             ( Detail params
             , Notification.confirm "The record was deleted"
-                |> navigate client.key params.table.name
+                |> navigate client.key (Record.tableName params.record)
             )
 
         NotificationChanged _ ->
@@ -122,76 +103,61 @@ mapMsg msg =
 
 
 
--- Http
-
-
-fetch : Client a -> Detail -> Cmd Msg
-fetch client (Detail { table, id }) =
-    Client.fetch client table id
-        |> attemptWithError Failed Fetched
-
-
-
 -- View
 
 
 view : Schema -> Detail -> Html Msg
-view schema (Detail params) =
-    case params.record of
-        Just ({ tableName } as record) ->
-            section
-                [ class "record-detail" ]
-                [ h1
-                    []
-                    [ Record.label record
-                        |> Maybe.withDefault ""
-                        |> (++) (String.humanize tableName ++ " - ")
-                        |> text
-                    ]
-                , article
-                    [ class "card" ]
-                    [ table
-                        []
-                        (sortedFields record |> List.map (tableRow tableName))
-                    , actions record
-                    ]
-                , if params.confirmDelete then
-                    div
-                        [ class "modal-background" ]
-                        [ div
-                            [ class "modal-dialog" ]
-                            [ h2 []
-                                [ text """Are you sure you want to delete the
+view schema (Detail { record, confirmDelete }) =
+    section
+        [ class "record-detail" ]
+        [ h1
+            []
+            [ Record.label record
+                |> Maybe.withDefault ""
+                |> (++) (String.humanize (Record.tableName record) ++ " - ")
+                |> text
+            ]
+        , article
+            [ class "card" ]
+            [ table
+                []
+                (sortedFields record |> List.map (tableRow (Record.tableName record)))
+            , actions record
+            ]
+        , if confirmDelete then
+            div
+                [ class "modal-background" ]
+                [ div
+                    [ class "modal-dialog" ]
+                    [ h2 []
+                        [ text """Are you sure you want to delete the
                                           record?"""
-                                ]
-                            , p [] [ text "This action cannot be undone." ]
-                            , div
-                                [ class "actions" ]
-                                [ button
-                                    [ class "button button-danger"
-                                    , onClick DeleteConfirmed
-                                    ]
-                                    [ text "Delete" ]
-                                , button
-                                    [ class "button"
-                                    , onClick DeleteModalClosed
-                                    ]
-                                    [ text "Cancel" ]
-                                ]
-                            ]
                         ]
-
-                  else
-                    text ""
-                , aside
-                    [ class "associations" ]
-                    (Record.referencedBy schema record
-                        |> List.map referenceToHtml
-                    )
+                    , p [] [ text "This action cannot be undone." ]
+                    , div
+                        [ class "actions" ]
+                        [ button
+                            [ class "button button-danger"
+                            , onClick DeleteConfirmed
+                            ]
+                            [ text "Delete" ]
+                        , button
+                            [ class "button"
+                            , onClick DeleteModalClosed
+                            ]
+                            [ text "Cancel" ]
+                        ]
+                    ]
                 ]
 
-        Nothing ->
-            text "loading"
+          else
+            text ""
+        , aside
+            [ class "associations" ]
+            (Record.referencedBy schema record
+                |> List.map referenceToHtml
+            )
+        ]
 
 
 referenceToHtml : Reference -> Html Msg
@@ -217,7 +183,7 @@ actions record =
             div
                 [ class "actions" ]
                 [ a
-                    [ href (Url.absolute [ record.tableName, id, "edit" ] [])
+                    [ href (Url.absolute [ Record.tableName record, id, "edit" ] [])
                     , class "button"
                     ]
                     [ text "Edit" ]

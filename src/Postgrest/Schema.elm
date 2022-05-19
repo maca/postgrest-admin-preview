@@ -6,7 +6,7 @@ module Postgrest.Schema exposing
     , Schema
     , Table
     , decoder
-    , getSchema
+    , fetchSchema
     )
 
 import Basics.Extra exposing (flip)
@@ -84,8 +84,8 @@ type alias ColumnDefinition =
     }
 
 
-getSchema : Url -> Task Error Schema
-getSchema url =
+fetchSchema : Url -> Task Error Schema
+fetchSchema url =
     Http.task
         { method = "GET"
         , headers = []

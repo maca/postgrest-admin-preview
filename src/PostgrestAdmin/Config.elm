@@ -10,10 +10,14 @@ module PostgrestAdmin.Config exposing
 
 import BasicAuth exposing (BasicAuth)
 import Dict exposing (Dict)
+import Html exposing (Html)
 import Json.Decode as Decode exposing (Decoder)
+import Postgrest.Record exposing (Record)
 import PostgrestAdmin.AuthScheme as AuthScheme exposing (AuthScheme)
 import PostgrestAdmin.Flag as Flag
+import PostgrestAdmin.Route exposing (Route(..))
 import Url exposing (Protocol(..), Url)
+import Url.Parser as Parser exposing ((</>), Parser, s)
 
 
 type alias Config =

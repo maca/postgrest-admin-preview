@@ -3,7 +3,6 @@ module FormPage exposing
     , Msg
     , Params
     , errors
-    , fetch
     , id
     , init
     , mapMsg
@@ -31,16 +30,14 @@ import Utils.Task exposing (Error(..), attemptWithError)
 
 
 type alias Params =
-    { resourcesName : String
-    , table : Table
+    { table : Table
     , fieldNames : List String
     , id : Maybe String
     }
 
 
 type Msg
-    = Fetched Record
-    | Saved Record
+    = Saved Record
     | InputChanged Input.Msg
     | NotificationChanged Notification.Msg
     | Submitted
@@ -55,9 +52,14 @@ type Form
     = Form Params Fields
 
 
-init : Params -> Table -> Form
-init params table =
-    Record.fromTable table |> fromRecord params
+init : { fieldNames : List String, id : Maybe String, record : Record } -> Form
+init params =
+    fromRecord
+        { table = Record.toTable params.record
+        , fieldNames = params.fieldNames
+        , id = params.id
+        }
+        params.record
 
 
 
@@ -67,9 +69,6 @@ init params table =
 update : Client { a | key : Nav.Key } -> Msg -> Form -> ( Form, Cmd Msg )
 update client msg ((Form params fields) as form) =
     case msg of
-        Fetched resource ->
-            ( fromRecord params resource, Cmd.none )
-
         InputChanged inputMsg ->
             Input.update client inputMsg fields
                 |> Tuple.mapFirst (Form params)
@@ -91,7 +90,7 @@ update client msg ((Form params fields) as form) =
         Saved resource ->
             ( fromRecord params resource
             , Notification.confirm "The record was saved"
-                |> navigate client params.resourcesName (Record.id resource)
+                |> navigate client params.table.name (Record.id resource)
             )
 
         Failed _ ->
@@ -120,8 +119,8 @@ navigate client resourcesName resourceId notificationTask =
 
 
 toRecord : Form -> Record
-toRecord (Form { resourcesName } fields) =
-    { tableName = resourcesName
+toRecord (Form { table } fields) =
+    { table = table
     , fields = Dict.map (\_ input -> Input.toField input) fields
     }
 
@@ -195,21 +194,11 @@ id (Form params _) =
 
 
 
--- Http
-
-
-fetch : Client a -> Form -> String -> Cmd Msg
-fetch client (Form { table } _) recordId =
-    Client.fetch client table recordId
-        |> attemptWithError Failed Fetched
-
-
-
 -- View
 
 
 view : Form -> Html Msg
-view ((Form { resourcesName } _) as form) =
+view ((Form { table } _) as form) =
     let
         fields =
             filterFields form
@@ -223,7 +212,7 @@ view ((Form { resourcesName } _) as form) =
         [ class "resource-form" ]
         [ h1
             []
-            [ text (String.humanize resourcesName ++ " - ")
+            [ text (String.humanize table.name ++ " - ")
             , case
                 Maybe.map2 Tuple.pair
                     (Record.label (toRecord form))
@@ -231,7 +220,7 @@ view ((Form { resourcesName } _) as form) =
               of
                 Just ( resourceLabel, resourceId ) ->
                     a
-                        [ href (Url.absolute [ resourcesName, resourceId ] [])
+                        [ href (Url.absolute [ table.name, resourceId ] [])
                         ]
                         [ text resourceLabel ]
 
