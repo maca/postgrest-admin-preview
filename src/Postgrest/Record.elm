@@ -112,7 +112,11 @@ decoder table =
         |> Decode.map (\fields -> { table = table, fields = fields })
 
 
-decoderHelp : String -> Column -> Decoder (Dict String Field) -> Decoder (Dict String Field)
+decoderHelp :
+    String
+    -> Column
+    -> Decoder (Dict String Field)
+    -> Decoder (Dict String Field)
 decoderHelp name column =
     Decode.andThen
         (\dict ->
@@ -123,7 +127,11 @@ decoderHelp name column =
         )
 
 
-fieldDecoder : Dict String Field -> String -> Column -> Decoder (Dict String Field)
+fieldDecoder :
+    Dict String Field
+    -> String
+    -> Column
+    -> Decoder (Dict String Field)
 fieldDecoder fields name column =
     let
         insert constraint value =
@@ -172,7 +180,8 @@ referencedBy schema record =
                             if foreignKey.tableName == tableName record then
                                 { foreignKeyName = columnName
                                 , foreignKeyValue =
-                                    Dict.get foreignKey.primaryKeyName record.fields
+                                    record.fields
+                                        |> Dict.get foreignKey.primaryKeyName
                                         |> Maybe.andThen
                                             (.value >> Value.toString)
                                         |> Maybe.withDefault ""

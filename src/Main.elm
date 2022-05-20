@@ -45,14 +45,18 @@ update msg model =
             ( { model | count = model.count - 1 }, Cmd.none )
 
 
+init record =
+    ( { count = 1, record = record }, Cmd.none )
+
+
 main : PostgrestAdmin.Program Model Msg
 main =
     Config.init
         |> Config.withBasicAuth BasicAuth.config
         |> Config.withResourceMountPoint
-            { view = \model -> view model
+            { view = view
             , update = update
-            , init = \record -> ( { count = 1, record = record }, Cmd.none )
+            , init = init
             }
             (tableNameParser "workflows" </> Parser.string </> s "form")
         |> PostgrestAdmin.application

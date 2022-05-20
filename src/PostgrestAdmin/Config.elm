@@ -1,15 +1,54 @@
 module PostgrestAdmin.Config exposing
     ( Config
-    , default
     , init
-    , tableNameParser
-    , withBasicAuth
-    , withFormFields
     , withHost
+    , withFormFields
+    , withBasicAuth
     , withJwt
     , withNewResourceMountPoint
     , withResourceMountPoint
+    , tableNameParser
+    , default
     )
+
+{-| Program configuration
+
+@docs Config
+
+
+# Init
+
+@docs init
+
+
+# Basics
+
+@docs withHost
+@docs withFormFields
+
+
+# Auth
+
+@docs withBasicAuth
+@docs withJwt
+
+
+# Element mounting
+
+@docs withNewResourceMountPoint
+@docs withResourceMountPoint
+
+
+# URL parsing
+
+@docs tableNameParser
+
+
+# Defaults
+
+@docs default
+
+-}
 
 import BasicAuth exposing (BasicAuth)
 import Dict exposing (Dict)
@@ -23,6 +62,9 @@ import Url exposing (Protocol(..), Url)
 import Url.Parser as Parser exposing (Parser)
 
 
+{-| [PostgrestAdmin.application](PostgrestAdmin#application) configuration
+params
+-}
 type alias Config m msg =
     { host : Url
     , authScheme : AuthScheme
@@ -31,22 +73,14 @@ type alias Config m msg =
     }
 
 
-default : Config m msg
-default =
-    { authScheme = AuthScheme.unset
-    , host =
-        { protocol = Http
-        , host = "localhost"
-        , port_ = Just 3000
-        , path = ""
-        , query = Nothing
-        , fragment = Nothing
-        }
-    , formFields = Dict.empty
-    , resourceRoutes = []
-    }
+{-| [PostgrestAdmin.application](PostgrestAdmin#application) decoder with
+defaults.
 
+    main : PostgrestAdmin.Program Model Msg
+    main =
+        PostgrestAdmin.application Config.init
 
+-}
 init : Decoder (Config m msg)
 init =
     Decode.succeed default
@@ -54,6 +88,22 @@ init =
         |> Flag.stringDict "formFields" withFormFieldsDecoder
 
 
+{-| Specify the postgREST host.
+
+      main : PostgrestAdmin.Program Never Never
+      main =
+          Config.init
+              |> Config.withHost "http://localhost:3000"
+              |> PostgrestAdmin.application
+
+Alternatively the host can be specified using flags, configuring using `withHost`
+function precedence.
+
+      Elm.Main.init({
+          flags: { host: "http://localhost:3000" }
+      })
+
+-}
 withHost : String -> Decoder (Config m msg) -> Decoder (Config m msg)
 withHost urlStr decoder =
     decoder |> Decode.andThen (withHostDecoder urlStr)
@@ -67,15 +117,9 @@ withHostDecoder urlStr conf =
             (Decode.fail "`Config.withHost` was given an invalid URL")
 
 
-withJwt : String -> Decoder (Config m msg) -> Decoder (Config m msg)
-withJwt tokenStr decoder =
-    decoder
-        |> Decode.andThen
-            (\conf ->
-                Decode.succeed { conf | authScheme = AuthScheme.jwt tokenStr }
-            )
-
-
+{-| Enable user credentials form and configure the parameters. Credentials
+are be used to obtain a JWT.
+-}
 withBasicAuth :
     Decoder BasicAuth
     -> Decoder (Config m msg)
@@ -86,6 +130,50 @@ withBasicAuth authDecoder decoder =
         decoder
 
 
+{-| Set a JWT to authenticate postgREST requests.
+
+      main : PostgrestAdmin.Program Never Never
+      main =
+          Config.init
+              |> Config.withJwt "8abf3a...9ac36d"
+              |> PostgrestAdmin.application
+
+Alternatively the token can be passed using flags, configuring using `withJwt`
+function precedence.
+
+      Elm.Main.init({
+          flags: { jwt: sessionStorage.getItem("jwt") }
+      })
+
+-}
+withJwt : String -> Decoder (Config m msg) -> Decoder (Config m msg)
+withJwt tokenStr decoder =
+    decoder
+        |> Decode.andThen
+            (\conf ->
+                Decode.succeed { conf | authScheme = AuthScheme.jwt tokenStr }
+            )
+
+
+{-| Specify which fields should be present in the the edit and create forms,
+overriding the table schema. By default a primary key field is not present in
+the forms.
+
+      main : PostgrestAdmin.Program Never Never
+      main =
+          Config.init
+              |> Config.withFormFields
+                  (Dict.fromList [("posts", ["id", "title", "content"])])
+              |> PostgrestAdmin.application
+
+Alternatively this parameter can be configured using flags, configuring using
+`withFormFields` function precedence.
+
+      Elm.Main.init({
+          flags: { formFields: { posts: [ "id", "title", "content" ]} }
+      })
+
+-}
 withFormFields :
     Dict String (List String)
     -> Decoder (Config m msg)
@@ -102,6 +190,24 @@ withFormFieldsDecoder fields conf =
     Decode.succeed { conf | formFields = fields }
 
 
+{-| Create an HTML element for an **existing record** and match to a url path
+using
+[Url.Parser](https://package.elm-lang.org/packages/elm/url/latest/Url.Parser).
+This is usefull if you want to override an existing resource page or add an
+additional details page.
+
+The component specification is similar to the specification for
+[Browser.element](https://package.elm-lang.org/packages/elm/browser/latest/Browser#element).
+
+    main : PostgrestAdmin.Program Model Msg
+    main =
+        Config.init
+            |> Config.withResourceMountPoint
+                { view = view, update = update, init = init }
+                (Config.tableNameParser "posts" </> Parser.string </> s "detail")
+            |> PostgrestAdmin.application
+
+-}
 withResourceMountPoint :
     { init : Record -> ( m, Cmd msg )
     , view : m -> Html msg
@@ -121,6 +227,23 @@ withResourceMountPoint program parser =
         )
 
 
+{-| Create an HTML element for a **blank record** and match to a url path
+using
+[Url.Parser](https://package.elm-lang.org/packages/elm/url/latest/Url.Parser).
+This is usefull if you want to override the record creation form.
+
+The component specification is similar to the specification for
+[Browser.element](https://package.elm-lang.org/packages/elm/browser/latest/Browser#element).
+
+    main : PostgrestAdmin.Program Model Msg
+    main =
+        Config.init
+            |> Config.withNewResourceMountPoint
+                { view = view, update = update, init = init }
+                (Config.tableNameParser "posts" </> s "new-form")
+            |> PostgrestAdmin.application
+
+-}
 withNewResourceMountPoint :
     { init : Record -> ( m, Cmd msg )
     , view : m -> Html msg
@@ -141,6 +264,11 @@ withNewResourceMountPoint program parser =
         )
 
 
+{-| Parse url segment only if it matches string.
+
+      tableNameParser "posts" </> Parser.string </> s "comments"
+
+-}
 tableNameParser : String -> Parser (String -> a) a
 tableNameParser tableName =
     Parser.custom "TABLE_NAME" <|
@@ -150,3 +278,21 @@ tableNameParser tableName =
 
             else
                 Nothing
+
+
+{-| Configuration defaults
+-}
+default : Config m msg
+default =
+    { authScheme = AuthScheme.unset
+    , host =
+        { protocol = Http
+        , host = "localhost"
+        , port_ = Just 3000
+        , path = ""
+        , query = Nothing
+        , fragment = Nothing
+        }
+    , formFields = Dict.empty
+    , resourceRoutes = []
+    }

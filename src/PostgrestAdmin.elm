@@ -1,4 +1,20 @@
-port module PostgrestAdmin exposing (Program, application, applicationParams)
+module PostgrestAdmin exposing
+    ( Program
+    , application
+    , applicationParams
+    )
+
+{-| Program configuration
+
+@docs Program
+
+
+# Init
+
+@docs application
+@docs applicationParams
+
+-}
 
 import Browser
 import Browser.Navigation as Nav
@@ -19,7 +35,7 @@ import Postgrest.Schema as Schema exposing (Schema)
 import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.Config as Config exposing (Config)
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
-import PostgrestAdmin.Route as Route
+import PostgrestAdmin.Route
     exposing
         ( MountPoint(..)
         , ResourceProgram
@@ -31,9 +47,12 @@ import Url.Parser as Parser exposing ((</>), Parser, s)
 import Utils.Task exposing (Error(..), attemptWithError, errorToString, fail)
 
 
-port loginSuccess : String -> Cmd msg
+
+-- port loginSuccess : String -> Cmd msg
 
 
+{-| Default
+-}
 type alias Program model msg =
     Platform.Program Decode.Value (Model model msg) (Msg msg)
 
@@ -73,11 +92,15 @@ type alias Model m msg =
         }
 
 
+{-| Default
+-}
 application : Decoder (Config m msg) -> Program m msg
 application decoder =
     applicationParams decoder |> Browser.application
 
 
+{-| Default
+-}
 applicationParams : Decoder (Config m msg) -> Params m msg
 applicationParams decoder =
     { init = init decoder
@@ -309,6 +332,10 @@ handleChildMsg msg ( model, cmd ) =
 
         OuterMsg.Pass ->
             ( model, cmd )
+
+
+loginSuccess _ =
+    Cmd.none
 
 
 failed : Error -> Model m msg -> Model m msg
