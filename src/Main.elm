@@ -5,7 +5,7 @@ import Html exposing (Html, button, div, text)
 import Html.Events exposing (onClick)
 import Postgrest.Record as Record exposing (Record)
 import PostgrestAdmin
-import PostgrestAdmin.Config as Config
+import PostgrestAdmin.Config as Config exposing (tableNameParser)
 import Url.Parser as Parser exposing ((</>), s)
 
 
@@ -47,15 +47,12 @@ update msg model =
 
 main : PostgrestAdmin.Program Model Msg
 main =
-    let
-        program =
+    Config.init
+        |> Config.withBasicAuth BasicAuth.config
+        |> Config.withResourceMountPoint
             { view = \model -> view model
             , update = update
             , init = \record -> ( { count = 1, record = record }, Cmd.none )
             }
-    in
-    Config.init
-        |> Config.withBasicAuth BasicAuth.config
-        |> Config.withMountedResource program
-            (Parser.string </> Parser.string </> s "something")
+            (tableNameParser "workflows" </> Parser.string </> s "form")
         |> PostgrestAdmin.application

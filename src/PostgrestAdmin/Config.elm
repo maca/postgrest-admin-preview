@@ -2,11 +2,13 @@ module PostgrestAdmin.Config exposing
     ( Config
     , default
     , init
+    , tableNameParser
     , withBasicAuth
     , withFormFields
     , withHost
     , withJwt
-    , withMountedResource
+    , withNewResourceMountPoint
+    , withResourceMountPoint
     )
 
 import BasicAuth exposing (BasicAuth)
@@ -16,9 +18,9 @@ import Json.Decode as Decode exposing (Decoder)
 import Postgrest.Record exposing (Record)
 import PostgrestAdmin.AuthScheme as AuthScheme exposing (AuthScheme)
 import PostgrestAdmin.Flag as Flag
-import PostgrestAdmin.Route exposing (MountPoint, Route(..))
+import PostgrestAdmin.Route exposing (MountPoint(..), Route(..))
 import Url exposing (Protocol(..), Url)
-import Url.Parser exposing (Parser)
+import Url.Parser as Parser exposing (Parser)
 
 
 type alias Config m msg =
@@ -100,7 +102,7 @@ withFormFieldsDecoder fields conf =
     Decode.succeed { conf | formFields = fields }
 
 
-withMountedResource :
+withResourceMountPoint :
     { init : Record -> ( m, Cmd msg )
     , view : m -> Html msg
     , update : msg -> m -> ( m, Cmd msg )
@@ -108,12 +110,43 @@ withMountedResource :
     -> Parser (String -> String -> Route m msg) (Route m msg)
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
-withMountedResource program parser =
+withResourceMountPoint program parser =
     Decode.andThen
         (\conf ->
             Decode.succeed
                 { conf
                     | resourceRoutes =
-                        MountPoint program parser :: conf.resourceRoutes
+                        MountPointResource program parser :: conf.resourceRoutes
                 }
         )
+
+
+withNewResourceMountPoint :
+    { init : Record -> ( m, Cmd msg )
+    , view : m -> Html msg
+    , update : msg -> m -> ( m, Cmd msg )
+    }
+    -> Parser (String -> Route m msg) (Route m msg)
+    -> Decoder (Config m msg)
+    -> Decoder (Config m msg)
+withNewResourceMountPoint program parser =
+    Decode.andThen
+        (\conf ->
+            Decode.succeed
+                { conf
+                    | resourceRoutes =
+                        MountPointNewResource program parser
+                            :: conf.resourceRoutes
+                }
+        )
+
+
+tableNameParser : String -> Parser (String -> a) a
+tableNameParser tableName =
+    Parser.custom "TABLE_NAME" <|
+        \segment ->
+            if segment == tableName then
+                Just segment
+
+            else
+                Nothing

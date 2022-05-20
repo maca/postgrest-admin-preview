@@ -19,7 +19,12 @@ import Postgrest.Schema as Schema exposing (Schema)
 import PostgrestAdmin.AuthScheme as AuthScheme
 import PostgrestAdmin.Config as Config exposing (Config)
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
-import PostgrestAdmin.Route as Route exposing (MountPoint, Route(..))
+import PostgrestAdmin.Route as Route
+    exposing
+        ( MountPoint(..)
+        , ResourceProgram
+        , Route(..)
+        )
 import String.Extra as String
 import Url exposing (Url)
 import Url.Parser as Parser exposing ((</>), Parser, s)
@@ -432,14 +437,8 @@ parseRoute url model =
 
 routeParser : Url -> Model m msg -> Parser (Route m msg -> a) a
 routeParser url model =
-    let
-        mounts =
-            List.map
-                (\{ program, parser } -> Parser.map (routeMount program) parser)
-                model.resourceRoutes
-    in
     Parser.oneOf
-        (List.reverse mounts
+        ((List.map makeMountRoute model.resourceRoutes |> List.reverse)
             ++ [ Parser.map RouteRoot Parser.top
                , Parser.map (newFormRoute model)
                     (Parser.string </> s "new")
@@ -533,9 +532,37 @@ makeDetailRoute tableName id =
         |> RouteLoadingSchema
 
 
-routeMount : Route.Program m msg -> String -> String -> Route m msg
-routeMount program tableName id =
+
+-- MOUNTS
+
+
+makeMountRoute : MountPoint m msg -> Parser (Route m msg -> a) a
+makeMountRoute mountPoint =
+    case mountPoint of
+        MountPointResource program parser ->
+            Parser.map (routeResourceMount program) parser
+
+        MountPointNewResource program parser ->
+            Parser.map (routeNewResourceMount program) parser
+
+
+routeResourceMount : ResourceProgram m msg -> String -> String -> Route m msg
+routeResourceMount program tableName id =
     RouteLoadingResource { tableName = tableName, id = id }
         (program.init >> RouteResource program)
         |> always
         |> RouteLoadingSchema
+
+
+routeNewResourceMount : ResourceProgram m msg -> String -> Route m msg
+routeNewResourceMount program tableName =
+    RouteLoadingSchema
+        (\schema ->
+            case Dict.get tableName schema of
+                Just table ->
+                    program.init (Record.fromTable table)
+                        |> RouteResource program
+
+                Nothing ->
+                    RouteNotFound
+        )

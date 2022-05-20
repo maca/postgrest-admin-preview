@@ -1,6 +1,6 @@
 module PostgrestAdmin.Route exposing
-    ( MountPoint
-    , Program
+    ( MountPoint(..)
+    , ResourceProgram
     , Route(..)
     )
 
@@ -13,7 +13,7 @@ import Postgrest.Schema exposing (Schema)
 import Url.Parser exposing (Parser)
 
 
-type alias Program model msg =
+type alias ResourceProgram model msg =
     { init : Record -> ( model, Cmd msg )
     , view : model -> Html msg
     , update : msg -> model -> ( model, Cmd msg )
@@ -26,10 +26,19 @@ type alias Resource =
     }
 
 
-type alias MountPoint m msg =
-    { program : Program m msg
-    , parser : Parser (String -> String -> Route m msg) (Route m msg)
-    }
+type MountPoint m msg
+    = MountPointResource
+        (ResourceProgram m msg)
+        (Parser
+            (String -> String -> Route m msg)
+            (Route m msg)
+        )
+    | MountPointNewResource
+        (ResourceProgram m msg)
+        (Parser
+            (String -> Route m msg)
+            (Route m msg)
+        )
 
 
 type Route model msg
@@ -39,5 +48,5 @@ type Route model msg
     | RouteListing PageListing
     | RouteDetail PageDetail
     | RouteForm PageForm
-    | RouteResource (Program model msg) ( model, Cmd msg )
+    | RouteResource (ResourceProgram model msg) ( model, Cmd msg )
     | RouteNotFound
