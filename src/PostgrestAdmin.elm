@@ -23,6 +23,7 @@ import Dict.Extra as Dict
 import Html exposing (Html, a, aside, div, h1, li, pre, text, ul)
 import Html.Attributes exposing (class, href)
 import Inflect as String
+import Internal.Config as Config exposing (Config)
 import Json.Decode as Decode exposing (Decoder, Value)
 import Notification exposing (Notification)
 import PageDetail
@@ -33,7 +34,6 @@ import Postgrest.Record as Record exposing (Record)
 import Postgrest.Record.Client as Client exposing (Client)
 import Postgrest.Schema as Schema exposing (Schema)
 import PostgrestAdmin.AuthScheme as AuthScheme
-import PostgrestAdmin.Config as Config exposing (Config)
 import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 import PostgrestAdmin.Route
     exposing

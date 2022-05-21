@@ -1,7 +1,7 @@
 module BasicAuth exposing
     ( BasicAuth
     , Msg
-    , Session
+    , Session(..)
     , config
     , fail
     , mapMsg
@@ -417,20 +417,6 @@ withAuthUrlDecoder urlStr auth =
             (Decode.fail "`BasicAuth.withAuthUrl` was given an invalid URL")
 
 
-withDecoder : Decoder Session -> Decoder BasicAuth -> Decoder BasicAuth
-withDecoder jwtDecoder decoder =
-    decoder
-        |> Decode.andThen
-            (\auth ->
-                let
-                    params =
-                        toParams auth
-                in
-                updateParams { params | decoder = jwtDecoder } auth
-                    |> Decode.succeed
-            )
-
-
 withEncoder :
     (Dict String String -> Value)
     -> Decoder BasicAuth
@@ -444,6 +430,24 @@ withEncoder encoder decoder =
                         toParams auth
                 in
                 updateParams { params | encoder = encoder } auth
+                    |> Decode.succeed
+            )
+
+
+withDecoder : Decoder String -> Decoder BasicAuth -> Decoder BasicAuth
+withDecoder jwtDecoder decoder =
+    decoder
+        |> Decode.andThen
+            (\auth ->
+                let
+                    params =
+                        toParams auth
+                in
+                updateParams
+                    { params
+                        | decoder = Decode.map (PG.jwt >> Token) jwtDecoder
+                    }
+                    auth
                     |> Decode.succeed
             )
 

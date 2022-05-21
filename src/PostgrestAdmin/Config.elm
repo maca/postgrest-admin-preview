@@ -8,7 +8,6 @@ module PostgrestAdmin.Config exposing
     , withNewResourceMountPoint
     , withResourceMountPoint
     , tableNameParser
-    , default
     )
 
 {-| Program configuration
@@ -43,19 +42,15 @@ module PostgrestAdmin.Config exposing
 
 @docs tableNameParser
 
-
-# Defaults
-
-@docs default
-
 -}
 
-import BasicAuth exposing (BasicAuth)
 import Dict exposing (Dict)
 import Html exposing (Html)
+import Internal.Config as Config
 import Json.Decode as Decode exposing (Decoder)
 import Postgrest.Record exposing (Record)
 import PostgrestAdmin.AuthScheme as AuthScheme exposing (AuthScheme)
+import PostgrestAdmin.BasicAuthConfig exposing (BasicAuthConfig)
 import PostgrestAdmin.Flag as Flag
 import PostgrestAdmin.Route exposing (MountPoint(..), Route(..))
 import Url exposing (Protocol(..), Url)
@@ -63,14 +58,10 @@ import Url.Parser as Parser exposing (Parser)
 
 
 {-| [PostgrestAdmin.application](PostgrestAdmin#application) configuration
-params
+params.
 -}
 type alias Config m msg =
-    { host : Url
-    , authScheme : AuthScheme
-    , formFields : Dict String (List String)
-    , resourceRoutes : List (MountPoint m msg)
-    }
+    Decoder (Config.Config m msg)
 
 
 {-| [PostgrestAdmin.application](PostgrestAdmin#application) decoder with
@@ -81,11 +72,9 @@ defaults.
         PostgrestAdmin.application Config.init
 
 -}
-init : Decoder (Config m msg)
+init : Config m msg
 init =
-    Decode.succeed default
-        |> Flag.string "host" withHostDecoder
-        |> Flag.stringDict "formFields" withFormFieldsDecoder
+    Config.init
 
 
 {-| Specify the postgREST host.
@@ -104,33 +93,21 @@ function precedence.
       })
 
 -}
-withHost : String -> Decoder (Config m msg) -> Decoder (Config m msg)
-withHost urlStr decoder =
-    decoder |> Decode.andThen (withHostDecoder urlStr)
-
-
-withHostDecoder : String -> Config m msg -> Decoder (Config m msg)
-withHostDecoder urlStr conf =
-    Url.fromString urlStr
-        |> Maybe.map (\u -> Decode.succeed { conf | host = u })
-        |> Maybe.withDefault
-            (Decode.fail "`Config.withHost` was given an invalid URL")
+withHost : String -> Config m msg -> Config m msg
+withHost =
+    Config.withHost
 
 
 {-| Enable user credentials form and configure the parameters. Credentials
 are be used to obtain a JWT.
 -}
-withBasicAuth :
-    Decoder BasicAuth
-    -> Decoder (Config m msg)
-    -> Decoder (Config m msg)
-withBasicAuth authDecoder decoder =
-    Decode.map2 (\auth conf -> { conf | authScheme = AuthScheme.basic auth })
-        authDecoder
-        decoder
+withBasicAuth : BasicAuthConfig -> Config m msg -> Config m msg
+withBasicAuth =
+    Config.withBasicAuth
 
 
-{-| Set a JWT to authenticate postgREST requests.
+{-| Set a JWT to authenticate postgREST requests. Even when using basic
+authentication it's possible to set an initial JWT.
 
       main : PostgrestAdmin.Program Never Never
       main =
@@ -146,13 +123,9 @@ function precedence.
       })
 
 -}
-withJwt : String -> Decoder (Config m msg) -> Decoder (Config m msg)
-withJwt tokenStr decoder =
-    decoder
-        |> Decode.andThen
-            (\conf ->
-                Decode.succeed { conf | authScheme = AuthScheme.jwt tokenStr }
-            )
+withJwt : String -> Config m msg -> Config m msg
+withJwt =
+    Config.withJwt
 
 
 {-| Specify which fields should be present in the the edit and create forms,
@@ -174,20 +147,9 @@ Alternatively this parameter can be configured using flags, configuring using
       })
 
 -}
-withFormFields :
-    Dict String (List String)
-    -> Decoder (Config m msg)
-    -> Decoder (Config m msg)
-withFormFields fields =
-    Decode.andThen (withFormFieldsDecoder fields)
-
-
-withFormFieldsDecoder :
-    Dict String (List String)
-    -> Config m msg
-    -> Decoder (Config m msg)
-withFormFieldsDecoder fields conf =
-    Decode.succeed { conf | formFields = fields }
+withFormFields : Dict String (List String) -> Config m msg -> Config m msg
+withFormFields =
+    Config.withFormFields
 
 
 {-| Create an HTML element for an **existing record** and match to a url path
@@ -214,17 +176,10 @@ withResourceMountPoint :
     , update : msg -> m -> ( m, Cmd msg )
     }
     -> Parser (String -> String -> Route m msg) (Route m msg)
-    -> Decoder (Config m msg)
-    -> Decoder (Config m msg)
-withResourceMountPoint program parser =
-    Decode.andThen
-        (\conf ->
-            Decode.succeed
-                { conf
-                    | resourceRoutes =
-                        MountPointResource program parser :: conf.resourceRoutes
-                }
-        )
+    -> Config m msg
+    -> Config m msg
+withResourceMountPoint =
+    Config.withResourceMountPoint
 
 
 {-| Create an HTML element for a **blank record** and match to a url path
@@ -250,18 +205,10 @@ withNewResourceMountPoint :
     , update : msg -> m -> ( m, Cmd msg )
     }
     -> Parser (String -> Route m msg) (Route m msg)
-    -> Decoder (Config m msg)
-    -> Decoder (Config m msg)
-withNewResourceMountPoint program parser =
-    Decode.andThen
-        (\conf ->
-            Decode.succeed
-                { conf
-                    | resourceRoutes =
-                        MountPointNewResource program parser
-                            :: conf.resourceRoutes
-                }
-        )
+    -> Config m msg
+    -> Config m msg
+withNewResourceMountPoint =
+    Config.withNewResourceMountPoint
 
 
 {-| Parse url segment only if it matches string.
@@ -278,21 +225,3 @@ tableNameParser tableName =
 
             else
                 Nothing
-
-
-{-| Configuration defaults
--}
-default : Config m msg
-default =
-    { authScheme = AuthScheme.unset
-    , host =
-        { protocol = Http
-        , host = "localhost"
-        , port_ = Just 3000
-        , path = ""
-        , query = Nothing
-        , fragment = Nothing
-        }
-    , formFields = Dict.empty
-    , resourceRoutes = []
-    }
