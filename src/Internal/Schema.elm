@@ -1,4 +1,4 @@
-module Postgrest.Schema exposing
+module Internal.Schema exposing
     ( Column
     , Constraint(..)
     , ForeignKeyParams
@@ -12,6 +12,7 @@ module Postgrest.Schema exposing
 import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
 import Http
+import Internal.Value exposing (Value(..))
 import Json.Decode as Decode
     exposing
         ( Decoder
@@ -24,7 +25,6 @@ import Json.Decode as Decode
         , maybe
         , string
         )
-import Postgrest.Value exposing (Value(..))
 import Regex exposing (Regex)
 import Task exposing (Task)
 import Time.Extra as Time

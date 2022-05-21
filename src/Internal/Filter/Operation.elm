@@ -1,4 +1,4 @@
-module Filter.Operation exposing
+module Internal.Filter.Operation exposing
     ( Operation(..)
     , operands
     , toPGQuery
@@ -6,7 +6,7 @@ module Filter.Operation exposing
     , values
     )
 
-import Filter.Operand as Operand exposing (Enum, Operand(..))
+import Internal.Filter.Operand as Operand exposing (Enum, Operand(..))
 import Iso8601
 import Postgrest.Client as PG
 import Set

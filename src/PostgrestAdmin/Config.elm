@@ -5,9 +5,7 @@ module PostgrestAdmin.Config exposing
     , withFormFields
     , withBasicAuth
     , withJwt
-    , withNewResourceMountPoint
-    , withResourceMountPoint
-    , tableNameParser
+    , withMountPoint
     )
 
 {-| Program configuration
@@ -35,7 +33,7 @@ module PostgrestAdmin.Config exposing
 # Element mounting
 
 @docs withNewResourceMountPoint
-@docs withResourceMountPoint
+@docs withMountPoint
 
 
 # URL parsing
@@ -46,15 +44,15 @@ module PostgrestAdmin.Config exposing
 
 import Dict exposing (Dict)
 import Html exposing (Html)
+import Internal.Cmd as AppCmd
 import Internal.Config as Config
-import Json.Decode as Decode exposing (Decoder)
-import Postgrest.Record exposing (Record)
-import PostgrestAdmin.AuthScheme as AuthScheme exposing (AuthScheme)
+import Internal.Msg exposing (Msg)
+import Internal.Route exposing (MountPoint(..), Route(..))
+import Json.Decode exposing (Decoder)
 import PostgrestAdmin.BasicAuthConfig exposing (BasicAuthConfig)
-import PostgrestAdmin.Flag as Flag
-import PostgrestAdmin.Route exposing (MountPoint(..), Route(..))
-import Url exposing (Protocol(..), Url)
-import Url.Parser as Parser exposing (Parser)
+import PostgrestAdmin.Client exposing (Client)
+import Url exposing (Protocol(..))
+import Url.Parser exposing (Parser)
 
 
 {-| [PostgrestAdmin.application](PostgrestAdmin#application) configuration
@@ -152,7 +150,7 @@ withFormFields =
     Config.withFormFields
 
 
-{-| Create an HTML element for an **existing record** and match to a url path
+{-| Create an HTML element and match to a url path
 using
 [Url.Parser](https://package.elm-lang.org/packages/elm/url/latest/Url.Parser).
 This is usefull if you want to override an existing resource page or add an
@@ -164,64 +162,23 @@ The component specification is similar to the specification for
     main : PostgrestAdmin.Program Model Msg
     main =
         Config.init
-            |> Config.withResourceMountPoint
+            |> Config.withMountPoint
                 { view = view, update = update, init = init }
                 (Config.tableNameParser "posts" </> Parser.string </> s "detail")
             |> PostgrestAdmin.application
 
 -}
-withResourceMountPoint :
-    { init : Record -> ( m, Cmd msg )
+withMountPoint :
+    { init : Client -> ( m, AppCmd.Cmd msg )
     , view : m -> Html msg
-    , update : msg -> m -> ( m, Cmd msg )
+    , update : msg -> m -> ( m, AppCmd.Cmd msg )
+    , onLogin : Client -> msg
     }
-    -> Parser (String -> String -> Route m msg) (Route m msg)
+    ->
+        Parser
+            (() -> ( Route m msg, Cmd (Msg msg) ))
+            ( Route m msg, Cmd (Msg msg) )
     -> Config m msg
     -> Config m msg
-withResourceMountPoint =
-    Config.withResourceMountPoint
-
-
-{-| Create an HTML element for a **blank record** and match to a url path
-using
-[Url.Parser](https://package.elm-lang.org/packages/elm/url/latest/Url.Parser).
-This is usefull if you want to override the record creation form.
-
-The component specification is similar to the specification for
-[Browser.element](https://package.elm-lang.org/packages/elm/browser/latest/Browser#element).
-
-    main : PostgrestAdmin.Program Model Msg
-    main =
-        Config.init
-            |> Config.withNewResourceMountPoint
-                { view = view, update = update, init = init }
-                (Config.tableNameParser "posts" </> s "new-form")
-            |> PostgrestAdmin.application
-
--}
-withNewResourceMountPoint :
-    { init : Record -> ( m, Cmd msg )
-    , view : m -> Html msg
-    , update : msg -> m -> ( m, Cmd msg )
-    }
-    -> Parser (String -> Route m msg) (Route m msg)
-    -> Config m msg
-    -> Config m msg
-withNewResourceMountPoint =
-    Config.withNewResourceMountPoint
-
-
-{-| Parse url segment only if it matches string.
-
-      tableNameParser "posts" </> Parser.string </> s "comments"
-
--}
-tableNameParser : String -> Parser (String -> a) a
-tableNameParser tableName =
-    Parser.custom "TABLE_NAME" <|
-        \segment ->
-            if segment == tableName then
-                Just segment
-
-            else
-                Nothing
+withMountPoint =
+    Config.withMountPoint

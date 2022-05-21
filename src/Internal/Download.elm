@@ -1,9 +1,9 @@
-module Postgrest.Download exposing (Download, Format(..), fetch, init, save)
+module Internal.Download exposing (Download, Format(..), fetch, init, save)
 
 import Bytes exposing (Bytes)
 import File.Download as Download
 import Http exposing (header)
-import Postgrest.Record.Client as Client exposing (Client)
+import PostgrestAdmin.Client as Client exposing (Client)
 import Task exposing (Task)
 import Url
 import Utils.Task exposing (Error(..), handleResponse)
@@ -44,9 +44,13 @@ format download =
             format_
 
 
-fetch : Client a -> Download -> Task Error Download
-fetch ({ host } as client) download =
-    case Client.jwtString client of
+fetch : Client -> Download -> Task Error Download
+fetch client download =
+    let
+        host =
+            Client.toHostUrl client
+    in
+    case Client.toJwtString client of
         Just token ->
             Http.task
                 { method = "GET"

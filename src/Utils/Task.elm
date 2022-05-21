@@ -51,7 +51,7 @@ handleJsonResponse decoder =
         (\body ->
             case Decode.decodeString decoder body of
                 Err err ->
-                    Err <| DecodeError err
+                    Err (DecodeError err)
 
                 Ok result ->
                     Ok result

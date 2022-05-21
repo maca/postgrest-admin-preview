@@ -1,13 +1,12 @@
-module PageListing exposing
+module Internal.PageListing exposing
     ( Msg
     , PageListing
     , ascendingBy
     , descendingBy
-    , fetch
     , hideSearch
     , init
     , isSearchVisible
-    , mapMsg
+    , onLogin
     , showSearch
     , update
     , view
@@ -49,27 +48,27 @@ import Html.Attributes
         )
 import Html.Events as Events exposing (on, onClick, onMouseDown, onMouseUp)
 import Inflect as String
+import Internal.Client exposing (selects)
+import Internal.Cmd as AppCmd
+import Internal.Download as Download exposing (Download, Format(..))
+import Internal.Field as Field
+import Internal.Notification as Notification
+import Internal.Schema exposing (Column, Constraint(..), Table)
+import Internal.Search as Search exposing (Search)
+import Internal.Upload as Upload
 import Json.Decode as Decode
 import Json.Encode as Encode
 import List.Extra as List
-import Notification
 import Postgrest.Client as PG
-import Postgrest.Download as Download exposing (Download, Format(..))
-import Postgrest.Field as Field
-import Postgrest.Record as Record exposing (Record)
-import Postgrest.Record.Client as Client exposing (Client)
-import Postgrest.Schema exposing (Column, Constraint(..), Table)
-import Postgrest.Upload as Upload
-import PostgrestAdmin.AuthScheme as AuthScheme
-import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
-import Search exposing (Search)
+import PostgrestAdmin.Client as Client exposing (Client)
+import PostgrestAdmin.Record as Record exposing (Record)
 import String.Extra as String
-import Task exposing (Task)
+import Task
 import Time
 import Time.Extra as Time
 import Url
 import Url.Builder as Url exposing (QueryParameter)
-import Utils.Task exposing (Error(..), attemptWithError, fail)
+import Utils.Task exposing (Error(..), attemptWithError)
 
 
 type Page
@@ -84,8 +83,9 @@ type SortOrder
 
 
 type Msg
-    = RecordLinkClicked String String
-    | Fetched (List Record)
+    = LoggedIn Client
+    | Fetched (Result Error (List Record))
+    | RecordLinkClicked String String
     | ApplyFilters
     | Sort SortOrder
     | Reload
@@ -113,7 +113,8 @@ type TextSelect
 
 
 type alias PageListing =
-    { resourcesName : String
+    { client : Client
+    , key : Nav.Key
     , scrollPosition : Float
     , table : Table
     , pages : List Page
@@ -132,41 +133,39 @@ type alias EventConfig =
     }
 
 
-init : String -> Maybe String -> Table -> PageListing
-init resourcesName rawQuery table =
+init :
+    { client : Client, table : Table }
+    -> Url.Url
+    -> Nav.Key
+    -> ( PageListing, AppCmd.Cmd Msg )
+init { client, table } url key =
     let
-        query =
-            Maybe.map parseQuery rawQuery |> Maybe.withDefault []
-
         order =
-            query
+            Maybe.map parseQuery url.query
+                |> Maybe.withDefault []
                 |> (List.filter (Tuple.first >> (==) "order") >> List.head)
                 |> Maybe.map (Tuple.second >> parseOrder)
                 |> Maybe.withDefault Unordered
+
+        listing =
+            { client = client
+            , key = key
+            , page = 0
+            , scrollPosition = 0
+            , table = table
+            , pages = []
+            , order = order
+            , search = Search.init table (url.query |> Maybe.withDefault "")
+            , searchOpen = False
+            , textSelect = Off
+            }
     in
-    { resourcesName = resourcesName
-    , page = 0
-    , scrollPosition = 0
-    , table = table
-    , pages = []
-    , order = order
-    , search = Search.init table (rawQuery |> Maybe.withDefault "")
-    , searchOpen = False
-    , textSelect = Off
-    }
+    ( listing, fetch listing )
 
 
-mapMsg : Msg -> OuterMsg
-mapMsg msg =
-    case msg of
-        FetchFailed err ->
-            OuterMsg.RequestFailed err
-
-        NotificationChanged innerMsg ->
-            OuterMsg.NotificationChanged innerMsg
-
-        _ ->
-            OuterMsg.Pass
+onLogin : Client -> Msg
+onLogin =
+    LoggedIn
 
 
 isSearchVisible : PageListing -> Bool
@@ -194,50 +193,38 @@ descendingBy column listing =
     { listing | order = Desc column }
 
 
-fetch : Client a -> PageListing -> Cmd Msg
-fetch client listing =
-    fetchTask client listing
-        |> attemptWithError FetchFailed Fetched
-
-
-fetchTask : Client a -> PageListing -> Task Error (List Record)
-fetchTask client listing =
+fetch : PageListing -> AppCmd.Cmd Msg
+fetch { search, page, table, order, client } =
     let
-        { search, resourcesName, page, table, order } =
-            listing
-
         pgOrder =
             Dict.toList table.columns
-                |> List.filterMap (sortBy resourcesName order)
+                |> List.filterMap (sortBy table.name order)
 
         params =
-            [ PG.select <| Client.selects table
+            [ PG.select (selects table)
             , PG.limit perPage
             , PG.offset (perPage * page)
             ]
     in
-    case AuthScheme.toJwt client.authScheme of
-        Just token ->
-            Client.fetchMany client table
-                |> PG.setParams (params ++ pgOrder ++ Search.toPGQuery search)
-                |> PG.toTask token
-                |> Task.mapError PGError
-
-        Nothing ->
-            Task.fail AuthError
+    Client.fetchRecordList
+        { client = client
+        , table = table
+        , params = params ++ pgOrder ++ Search.toPGQuery search
+        , expect = Client.expectRecordList Fetched table
+        }
 
 
-update : Client { a | key : Nav.Key } -> Msg -> PageListing -> ( PageListing, Cmd Msg )
-update client msg listing =
+update : Msg -> PageListing -> ( PageListing, AppCmd.Cmd Msg )
+update msg listing =
     case msg of
-        RecordLinkClicked resourcesName id ->
-            ( listing
-            , Nav.pushUrl client.key <| Url.absolute [ resourcesName, id ] []
-            )
+        LoggedIn client ->
+            fetchListing
+                { listing | client = client }
 
-        Fetched records ->
-            let
-                pages =
+        Fetched (Ok records) ->
+            ( { listing
+                | page = listing.page + 1
+                , pages =
                     case listing.pages of
                         Blank :: ps ->
                             if List.length records < perPage then
@@ -248,30 +235,46 @@ update client msg listing =
 
                         _ ->
                             Page records :: listing.pages
-            in
-            ( { listing | page = listing.page + 1, pages = pages }
-            , Cmd.none
+              }
+            , AppCmd.none
             )
+
+        RecordLinkClicked tableName id ->
+            ( listing
+            , Url.absolute [ tableName, id ] []
+                |> Nav.pushUrl listing.key
+                |> AppCmd.wrap
+            )
+
+        Fetched (Err _) ->
+            ( listing, AppCmd.none )
 
         ApplyFilters ->
             ( listing
-            , Dom.setViewportOf listing.resourcesName 0 0
+            , Dom.setViewportOf listing.table.name 0 0
                 |> Task.attempt (always Reload)
+                |> AppCmd.wrap
             )
 
         Sort order ->
             ( { listing | order = order }
-            , Dom.setViewportOf listing.resourcesName 0 0
+            , Dom.setViewportOf listing.table.name 0 0
                 |> Task.attempt (always Reload)
+                |> AppCmd.wrap
             )
 
         Reload ->
-            ( listing, listingPath listing |> Nav.pushUrl client.key )
+            ( listing
+            , listingPath listing
+                |> Nav.pushUrl listing.key
+                |> AppCmd.wrap
+            )
 
         Scrolled ->
             ( listing
-            , Dom.getViewportOf listing.resourcesName
+            , Dom.getViewportOf listing.table.name
                 |> Task.attempt ScrollInfo
+                |> AppCmd.wrap
             )
 
         ScrollInfo result ->
@@ -287,11 +290,11 @@ update client msg listing =
                                     | scrollPosition =
                                         viewport.viewport.y
                                   }
-                                , Cmd.none
+                                , AppCmd.none
                                 )
 
                             _ ->
-                                fetchListing client
+                                fetchListing
                                     { listing
                                         | scrollPosition = viewport.viewport.y
                                         , pages = Blank :: listing.pages
@@ -299,11 +302,11 @@ update client msg listing =
 
                     else
                         ( { listing | scrollPosition = viewport.viewport.y }
-                        , Cmd.none
+                        , AppCmd.none
                         )
 
                 Err _ ->
-                    ( listing, Cmd.none )
+                    ( listing, AppCmd.none )
 
         SearchChanged searchMsg ->
             Search.update searchMsg listing.search
@@ -311,33 +314,49 @@ update client msg listing =
                 |> Tuple.mapSecond (searchChanged searchMsg)
 
         ToggleSearchOpen ->
-            ( { listing | searchOpen = not listing.searchOpen }, Cmd.none )
+            ( { listing | searchOpen = not listing.searchOpen }
+            , AppCmd.none
+            )
 
         SelectEnter ->
-            ( { listing | textSelect = Enter }, Cmd.none )
+            ( { listing | textSelect = Enter }
+            , AppCmd.none
+            )
 
         SelectOff ->
-            ( { listing | textSelect = Off }, Cmd.none )
+            ( { listing | textSelect = Off }
+            , AppCmd.none
+            )
 
         SelectOn ->
-            ( { listing | textSelect = On }, Cmd.none )
+            ( { listing | textSelect = On }
+            , AppCmd.none
+            )
 
         DownloadRequested format ->
             ( listing
             , Download.init format (listingPath listing)
-                |> Download.fetch client
+                |> Download.fetch listing.client
                 |> attemptWithError FetchFailed Downloaded
+                |> AppCmd.wrap
             )
 
         Downloaded download ->
-            ( listing, Download.save listing.resourcesName download )
+            ( listing
+            , Download.save listing.table.name download
+                |> AppCmd.wrap
+            )
 
         CsvFileRequested ->
-            ( listing, Select.file [ "text/csv" ] CsvFileSelected )
+            ( listing
+            , Select.file [ "text/csv" ] CsvFileSelected
+                |> AppCmd.wrap
+            )
 
         CsvFileSelected file ->
             ( listing
             , Task.perform CsvFileLoaded (File.toString file)
+                |> AppCmd.wrap
             )
 
         CsvFileLoaded string ->
@@ -353,43 +372,45 @@ update client msg listing =
                                 records
 
                         path =
-                            Url.absolute [ listing.resourcesName ] []
+                            Url.absolute [ listing.table.name ] []
                     in
                     ( listing
-                    , Upload.post client path json
+                    , Upload.post listing.client path json
                         |> attemptWithError FetchFailed
                             (\_ -> CsvFilePosted (List.length records))
+                        |> AppCmd.wrap
                     )
 
                 Err _ ->
-                    ( listing, Cmd.none )
+                    ( listing, AppCmd.none )
 
         CsvFilePosted count ->
             ( listing
             , Cmd.batch
-                [ Dom.setViewportOf listing.resourcesName 0 0
+                [ Dom.setViewportOf listing.table.name 0 0
                     |> Task.attempt (always Reload)
                 , (String.fromInt count ++ " records where saved.")
                     |> Notification.confirm
                     |> Task.perform NotificationChanged
                 ]
+                |> AppCmd.wrap
             )
 
         NotificationChanged _ ->
-            ( listing, Cmd.none )
+            ( listing, AppCmd.none )
 
         FetchFailed _ ->
-            ( listing, Cmd.none )
+            ( listing, AppCmd.none )
 
 
 listingPath : PageListing -> String
-listingPath { order, resourcesName, search } =
+listingPath { order, table, search } =
     let
         queryParams =
             orderToQueryParams order
 
         baseUrl =
-            Url.absolute [ resourcesName ]
+            Url.absolute [ table.name ]
                 (orderToQueryParams order)
 
         filterQuery =
@@ -407,11 +428,6 @@ listingPath { order, resourcesName, search } =
         |> String.join joinChar
 
 
-fetchListing : Client a -> PageListing -> ( PageListing, Cmd Msg )
-fetchListing client listing =
-    ( listing, fetch client listing )
-
-
 scrollingDown : Viewport -> PageListing -> Bool
 scrollingDown { viewport } { scrollPosition } =
     scrollPosition < viewport.y
@@ -422,13 +438,20 @@ closeToBottom { scene, viewport } =
     scene.height - viewport.y < (viewport.height * 2)
 
 
-searchChanged : Search.Msg -> Cmd Search.Msg -> Cmd Msg
+fetchListing : PageListing -> ( PageListing, AppCmd.Cmd Msg )
+fetchListing listing =
+    ( listing, fetch listing )
+
+
+searchChanged : Search.Msg -> Cmd Search.Msg -> AppCmd.Cmd Msg
 searchChanged msg cmd =
     if Search.isApplyMsg msg then
-        Time.now |> Task.perform (always ApplyFilters)
+        Time.now
+            |> Task.perform (always ApplyFilters)
+            |> AppCmd.wrap
 
     else
-        Cmd.map SearchChanged cmd
+        Cmd.map SearchChanged cmd |> AppCmd.wrap
 
 
 
@@ -449,9 +472,9 @@ view listing =
     in
     section
         [ class "resources-listing" ]
-        [ listHeader listing.resourcesName
+        [ listHeader listing.table.name
         , div
-            [ id listing.resourcesName
+            [ id listing.table.name
             , class "resources-listing-results"
             , case listing.pages of
                 Blank :: _ ->
@@ -523,13 +546,13 @@ toggleSearchButton listing =
 
 
 listHeader : String -> Html Msg
-listHeader resourcesName =
+listHeader tableName =
     header []
-        [ h1 [] [ text <| String.humanize resourcesName ]
+        [ h1 [] [ text <| String.humanize tableName ]
         , div []
             [ a
                 [ class "button"
-                , href <| Url.absolute [ resourcesName, "new" ] []
+                , href <| Url.absolute [ tableName, "new" ] []
                 ]
                 [ text "New Record" ]
             ]
@@ -623,13 +646,18 @@ viewPage listing fields pageNum records =
 
 
 row : PageListing -> List String -> Record -> Html Msg
-row { resourcesName, textSelect } names record =
+row { table, textSelect } names record =
     let
         cell fieldName =
             Dict.get fieldName record.fields
                 |> Maybe.map
                     (\field ->
-                        td [] [ Field.toHtml (clickRecord textSelect) resourcesName field ]
+                        td
+                            []
+                            [ field
+                                |> Field.toHtml (clickRecord textSelect)
+                                    table.name
+                            ]
                     )
     in
     tr
@@ -643,20 +671,20 @@ row { resourcesName, textSelect } names record =
         , onMouseUp SelectOff
         , Record.id record
             |> Maybe.withDefault ""
-            |> clickRecord textSelect resourcesName
+            |> clickRecord textSelect table.name
         ]
         (List.filterMap cell names)
 
 
 clickRecord : TextSelect -> String -> String -> Html.Attribute Msg
-clickRecord textSelect resourcesName id =
+clickRecord textSelect tableName id =
     let
         msg =
             if textSelect == On then
                 SelectOff
 
             else
-                RecordLinkClicked resourcesName id
+                RecordLinkClicked tableName id
     in
     Events.custom "click" <|
         Decode.map (EventConfig True True)
@@ -678,7 +706,7 @@ perPage =
 
 
 sortBy : String -> SortOrder -> ( String, Column ) -> Maybe PG.Param
-sortBy resourcesName sort ( name, { constraint } ) =
+sortBy tableName sort ( name, { constraint } ) =
     let
         colName =
             case constraint of
@@ -687,7 +715,7 @@ sortBy resourcesName sort ( name, { constraint } ) =
                         |> Maybe.map
                             (\columnName ->
                                 String.join "_"
-                                    [ resourcesName
+                                    [ tableName
                                     , params.tableName
                                     , columnName
                                     ]

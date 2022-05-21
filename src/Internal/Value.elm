@@ -1,4 +1,4 @@
-module Postgrest.Value exposing
+module Internal.Value exposing
     ( Value(..)
     , encode
     , isNothing

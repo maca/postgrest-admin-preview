@@ -1,15 +1,17 @@
-module Form.Input exposing
+module Internal.Input exposing
     ( Input(..)
     , Msg
     , fromField
     , isRequired
-    , mapMsg
     , setError
     , toField
     , toValue
     , update
     , view
     )
+
+-- import Internal.Client as Client
+-- import Internal.Client as Client
 
 import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
@@ -29,17 +31,17 @@ import Html.Attributes
         , target
         )
 import Html.Events exposing (onInput)
+import Internal.Client
+import Internal.Cmd as AppCmd
+import Internal.Field as Field exposing (Field)
+import Internal.Schema exposing (Constraint(..), ForeignKeyParams)
+import Internal.Value as Value exposing (Value(..))
 import Maybe.Extra as Maybe
 import Postgrest.Client as PG exposing (PostgrestErrorJSON)
-import Postgrest.Field as Field exposing (Field)
-import Postgrest.Record as Record exposing (Record)
-import Postgrest.Record.Client as Client exposing (Client)
-import Postgrest.Schema exposing (Constraint(..), ForeignKeyParams)
-import Postgrest.Value as Value exposing (Value(..))
-import PostgrestAdmin.AuthScheme as AuthScheme
-import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
-import Result
+import PostgrestAdmin.Client as Client exposing (Client)
+import PostgrestAdmin.Record as Record exposing (Record)
 import String.Extra as String
+import Task
 import Url.Builder as Url
 import Utils.Task exposing (Error(..), fail)
 
@@ -73,17 +75,7 @@ type Input
     | Blank Field
 
 
-mapMsg : Msg -> OuterMsg
-mapMsg msg =
-    case msg of
-        Failed err ->
-            OuterMsg.RequestFailed err
-
-        _ ->
-            OuterMsg.Pass
-
-
-update : Client a -> Msg -> Fields -> ( Fields, Cmd Msg )
+update : Client -> Msg -> Fields -> ( Fields, AppCmd.Cmd Msg )
 update client msg record =
     case msg of
         Changed ( name, Association field autocomplete ) "" ->
@@ -96,7 +88,7 @@ update client msg record =
                         }
             in
             ( Dict.insert name input record
-            , Cmd.none
+            , AppCmd.none
             )
 
         Changed ( name, Association field autocomplete ) userInput ->
@@ -130,7 +122,7 @@ update client msg record =
                     )
 
                 _ ->
-                    ( record, Cmd.none )
+                    ( record, AppCmd.none )
 
         Changed ( name, input ) userInput ->
             let
@@ -138,7 +130,7 @@ update client msg record =
                     Field.updateWithString userInput
             in
             ( Dict.insert name (mapField updateFun input) record
-            , Cmd.none
+            , AppCmd.none
             )
 
         ListingFetched name (Ok results) ->
@@ -148,21 +140,24 @@ update client msg record =
                         input =
                             Association field <|
                                 if List.isEmpty results then
-                                    { params | results = [], blocked = True }
+                                    { params
+                                        | results = []
+                                        , blocked = True
+                                    }
 
                                 else
                                     { params | results = results }
                     in
-                    ( Dict.insert name input record, Cmd.none )
+                    ( Dict.insert name input record, AppCmd.none )
 
                 _ ->
-                    ( record, Cmd.none )
+                    ( record, AppCmd.none )
 
         ListingFetched _ (Err _) ->
-            ( record, Cmd.none )
+            ( record, AppCmd.none )
 
         Failed _ ->
-            ( record, Cmd.none )
+            ( record, AppCmd.none )
 
 
 mapField : (Field -> Field) -> Input -> Input
@@ -511,9 +506,9 @@ displayError error =
         |> Maybe.withDefault (text "")
 
 
-fetchRecords : Client a -> String -> ForeignKeyParams -> String -> Cmd Msg
+fetchRecords : Client -> String -> ForeignKeyParams -> String -> AppCmd.Cmd Msg
 fetchRecords client name { tableName, labelColumnName } userInput =
-    case Dict.get tableName client.schema of
+    case Internal.Client.getTable tableName client of
         Just table ->
             let
                 selects =
@@ -538,26 +533,18 @@ fetchRecords client name { tableName, labelColumnName } userInput =
                     List.filterMap identity [ idQuery, labelQuery ]
             in
             if List.isEmpty queries then
-                AutocompleteError userInput
-                    |> fail Failed
+                AppCmd.none
 
             else
-                case AuthScheme.toJwt client.authScheme of
-                    Just token ->
-                        Client.fetchMany client table
-                            |> PG.setParams
-                                [ PG.select selects
-                                , PG.or queries
-                                , PG.limit 40
-                                ]
-                            |> PG.toCmd token
-                                (Result.mapError PGError >> ListingFetched name)
-
-                    Nothing ->
-                        fail Failed AuthError
+                Client.fetchRecordList
+                    { client = client
+                    , table = table
+                    , params = [ PG.select selects, PG.or queries, PG.limit 40 ]
+                    , expect = Client.expectRecordList (ListingFetched name) table
+                    }
 
         Nothing ->
-            fail Failed (BadSchema tableName)
+            AppCmd.none
 
 
 findRecord : ForeignKeyParams -> Autocomplete -> String -> Maybe Record

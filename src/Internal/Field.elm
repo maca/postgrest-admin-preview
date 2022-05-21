@@ -1,4 +1,4 @@
-module Postgrest.Field exposing
+module Internal.Field exposing
     ( Field
     , compareTuple
     , isPrimaryKey
@@ -11,10 +11,10 @@ module Postgrest.Field exposing
 
 import Html exposing (Html, a, text)
 import Html.Attributes exposing (href, target)
+import Internal.Schema exposing (Constraint(..))
+import Internal.Value as Value exposing (Value(..))
 import List.Extra as List
 import Postgrest.Client as PG
-import Postgrest.Schema exposing (Constraint(..))
-import Postgrest.Value as Value exposing (Value(..))
 import String.Extra as String
 import Time
 import Time.Extra as Time

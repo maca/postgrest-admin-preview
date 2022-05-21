@@ -6,28 +6,28 @@ module Internal.Config exposing
     , withFormFields
     , withHost
     , withJwt
-    , withNewResourceMountPoint
-    , withResourceMountPoint
+    , withMountPoint
     )
 
-import BasicAuth exposing (BasicAuth)
 import Dict exposing (Dict)
 import Html exposing (Html)
+import Internal.AuthScheme as AuthScheme exposing (AuthScheme)
+import Internal.BasicAuth exposing (BasicAuth)
+import Internal.Cmd as AppCmd
+import Internal.Flag as Flag
+import Internal.Msg exposing (Msg)
+import Internal.Route exposing (Application, MountPoint(..), Route(..))
 import Json.Decode as Decode exposing (Decoder)
-import Postgrest.Record exposing (Record)
-import PostgrestAdmin.AuthScheme as AuthScheme exposing (AuthScheme)
-import PostgrestAdmin.BasicAuthConfig as BasicAuth
-import PostgrestAdmin.Flag as Flag
-import PostgrestAdmin.Route exposing (MountPoint(..), Route(..))
+import PostgrestAdmin.Client exposing (Client)
 import Url exposing (Protocol(..), Url)
-import Url.Parser as Parser exposing (Parser)
+import Url.Parser exposing (Parser)
 
 
 type alias Config m msg =
     { host : Url
     , authScheme : AuthScheme
     , formFields : Dict String (List String)
-    , resourceRoutes : List (MountPoint m msg)
+    , application : Maybe (MountPoint m msg)
     }
 
 
@@ -86,42 +86,19 @@ withFormFieldsDecoder fields conf =
     Decode.succeed { conf | formFields = fields }
 
 
-withResourceMountPoint :
-    { init : Record -> ( m, Cmd msg )
-    , view : m -> Html msg
-    , update : msg -> m -> ( m, Cmd msg )
-    }
-    -> Parser (String -> String -> Route m msg) (Route m msg)
+withMountPoint :
+    Application m msg
+    ->
+        Parser
+            (() -> ( Route m msg, Cmd (Msg msg) ))
+            ( Route m msg, Cmd (Msg msg) )
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
-withResourceMountPoint program parser =
+withMountPoint program parser =
     Decode.andThen
         (\conf ->
             Decode.succeed
-                { conf
-                    | resourceRoutes =
-                        MountPointResource program parser :: conf.resourceRoutes
-                }
-        )
-
-
-withNewResourceMountPoint :
-    { init : Record -> ( m, Cmd msg )
-    , view : m -> Html msg
-    , update : msg -> m -> ( m, Cmd msg )
-    }
-    -> Parser (String -> Route m msg) (Route m msg)
-    -> Decoder (Config m msg)
-    -> Decoder (Config m msg)
-withNewResourceMountPoint program parser =
-    Decode.andThen
-        (\conf ->
-            Decode.succeed
-                { conf
-                    | resourceRoutes =
-                        MountPointNewResource program parser
-                            :: conf.resourceRoutes
-                }
+                { conf | application = Just (MountPoint program parser) }
         )
 
 
@@ -137,5 +114,5 @@ default =
         , fragment = Nothing
         }
     , formFields = Dict.empty
-    , resourceRoutes = []
+    , application = Nothing
     }

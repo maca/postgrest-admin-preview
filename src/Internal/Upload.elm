@@ -1,16 +1,20 @@
-module Postgrest.Upload exposing (post)
+module Internal.Upload exposing (post)
 
 import Http exposing (header)
 import Json.Encode exposing (Value)
-import Postgrest.Record.Client as Client exposing (Client)
+import PostgrestAdmin.Client as Client exposing (Client)
 import Task exposing (Task)
 import Url
 import Utils.Task exposing (Error(..), handleResponse)
 
 
-post : Client a -> String -> Value -> Task Error ()
-post ({ host } as client) path value =
-    case Client.jwtString client of
+post : Client -> String -> Value -> Task Error ()
+post client path value =
+    let
+        host =
+            Client.toHostUrl client
+    in
+    case Client.toJwtString client of
         Just token ->
             Http.task
                 { method = "POST"

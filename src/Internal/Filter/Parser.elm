@@ -1,7 +1,8 @@
-module Filter.Parser exposing (OperandConst, enum, operation)
+module Internal.Filter.Parser exposing (OperandConst, enum, operation)
 
-import Filter.Operand as Operand exposing (Enum, Operand(..))
-import Filter.Operation exposing (Operation(..))
+import Internal.Filter.Operand as Operand exposing (Enum, Operand(..))
+import Internal.Filter.Operation exposing (Operation(..))
+import Internal.Value exposing (Value(..))
 import Parser
     exposing
         ( (|.)
@@ -19,7 +20,6 @@ import Parser
         , token
         , variable
         )
-import Postgrest.Value exposing (Value(..))
 import Set exposing (Set)
 import String.Extra exposing (unquote)
 import Url exposing (percentDecode)

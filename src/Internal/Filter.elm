@@ -1,4 +1,4 @@
-module Filter exposing
+module Internal.Filter exposing
     ( Filter
     , between
     , columnName
@@ -37,9 +37,11 @@ module Filter exposing
 
 import Basics.Extra exposing (flip)
 import Dict
-import Filter.Operand as Operand exposing (Operand(..))
-import Filter.Operation as Operation exposing (Operation(..))
-import Filter.Parser
+import Internal.Filter.Operand as Operand exposing (Operand(..))
+import Internal.Filter.Operation as Operation exposing (Operation(..))
+import Internal.Filter.Parser as FilterParser
+import Internal.Schema exposing (Column, Table)
+import Internal.Value exposing (Value(..))
 import Parser
     exposing
         ( (|.)
@@ -51,8 +53,6 @@ import Parser
         , token
         )
 import Postgrest.Client as PG
-import Postgrest.Schema exposing (Column, Table)
-import Postgrest.Value exposing (Value(..))
 import Set exposing (Set)
 import Time exposing (posixToMillis, toHour, utc)
 import Time.Extra as Time
@@ -322,9 +322,9 @@ columnFilter table separator =
         |. symbol separator
         |= Parser.oneOf
             [ succeed (enumCons table)
-                |= Filter.Parser.enum
+                |= FilterParser.enum
             , succeed (filterCons table)
-                |= Filter.Parser.operation
+                |= FilterParser.operation
             ]
 
 

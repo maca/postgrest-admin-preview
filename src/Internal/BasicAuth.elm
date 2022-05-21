@@ -1,10 +1,11 @@
-module BasicAuth exposing
+module Internal.BasicAuth exposing
     ( BasicAuth
     , Msg
     , Session(..)
     , config
     , fail
-    , mapMsg
+    , isFailed
+    , isSuccessMsg
     , toJwt
     , update
     , view
@@ -18,11 +19,10 @@ import Html exposing (Html, button, div, fieldset, form, input, label, pre, text
 import Html.Attributes exposing (class, disabled, for, id, style, type_, value)
 import Html.Events exposing (onInput, onSubmit)
 import Http
+import Internal.Flag as Flag
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Postgrest.Client as PG
-import PostgrestAdmin.Flag as Flag
-import PostgrestAdmin.OuterMsg as OuterMsg exposing (OuterMsg)
 import String.Extra as String
 import Task exposing (Task)
 import Url exposing (Protocol(..), Url)
@@ -90,21 +90,14 @@ config =
         |> Flag.string "authUrl" withAuthUrlDecoder
 
 
-readyDecoder : Params -> Decoder BasicAuth
-readyDecoder params =
-    Decode.succeed (Ready params)
-
-
-mapMsg : Msg -> OuterMsg
-mapMsg msg =
+isSuccessMsg : Msg -> Bool
+isSuccessMsg msg =
     case msg of
-        Succeeded session ->
-            sessionToJwt session
-                |> PG.jwtString
-                |> OuterMsg.LoginSuccess
+        Succeeded _ ->
+            True
 
         _ ->
-            OuterMsg.Pass
+            False
 
 
 fail : BasicAuth -> BasicAuth
@@ -124,7 +117,7 @@ fail auth =
 
 
 
--- Update
+-- UPDATE
 
 
 update : Msg -> BasicAuth -> ( BasicAuth, Cmd Msg )
@@ -219,7 +212,7 @@ handleJsonResponse decoder response =
 
 
 
--- View
+-- VIEW
 
 
 view : BasicAuth -> Html Msg
@@ -312,6 +305,16 @@ toJwt auth =
             Nothing
 
 
+isFailed : BasicAuth -> Bool
+isFailed auth =
+    case auth of
+        Failure _ _ ->
+            True
+
+        _ ->
+            False
+
+
 sessionToJwt : Session -> PG.JWT
 sessionToJwt session =
     case session of
@@ -396,7 +399,7 @@ errorWrapper html =
 
 
 
--- Decoders
+-- DECODERS
 
 
 withAuthUrl : String -> Decoder BasicAuth -> Decoder BasicAuth
@@ -466,3 +469,8 @@ updateParams params auth =
 
         Failure _ error ->
             Failure params error
+
+
+readyDecoder : Params -> Decoder BasicAuth
+readyDecoder params =
+    Decode.succeed (Ready params)

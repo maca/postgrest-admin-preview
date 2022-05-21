@@ -1,4 +1,4 @@
-module Filter.Operand exposing
+module Internal.Filter.Operand exposing
     ( Enum
     , Operand(..)
     , choices

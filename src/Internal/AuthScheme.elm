@@ -1,21 +1,20 @@
-module PostgrestAdmin.AuthScheme exposing
+module Internal.AuthScheme exposing
     ( AuthScheme
     , Msg
     , basic
     , fail
     , isAuthenticated
+    , isSuccessMsg
     , jwt
-    , mapMsg
     , toJwt
     , unset
     , update
     , view
     )
 
-import BasicAuth exposing (BasicAuth)
 import Html exposing (Html, text)
+import Internal.BasicAuth as BasicAuth exposing (BasicAuth)
 import Postgrest.Client as PG
-import PostgrestAdmin.OuterMsg exposing (OuterMsg)
 
 
 type AuthScheme
@@ -38,6 +37,11 @@ jwt tokenStr =
     Jwt (PG.jwt tokenStr)
 
 
+isSuccessMsg : Msg -> Bool
+isSuccessMsg (BasicAuthChanged msg) =
+    BasicAuth.isSuccessMsg msg
+
+
 fail : AuthScheme -> AuthScheme
 fail authScheme =
     case authScheme of
@@ -54,11 +58,6 @@ fail authScheme =
 unset : AuthScheme
 unset =
     Unset
-
-
-mapMsg : Msg -> OuterMsg
-mapMsg (BasicAuthChanged basicAuthMsg) =
-    BasicAuth.mapMsg basicAuthMsg
 
 
 update : Msg -> AuthScheme -> ( AuthScheme, Cmd Msg )

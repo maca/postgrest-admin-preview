@@ -27,10 +27,10 @@ module PostgrestAdmin.BasicAuthConfig exposing
 
 -}
 
-import BasicAuth as BasicAuth exposing (BasicAuth, Session)
 import Dict exposing (Dict)
-import Json.Decode as Decode exposing (Decoder)
-import Json.Encode as Encode exposing (Value)
+import Internal.BasicAuth as BasicAuth
+import Json.Decode exposing (Decoder)
+import Json.Encode exposing (Value)
 
 
 {-| Initialize basic authentication configuration.

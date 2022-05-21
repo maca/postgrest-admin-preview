@@ -1,4 +1,4 @@
-module Notification exposing
+module Internal.Notification exposing
     ( Msg
     , Notification
     , confirm

@@ -1,4 +1,4 @@
-module Postgrest.Record exposing
+module PostgrestAdmin.Record exposing
     ( Record
     , decoder
     , encode
@@ -17,11 +17,8 @@ module Postgrest.Record exposing
 
 import Dict exposing (Dict)
 import Dict.Extra as Dict
-import Json.Decode as Decode exposing (Decoder, maybe, string)
-import Json.Encode as Encode
-import Maybe.Extra as Maybe exposing (isNothing)
-import Postgrest.Field as Field exposing (Field)
-import Postgrest.Schema
+import Internal.Field as Field exposing (Field)
+import Internal.Schema
     exposing
         ( Column
         , Constraint(..)
@@ -30,7 +27,10 @@ import Postgrest.Schema
         , Schema
         , Table
         )
-import Postgrest.Value as Value exposing (Value(..))
+import Internal.Value as Value exposing (Value(..))
+import Json.Decode as Decode exposing (Decoder, maybe, string)
+import Json.Encode as Encode
+import Maybe.Extra as Maybe exposing (isNothing)
 
 
 type alias Record =

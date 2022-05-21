@@ -1,4 +1,4 @@
-module Search exposing
+module Internal.Search exposing
     ( Msg
     , Search
     , init
@@ -13,18 +13,6 @@ import Array exposing (Array)
 import Array.Extra as Array
 import Basics.Extra exposing (flip)
 import Dict
-import Filter as Filter exposing (Filter)
-import Filter.Operand as Operand
-    exposing
-        ( Enum
-        , Operand
-        , date
-        , float
-        , int
-        , text
-        , time
-        )
-import Filter.Operation as Operation exposing (Operation(..))
 import Html exposing (Attribute, Html, button, div, i, label, option, span)
 import Html.Attributes
     exposing
@@ -42,10 +30,22 @@ import Html.Attributes
 import Html.Events exposing (keyCode, on, onClick, onInput)
 import Html.Keyed as Keyed
 import Html.Lazy as Lazy
+import Internal.Filter as Filter exposing (Filter)
+import Internal.Filter.Operand as Operand
+    exposing
+        ( Enum
+        , Operand
+        , date
+        , float
+        , int
+        , text
+        , time
+        )
+import Internal.Filter.Operation as Operation exposing (Operation(..))
+import Internal.Schema exposing (Table)
+import Internal.Value exposing (Value(..))
 import Json.Decode as Decode
 import Postgrest.Client as PG
-import Postgrest.Schema exposing (Table)
-import Postgrest.Value exposing (Value(..))
 import Set
 import String.Extra as String
 import Url exposing (percentDecode)
