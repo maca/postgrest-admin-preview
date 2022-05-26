@@ -2,7 +2,6 @@ module PostgrestAdmin.Cmd exposing (Cmd, map, none, wrap)
 
 import Internal.Cmd as Internal exposing (Cmd)
 import Platform.Cmd as Platform
-import PostgrestAdmin.Client exposing (Client)
 
 
 type alias Cmd msg =

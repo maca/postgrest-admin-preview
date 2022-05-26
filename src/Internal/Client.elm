@@ -196,7 +196,7 @@ saveRecord : Client -> Record -> Maybe String -> Task Never Client
 saveRecord client record maybeId =
     case maybeId of
         Just _ ->
-            updateRecord client record
+            updateRecord client record maybeId
 
         Nothing ->
             create client record
@@ -210,11 +210,11 @@ create ((Client params) as client) record =
         |> requestToTask client
 
 
-updateRecord : Client -> Record -> Task Never Client
-updateRecord ((Client params) as client) record =
+updateRecord : Client -> Record -> Maybe String -> Task Never Client
+updateRecord ((Client params) as client) record maybeId =
     case tablePrimaryKeyName record.table of
         Just primaryKeyName ->
-            case Record.id record of
+            case maybeId of
                 Just id ->
                     let
                         endpoint =
@@ -330,7 +330,7 @@ mapWithToken ((Client params) as client) taskFn =
 
 
 authFailed : Client -> Task Never Client
-authFailed ((Client params) as client) =
+authFailed (Client params) =
     Task.succeed
         (Client
             { params
@@ -341,7 +341,7 @@ authFailed ((Client params) as client) =
 
 
 missingId : Client -> Task Never Client
-missingId ((Client params) as client) =
+missingId (Client params) =
     Task.succeed
         (Client
             { params | response = Err (RequestError "Record has no id") }

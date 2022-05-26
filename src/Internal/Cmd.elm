@@ -28,5 +28,5 @@ map fn cmd =
         ChildCmd a ->
             wrap (Cmd.map fn a)
 
-        Fetch _ _ ->
-            none
+        Fetch result task ->
+            Fetch (fn << result) task

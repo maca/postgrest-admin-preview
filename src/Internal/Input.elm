@@ -10,9 +10,6 @@ module Internal.Input exposing
     , view
     )
 
--- import Internal.Client as Client
--- import Internal.Client as Client
-
 import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
 import Html exposing (Html, a, div, label, option, p, text)
@@ -41,9 +38,8 @@ import Postgrest.Client as PG exposing (PostgrestErrorJSON)
 import PostgrestAdmin.Client as Client exposing (Client)
 import PostgrestAdmin.Record as Record exposing (Record)
 import String.Extra as String
-import Task
 import Url.Builder as Url
-import Utils.Task exposing (Error(..), fail)
+import Utils.Task exposing (Error(..))
 
 
 type alias Fields =
@@ -60,7 +56,6 @@ type alias Autocomplete =
 type Msg
     = Changed ( String, Input ) String
     | ListingFetched String (Result Error (List Record))
-    | Failed Error
 
 
 type Input
@@ -154,9 +149,6 @@ update client msg record =
                     ( record, AppCmd.none )
 
         ListingFetched _ (Err _) ->
-            ( record, AppCmd.none )
-
-        Failed _ ->
             ( record, AppCmd.none )
 
 
@@ -532,16 +524,12 @@ fetchRecords client name { tableName, labelColumnName } userInput =
                 queries =
                     List.filterMap identity [ idQuery, labelQuery ]
             in
-            if List.isEmpty queries then
-                AppCmd.none
-
-            else
-                Client.fetchRecordList
-                    { client = client
-                    , table = table
-                    , params = [ PG.select selects, PG.or queries, PG.limit 40 ]
-                    , expect = Client.expectRecordList (ListingFetched name) table
-                    }
+            Client.fetchRecordList
+                { client = client
+                , table = table
+                , params = [ PG.select selects, PG.or queries, PG.limit 40 ]
+                , expect = Client.expectRecordList (ListingFetched name) table
+                }
 
         Nothing ->
             AppCmd.none

@@ -38,7 +38,6 @@ module PostgrestAdmin.Client exposing
 
 -}
 
-import Internal.AuthScheme as AuthScheme
 import Internal.Client as Client
 import Internal.Cmd as AppCmd exposing (Cmd(..))
 import Internal.Schema exposing (Table)

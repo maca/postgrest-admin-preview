@@ -10,15 +10,12 @@ module Internal.Config exposing
     )
 
 import Dict exposing (Dict)
-import Html exposing (Html)
 import Internal.AuthScheme as AuthScheme exposing (AuthScheme)
 import Internal.BasicAuth exposing (BasicAuth)
-import Internal.Cmd as AppCmd
 import Internal.Flag as Flag
 import Internal.Msg exposing (Msg)
 import Internal.Route exposing (Application, MountPoint(..), Route(..))
 import Json.Decode as Decode exposing (Decoder)
-import PostgrestAdmin.Client exposing (Client)
 import Url exposing (Protocol(..), Url)
 import Url.Parser exposing (Parser)
 

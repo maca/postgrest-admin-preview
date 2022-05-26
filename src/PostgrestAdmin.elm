@@ -35,7 +35,7 @@ import Internal.Route as Route exposing (MountPoint(..), Route(..))
 import Json.Decode as Decode exposing (Decoder, Value)
 import PostgrestAdmin.Client as Client exposing (Client)
 import String.Extra as String
-import Task exposing (Task)
+import Task
 import Url exposing (Url)
 import Url.Parser as Parser exposing ((</>), Parser, s)
 import Utils.Task exposing (Error(..), errorToString)
