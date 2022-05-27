@@ -6,10 +6,11 @@
     "version": "1.0.0",
     "exposed-modules": [
         "PostgrestAdmin",
-        "PostgrestAdmin.BasicAuth",
         "PostgrestAdmin.Client",
         "PostgrestAdmin.Cmd",
-        "PostgrestAdmin.Config"
+        "PostgrestAdmin.Config",
+        "PostgrestAdmin.Config.BasicAuth",
+        "PostgrestAdmin.Record"
     ],
     "elm-version": "0.19.0 <= v < 0.20.0",
     "dependencies": {
