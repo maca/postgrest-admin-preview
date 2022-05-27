@@ -54,14 +54,14 @@ type alias Record =
     Record.Record
 
 
-{-| Create a blank record from a [Table](PostgrestAdmin.Client#table).
+{-| Create a blank record from a [Table](PostgrestAdmin.Client#Table).
 -}
 fromTable : Table -> Record
 fromTable =
     Record.fromTable
 
 
-{-| Get the [table](PostgrestAdmin.Client#table) for the Record.
+{-| Get the [Table](PostgrestAdmin.Client#Table) for the Record.
 -}
 getTable : Record -> Table
 getTable =
@@ -75,7 +75,7 @@ id =
     Record.id
 
 
-{-| Get the Record [table](PostgrestAdmin.Client#table) name.
+{-| Get the Record [Table](PostgrestAdmin.Client#Table) name.
 -}
 tableName : Record -> String
 tableName =

@@ -136,13 +136,23 @@ withJwt =
 {-| Callback triggered with a JWT string on successful login.
 Tipically used to persist the JWT to session storage.
 
-      port loginSuccess : String -> Cmd msg
+          port loginSuccess : String -> Cmd msg
 
-      main : PostgrestAdmin.Program Never Never
-      main =
-          Config.init
-              |> Config.withOnLogin loginSuccess
-              |> PostgrestAdmin.application
+          main : PostgrestAdmin.Program Never Never
+          main =
+              Config.init
+                  |> Config.withOnLogin loginSuccess
+                  |> PostgrestAdmin.application
+
+Elm init
+
+        app = Elm.Main.init({
+          flags: { jwt: sessionStorage.getItem("jwt") }
+        })
+
+        app.ports.loginSuccess.subscribe(jwt => {
+          sessionStorage.setItem("jwt", jwt)
+        });
 
 -}
 withOnLogin : (String -> Cmd a) -> Config m msg -> Config m msg

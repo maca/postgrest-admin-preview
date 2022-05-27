@@ -132,7 +132,7 @@ errorToString =
 `expect` param requires a function that returns a `Msg`.
 
 You can use [expectRecord](#expectRecord) to interpret the result as a
-[Record](PostgresAdmin.Record).
+[Record](PostgrestAdmin.Record).
 
     import PostgrestAdmin.Cmd as AppCmd
 
@@ -166,7 +166,7 @@ fetchRecord { client, table, expect, id } =
 `expect` param requires a function that returns a `Msg`.
 
 You can use [expectRecordList](#expectRecordList) to interpret the result as a
-list of [Record](PostgresAdmin.Record)s.
+list of [Record](PostgrestAdmin.Record)s.
 
     import PostgrestAdmin.Cmd as AppCmd
 
@@ -200,7 +200,7 @@ fetchRecordList { client, table, params, expect } =
 `expect` param requires a function that returns a `Msg`.
 
 You can use [expectRecord](#expectRecord) to interpret the result as a
-[Record](PostgresAdmin.Record).
+[Record](PostgrestAdmin.Record).
 
     import PostgrestAdmin.Cmd as AppCmd
 
@@ -231,7 +231,7 @@ saveRecord { client, record, id, expect } =
 `expect` param requires a function that returns a `Msg`.
 
 You can use [expectRecord](#expectRecord) to interpret the result as a
-[Record](PostgresAdmin.Record).
+[Record](PostgrestAdmin.Record).
 
     import PostgrestAdmin.Cmd as AppCmd
 
