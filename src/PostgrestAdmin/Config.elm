@@ -5,6 +5,7 @@ module PostgrestAdmin.Config exposing
     , withFormFields
     , withBasicAuth
     , withJwt
+    , withOnLogin
     , withMountPoint
     )
 
@@ -28,6 +29,7 @@ module PostgrestAdmin.Config exposing
 
 @docs withBasicAuth
 @docs withJwt
+@docs withOnLogin
 
 
 # Application mounting
@@ -118,6 +120,23 @@ function takes precedence.
 withJwt : String -> Config m msg -> Config m msg
 withJwt =
     Config.withJwt
+
+
+{-| Callback triggered with a JWT string on successful login.
+Tipically used to persist the JWT to session storage.
+
+      port loginSuccess : String -> Cmd msg
+
+      main : PostgrestAdmin.Program Never Never
+      main =
+          Config.init
+              |> Config.withOnLogin loginSuccess
+              |> PostgrestAdmin.application
+
+-}
+withOnLogin : (String -> Cmd a) -> Config m msg -> Config m msg
+withOnLogin =
+    Config.withOnLogin
 
 
 {-| Specify which fields should be present in the the edit and create forms,

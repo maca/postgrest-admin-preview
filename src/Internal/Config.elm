@@ -7,6 +7,7 @@ module Internal.Config exposing
     , withHost
     , withJwt
     , withMountPoint
+    , withOnLogin
     )
 
 import Dict exposing (Dict)
@@ -25,6 +26,7 @@ type alias Config m msg =
     , authScheme : AuthScheme
     , formFields : Dict String (List String)
     , application : Maybe (MountPoint m msg)
+    , onLogin : String -> Cmd ()
     }
 
 
@@ -65,6 +67,20 @@ withJwt tokenStr decoder =
             (\conf ->
                 Decode.succeed { conf | authScheme = AuthScheme.jwt tokenStr }
             )
+
+
+withOnLogin : (String -> Cmd a) -> Decoder (Config m msg) -> Decoder (Config m msg)
+withOnLogin onLogin decoder =
+    decoder
+        |> Decode.andThen
+            (\conf ->
+                Decode.succeed
+                    { conf | onLogin = onLogin >> Cmd.map (always ()) }
+            )
+
+
+
+-- decoder |> Decode.andThen (withHostDecoder urlStr)
 
 
 withFormFields :
@@ -121,4 +137,5 @@ default =
         }
     , formFields = Dict.empty
     , application = Nothing
+    , onLogin = always Cmd.none
     }

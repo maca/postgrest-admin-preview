@@ -21,4 +21,4 @@ type Msg msg
     | NotificationChanged Notification.Msg
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
-    | Failed Error
+    | NoOp

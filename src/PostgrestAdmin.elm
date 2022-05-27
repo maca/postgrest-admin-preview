@@ -66,6 +66,7 @@ type alias Model m msg =
     , formFields : Dict String (List String)
     , application : Maybe (MountPoint m msg)
     , client : Client
+    , onLogin : Maybe String -> Cmd (Msg msg)
     }
 
 
@@ -110,6 +111,10 @@ init decoder flags url key =
             , client = Client.init config.host config.authScheme
             , formFields = config.formFields
             , application = config.application
+            , onLogin =
+                Maybe.withDefault ""
+                    >> config.onLogin
+                    >> Cmd.map (always NoOp)
             }
     in
     case Decode.decodeValue decoder flags of
@@ -162,7 +167,7 @@ update msg model =
 
                 RouteListing _ ->
                     model
-                        |> loginChanged
+                        |> clientChanged
                             { loginMsg = PageListing.onLogin
                             , tagger = PageListingChanged
                             , clientMsg = childMsg
@@ -170,7 +175,7 @@ update msg model =
 
                 RouteDetail _ ->
                     model
-                        |> loginChanged
+                        |> clientChanged
                             { loginMsg = PageDetail.onLogin
                             , tagger = PageDetailChanged
                             , clientMsg = childMsg
@@ -178,7 +183,7 @@ update msg model =
 
                 RouteForm _ ->
                     model
-                        |> loginChanged
+                        |> clientChanged
                             { loginMsg = PageForm.onLogin
                             , tagger = PageFormChanged
                             , clientMsg = childMsg
@@ -186,7 +191,7 @@ update msg model =
 
                 RouteApplication program _ ->
                     model
-                        |> loginChanged
+                        |> clientChanged
                             { loginMsg = program.onLogin
                             , tagger = PageApplicationChanged
                             , clientMsg = childMsg
@@ -279,18 +284,18 @@ update msg model =
             in
             ( { model | route = route }, cmd )
 
-        Failed err ->
-            ( failed err model, Cmd.none )
+        NoOp ->
+            ( model, Cmd.none )
 
 
-loginChanged :
+clientChanged :
     { loginMsg : Client -> a
     , tagger : a -> Msg msg
     , clientMsg : Client.Msg
     }
     -> Model m msg
     -> ( Model m msg, Cmd (Msg msg) )
-loginChanged { loginMsg, tagger, clientMsg } model =
+clientChanged { loginMsg, tagger, clientMsg } model =
     let
         ( client, clientCmd ) =
             Client.update clientMsg model.client
@@ -304,17 +309,13 @@ loginChanged { loginMsg, tagger, clientMsg } model =
                     |> Task.succeed
                     |> Task.perform identity
                     |> Cmd.map tagger
+                , model.onLogin (Client.toJwtString client)
                 ]
 
           else
             Cmd.none
         ]
     )
-
-
-failed : Error -> Model m msg -> Model m msg
-failed error model =
-    { model | error = Just error }
 
 
 
