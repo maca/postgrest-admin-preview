@@ -10,10 +10,6 @@ import PostgrestAdmin.Config.BasicAuth as BasicAuth
 import Url.Parser as Parser exposing ((</>), s)
 
 
-
--- port loginSuccess : String -> Cmd msg
-
-
 type Msg
     = LoggedIn Client
     | Up
@@ -68,7 +64,7 @@ update msg model =
 main : PostgrestAdmin.Program Model Msg
 main =
     Config.init
-        |> Config.withBasicAuth BasicAuth.init
+        |> Config.withBasicAuth BasicAuth.config
         |> Config.withMountPoint
             { init = init
             , update = update

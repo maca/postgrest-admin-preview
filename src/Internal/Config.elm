@@ -79,10 +79,6 @@ withOnLogin onLogin decoder =
             )
 
 
-
--- decoder |> Decode.andThen (withHostDecoder urlStr)
-
-
 withFormFields :
     Dict String (List String)
     -> Decoder (Config m msg)
@@ -97,15 +93,6 @@ withFormFieldsDecoder :
     -> Decoder (Config m msg)
 withFormFieldsDecoder fields conf =
     Decode.succeed { conf | formFields = fields }
-
-
-
--- withFormFieldsDecoder :
---     Dict String (List String)
---     -> Config m msg
---     -> Decoder (Config m msg)
--- withFormFieldsDecoder fields conf =
---     Decode.succeed { conf | formFields = fields }
 
 
 withMountPoint :

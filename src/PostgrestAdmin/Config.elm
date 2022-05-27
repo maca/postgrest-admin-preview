@@ -94,6 +94,17 @@ withHost =
 
 {-| Enable user credentials form and configure the parameters. Credentials
 are be used to obtain a JWT.
+
+See [BasicAuth](PostgrestAdmin.BasicAuth) for configuration options.
+
+      import PostgrestAdmin.Config.BasicAuth as BasicAuth
+
+      main : PostgrestAdmin.Program Never Never
+      main =
+          Config.init
+              |> Config.withBasicAuth BasicAuth.config
+              |> PostgrestAdmin.application
+
 -}
 withBasicAuth : BasicAuth -> Config m msg -> Config m msg
 withBasicAuth =
@@ -147,7 +158,8 @@ the forms.
       main =
           Config.init
               |> Config.withFormFields
-                  (Dict.fromList [("posts", ["id", "title", "content"])])
+                  (Dict.fromList
+                       [("posts", ["id", "title", "content"])])
               |> PostgrestAdmin.application
 
 Alternatively this parameter can be configured using flags, configuring using

@@ -1,6 +1,6 @@
 module PostgrestAdmin.Config.BasicAuth exposing
     ( BasicAuth
-    , init
+    , config
     , withAuthUrl
     , withEncoder
     , withDecoder
@@ -12,7 +12,7 @@ module PostgrestAdmin.Config.BasicAuth exposing
 # Config
 
 @docs BasicAuth
-@docs init
+@docs config
 
 
 # Host
@@ -33,23 +33,24 @@ import Json.Decode exposing (Decoder)
 import Json.Encode exposing (Value)
 
 
-{-| Initialize basic authentication configuration.
+{-| Basic authentication configuration.
 -}
 type alias BasicAuth =
     Decoder BasicAuth.BasicAuth
 
 
-{-| Initialize basic authentication configuration.
+{-| Create a authentication configuration.
 -}
-init : BasicAuth
-init =
+config : BasicAuth
+config =
     BasicAuth.config
 
 
 {-| Set authentication request login url. Credentials are to be exchanged for a
 JWT via a post request.
 
-      init |> withAuthUrl "http://localhost:3000/rpc/login"
+      config
+          |> withAuthUrl "http://localhost:3000/rpc/login"
 
 Alternatively the host can be specified using flags, configuring using
 `withAuthUrl` function takes precedence.
@@ -67,7 +68,7 @@ withAuthUrl =
 {-| Override the credentials JSON encoder to be used when posting to the login
 url.
 
-      init
+      config
         |> withEncoder
               (\creds ->
                   Encode.object
@@ -88,7 +89,7 @@ withEncoder =
 
 {-| Override the JSON decoder used to obtain the JWT from the login response.
 
-      init
+      config
         |> withDecoder
             (Decode.at ["auth", "jwt"] Decode.string)
 

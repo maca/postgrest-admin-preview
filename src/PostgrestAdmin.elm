@@ -71,7 +71,7 @@ type alias Model m msg =
 
 
 {-| Takes a Config and creates a PostgrestAdmin application.
-See [PostgrestAdmin.Config](PostgrestAdmin.Config) to check all configuration
+See [Config](PostgrestAdmin.Config) to check all configuration
 options.
 
       main : PostgrestAdmin.Program Never Never
