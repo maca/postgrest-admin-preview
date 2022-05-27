@@ -1,10 +1,12 @@
 module PostgrestAdmin exposing
     ( Program
     , application
-    , applicationParams
     )
 
-{-| Program configuration
+{-|
+
+
+# Program configuration
 
 @docs Program
 
@@ -12,7 +14,6 @@ module PostgrestAdmin exposing
 # Init
 
 @docs application
-@docs applicationParams
 
 -}
 
@@ -33,7 +34,7 @@ import Internal.PageForm as PageForm
 import Internal.PageListing as PageListing
 import Internal.Route as Route exposing (MountPoint(..), Route(..))
 import Json.Decode as Decode exposing (Decoder, Value)
-import PostgrestAdmin.Client as Client exposing (Client)
+import PostgrestAdmin.Client exposing (Client)
 import String.Extra as String
 import Task
 import Url exposing (Url)
@@ -41,7 +42,7 @@ import Url.Parser as Parser exposing ((</>), Parser, s)
 import Utils.Task exposing (Error(..), errorToString)
 
 
-{-| Default
+{-| An alias to elm's Platform.Program describing a PostgrestAdmin program.
 -}
 type alias Program model msg =
     Platform.Program Decode.Value (Model model msg) (Msg msg)
@@ -68,15 +69,20 @@ type alias Model m msg =
     }
 
 
-{-| Default
+{-| Takes a Config and creates a PostgrestAdmin application.
+See [PostgrestAdmin.Config](PostgrestAdmin.Config) to check all configuration
+options.
+
+      main : PostgrestAdmin.Program Never Never
+      main =
+          PostgrestAdmin.application Config.init
+
 -}
 application : Decoder (Config m msg) -> Program m msg
 application decoder =
     Browser.application (applicationParams decoder)
 
 
-{-| Default
--}
 applicationParams : Decoder (Config m msg) -> Params m msg
 applicationParams decoder =
     { init = init decoder
@@ -293,10 +299,12 @@ loginChanged { loginMsg, tagger, clientMsg } model =
     , Cmd.batch
         [ Cmd.map ClientChanged clientCmd
         , if Client.isAuthSuccessMsg clientMsg then
-            loginMsg client
-                |> Task.succeed
-                |> Task.perform identity
-                |> Cmd.map tagger
+            Cmd.batch
+                [ loginMsg client
+                    |> Task.succeed
+                    |> Task.perform identity
+                    |> Cmd.map tagger
+                ]
 
           else
             Cmd.none

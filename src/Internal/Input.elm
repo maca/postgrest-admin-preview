@@ -31,12 +31,12 @@ import Html.Events exposing (onInput)
 import Internal.Client
 import Internal.Cmd as AppCmd
 import Internal.Field as Field exposing (Field)
+import Internal.Record as Record exposing (Record)
 import Internal.Schema exposing (Constraint(..), ForeignKeyParams)
 import Internal.Value as Value exposing (Value(..))
 import Maybe.Extra as Maybe
 import Postgrest.Client as PG exposing (PostgrestErrorJSON)
 import PostgrestAdmin.Client as Client exposing (Client)
-import PostgrestAdmin.Record as Record exposing (Record)
 import String.Extra as String
 import Url.Builder as Url
 import Utils.Task exposing (Error(..))

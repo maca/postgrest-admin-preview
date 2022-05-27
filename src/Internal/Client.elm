@@ -25,6 +25,7 @@ import Dict.Extra as Dict
 import Html exposing (Html, text)
 import Internal.AuthScheme as AuthScheme exposing (AuthScheme)
 import Internal.Field as Field
+import Internal.Record as Record exposing (Record)
 import Internal.Schema as Schema
     exposing
         ( Column
@@ -35,7 +36,6 @@ import Internal.Schema as Schema
 import Json.Decode as Decode exposing (Value)
 import Json.Encode as Encode
 import Postgrest.Client as PG exposing (Endpoint, Request, Selectable)
-import PostgrestAdmin.Record as Record exposing (Record)
 import Task exposing (Task)
 import Url exposing (Url)
 import Utils.Task exposing (Error(..))

@@ -1,20 +1,29 @@
 module PostgrestAdmin.Client exposing
     ( Client
+    , Table
     , toHostUrl
+    , getTable
     , isAuthenticated
     , toJwtString
     , fetchRecord
     , fetchRecordList
     , saveRecord
     , deleteRecord
+    , Error
+    , errorToString
     , expectRecord
     , expectRecordList
     )
 
-{-| Program configuration
+{-|
+
+
+# Client
 
 @docs Client
+@docs Table
 @docs toHostUrl
+@docs getTable
 
 
 # Authentication
@@ -25,13 +34,20 @@ module PostgrestAdmin.Client exposing
 
 # Requests
 
+Note that the request functions **do not produce a vanilla Elm
+[Cmd](https://package.elm-lang.org/packages/elm/core/latest/Platform-Cmd#Cmd)**
+but a [PostgrestAdmin.Cmd](PostgrestAdmin.Cmd).
+
 @docs fetchRecord
 @docs fetchRecordList
 @docs saveRecord
 @docs deleteRecord
 
+@docs Error
+@docs errorToString
 
-# Access
+
+# Result interpreting
 
 @docs expectRecord
 @docs expectRecordList
@@ -39,43 +55,103 @@ module PostgrestAdmin.Client exposing
 -}
 
 import Internal.Client as Client
-import Internal.Cmd as AppCmd exposing (Cmd(..))
-import Internal.Schema exposing (Table)
+import Internal.Cmd as Internal
+import Internal.Schema as Schema
 import Json.Decode as Decode exposing (Decoder, Value)
 import Postgrest.Client as PG
+import PostgrestAdmin.Cmd as AppCmd
 import PostgrestAdmin.Record as Record exposing (Record)
 import Url exposing (Url)
-import Utils.Task exposing (Error(..))
+import Utils.Task as Internal exposing (Error)
 
 
-{-| -}
+{-| Represents a client for a PostgREST instance, including authentication
+params.
+
+PostgREST expect the user to be authenticated with a
+[Json Web Token](https://en.wikipedia.org/wiki/JSON_Web_Token).
+See [PostgREST documentation](https://postgrest.org/en/stable/auth.html?highlight=authentication#)
+to get a better understanding of JWT and roles.
+
+-}
 type alias Client =
     Client.Client
 
 
-{-| -}
+{-| Represents a PostgREST table.
+-}
+type alias Table =
+    Schema.Table
+
+
+{-| Request error.
+-}
+type alias Error =
+    Internal.Error
+
+
+{-| Obtain the PostgREST instance url.
+-}
 toHostUrl : Client -> Url
 toHostUrl =
     Client.toHostUrl
 
 
-{-| -}
+{-| Does the client has a valid JWT?
+-}
 isAuthenticated : Client -> Bool
 isAuthenticated =
     Client.isAuthenticated
 
 
-{-| -}
+{-| Obtain the JWT as a string.
+-}
 toJwtString : Client -> Maybe String
 toJwtString client =
     Client.toJwtString client
+
+
+{-| Obtain a table from the table name.
+-}
+getTable : String -> Client -> Maybe Table
+getTable =
+    Client.getTable
+
+
+{-| Transform [Error](#Error) to an error explanation.
+-}
+errorToString : Error -> String
+errorToString =
+    Internal.errorToString
 
 
 
 -- VIEW
 
 
-{-| -}
+{-| Fetches a record for a given table.
+`expect` param requires a function that returns a `Msg`.
+
+You can use [expectRecord](#expectRecord) to interpret the result as a
+[Record](PostgresAdmin.Record).
+
+    import PostgrestAdmin.Cmd as AppCmd
+
+    fetch : String -> Client -> AppCmd.Cmd Msg
+    fetch tableName client =
+        case getTable tableName client of
+            Just table ->
+                fetchRecordList
+                    { client = client
+                    , table = table
+                    , params = []
+                    , expect = Client.expectRecord MyFetchedMsg table
+                    }
+
+            Nothing ->
+                AppCmd.none
+
+-}
 fetchRecord :
     { client : Client
     , table : Table
@@ -84,10 +160,32 @@ fetchRecord :
     }
     -> AppCmd.Cmd msg
 fetchRecord { client, table, expect, id } =
-    Fetch expect (Client.fetchRecord client table id)
+    Internal.Fetch expect (Client.fetchRecord client table id)
 
 
-{-| -}
+{-| Fetches a list of records for a given table.
+`expect` param requires a function that returns a `Msg`.
+
+You can use [expectRecordList](#expectRecordList) to interpret the result as a
+list of [Record](PostgresAdmin.Record)s.
+
+    import PostgrestAdmin.Cmd as AppCmd
+
+    fetchList : String -> Client -> AppCmd.Cmd Msg
+    fetchList tableName client =
+        case getTable tableName client of
+            Just table ->
+                fetchRecordList
+                    { client = client
+                    , table = table
+                    , params = []
+                    , expect = Client.expectRecordList MyListFetchedMsg table
+                    }
+
+            Nothing ->
+                AppCmd.none
+
+-}
 fetchRecordList :
     { client : Client
     , table : Table
@@ -96,10 +194,29 @@ fetchRecordList :
     }
     -> AppCmd.Cmd msg
 fetchRecordList { client, table, params, expect } =
-    Fetch expect (Client.fetchRecordList client table params)
+    Internal.Fetch expect (Client.fetchRecordList client table params)
 
 
-{-| -}
+{-| Saves a record.
+`expect` param requires a function that returns a `Msg`.
+
+You can use [expectRecord](#expectRecord) to interpret the result as a
+[Record](PostgresAdmin.Record).
+
+    import PostgrestAdmin.Cmd as AppCmd
+
+    save : Record -> Maybe String -> Client -> AppCmd.Cmd Msg
+    save record id client =
+        saveRecord
+            { client = client
+            , record = record
+            , id = id
+            , expect =
+                Client.expectRecord MySavedMsg
+                    (Record.getTable record)
+            }
+
+-}
 saveRecord :
     { client : Client
     , record : Record
@@ -108,10 +225,28 @@ saveRecord :
     }
     -> AppCmd.Cmd msg
 saveRecord { client, record, id, expect } =
-    Fetch expect (Client.saveRecord client record id)
+    Internal.Fetch expect (Client.saveRecord client record id)
 
 
-{-| -}
+{-| Deletes a record.
+`expect` param requires a function that returns a `Msg`.
+
+You can use [expectRecord](#expectRecord) to interpret the result as a
+[Record](PostgresAdmin.Record).
+
+    import PostgrestAdmin.Cmd as AppCmd
+
+    save : Record -> Client -> AppCmd.Cmd Msg
+    save record client =
+        deleteRecord
+            { client = client
+            , record = record
+            , expect =
+                Client.expectRecord MyDeletedMsg
+                    (Record.getTable record)
+            }
+
+-}
 deleteRecord :
     { client : Client
     , record : Record
@@ -119,10 +254,15 @@ deleteRecord :
     }
     -> AppCmd.Cmd msg
 deleteRecord { client, record, expect } =
-    Fetch expect (Client.deleteRecord client record)
+    Internal.Fetch expect (Client.deleteRecord client record)
 
 
-{-| -}
+{-| Decode the Value for successful Result as a record, decode as such and
+map the success of the Result to a msg.
+
+See [fetchRecord](#fetchRecord).
+
+-}
 expectRecord :
     (Result Error Record -> msg)
     -> Table
@@ -131,7 +271,12 @@ expectRecord tagger table =
     handleResponse (Record.decoder table) >> tagger
 
 
-{-| -}
+{-| Decode the Value for successful Result as a list of records, decode as such
+and map the success of the Result to a msg.
+
+See [fetchRecordList](#fetchRecordList).
+
+-}
 expectRecordList :
     (Result Error (List Record) -> msg)
     -> Table
@@ -144,7 +289,8 @@ handleResponse : Decoder a -> Result Error Value -> Result Error a
 handleResponse decoder result =
     case result of
         Ok value ->
-            Result.mapError DecodeError (Decode.decodeValue decoder value)
+            Result.mapError Internal.DecodeError
+                (Decode.decodeValue decoder value)
 
         Err err ->
             Err err

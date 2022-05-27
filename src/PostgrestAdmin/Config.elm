@@ -30,15 +30,9 @@ module PostgrestAdmin.Config exposing
 @docs withJwt
 
 
-# Element mounting
+# Application mounting
 
-@docs withNewResourceMountPoint
 @docs withMountPoint
-
-
-# URL parsing
-
-@docs tableNameParser
 
 -}
 
@@ -49,8 +43,8 @@ import Internal.Config as Config
 import Internal.Msg exposing (Msg)
 import Internal.Route exposing (MountPoint(..), Route(..))
 import Json.Decode exposing (Decoder)
-import PostgrestAdmin.BasicAuthConfig exposing (BasicAuthConfig)
 import PostgrestAdmin.Client exposing (Client)
+import PostgrestAdmin.Config.BasicAuth exposing (BasicAuth)
 import Url exposing (Protocol(..))
 import Url.Parser exposing (Parser)
 
@@ -84,7 +78,7 @@ init =
               |> PostgrestAdmin.application
 
 Alternatively the host can be specified using flags, configuring using `withHost`
-function precedence.
+function takes precedence.
 
       Elm.Main.init({
           flags: { host: "http://localhost:3000" }
@@ -99,7 +93,7 @@ withHost =
 {-| Enable user credentials form and configure the parameters. Credentials
 are be used to obtain a JWT.
 -}
-withBasicAuth : BasicAuthConfig -> Config m msg -> Config m msg
+withBasicAuth : BasicAuth -> Config m msg -> Config m msg
 withBasicAuth =
     Config.withBasicAuth
 
@@ -114,7 +108,7 @@ authentication it's possible to set an initial JWT.
               |> PostgrestAdmin.application
 
 Alternatively the token can be passed using flags, configuring using `withJwt`
-function precedence.
+function takes precedence.
 
       Elm.Main.init({
           flags: { jwt: sessionStorage.getItem("jwt") }
@@ -138,7 +132,7 @@ the forms.
               |> PostgrestAdmin.application
 
 Alternatively this parameter can be configured using flags, configuring using
-`withFormFields` function precedence.
+`withFormFields` function takes precedence.
 
       Elm.Main.init({
           flags: { formFields: { posts: [ "id", "title", "content" ]} }
@@ -150,21 +144,28 @@ withFormFields =
     Config.withFormFields
 
 
-{-| Create an HTML element and match to a url path
-using
+{-| Mount an application on a give path using
 [Url.Parser](https://package.elm-lang.org/packages/elm/url/latest/Url.Parser).
-This is usefull if you want to override an existing resource page or add an
-additional details page.
+This is usefull if you want to override an existing page or add additional
+behaviour.
 
 The component specification is similar to the specification for
-[Browser.element](https://package.elm-lang.org/packages/elm/browser/latest/Browser#element).
+[Browser.application](https://package.elm-lang.org/packages/elm/browser/latest/Browser#application),
+with the addition of `onLogin` param for which a msg should be provided to be
+sent on successful login.
 
     main : PostgrestAdmin.Program Model Msg
     main =
         Config.init
             |> Config.withMountPoint
-                { view = view, update = update, init = init }
-                (Config.tableNameParser "posts" </> Parser.string </> s "detail")
+                { view = view
+                , update = update
+                , init = init
+                , onLogin = LoggedIn
+                }
+                (Parser.map (always ())
+                    (s "posts" </> Parser.string </> s "comments")
+                )
             |> PostgrestAdmin.application
 
 -}

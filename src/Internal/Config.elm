@@ -83,6 +83,15 @@ withFormFieldsDecoder fields conf =
     Decode.succeed { conf | formFields = fields }
 
 
+
+-- withFormFieldsDecoder :
+--     Dict String (List String)
+--     -> Config m msg
+--     -> Decoder (Config m msg)
+-- withFormFieldsDecoder fields conf =
+--     Decode.succeed { conf | formFields = fields }
+
+
 withMountPoint :
     Application m msg
     ->
