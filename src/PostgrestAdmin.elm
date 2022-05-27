@@ -42,7 +42,8 @@ import Url.Parser as Parser exposing ((</>), Parser, s)
 import Utils.Task exposing (Error(..), errorToString)
 
 
-{-| An alias to elm's Platform.Program describing a PostgrestAdmin program.
+{-| An alias to elm's Platform.Program providing the type signature for a
+PostgrestAdmin program.
 -}
 type alias Program model msg =
     Platform.Program Decode.Value (Model model msg) (Msg msg)

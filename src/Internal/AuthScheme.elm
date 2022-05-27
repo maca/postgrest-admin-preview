@@ -13,23 +13,23 @@ module Internal.AuthScheme exposing
     )
 
 import Html exposing (Html, text)
-import Internal.BasicAuth as BasicAuth exposing (BasicAuth)
+import Internal.FormAuth as FormAuth exposing (FormAuth)
 import Postgrest.Client as PG
 
 
 type AuthScheme
-    = BasicAuth BasicAuth.BasicAuth
+    = FormAuth FormAuth.FormAuth
     | Jwt PG.JWT
     | Unset
 
 
 type Msg
-    = BasicAuthChanged BasicAuth.Msg
+    = FormAuthChanged FormAuth.Msg
 
 
-basic : BasicAuth -> AuthScheme
+basic : FormAuth -> AuthScheme
 basic auth =
-    BasicAuth auth
+    FormAuth auth
 
 
 jwt : String -> AuthScheme
@@ -38,15 +38,15 @@ jwt tokenStr =
 
 
 isSuccessMsg : Msg -> Bool
-isSuccessMsg (BasicAuthChanged msg) =
-    BasicAuth.isSuccessMsg msg
+isSuccessMsg (FormAuthChanged msg) =
+    FormAuth.isSuccessMsg msg
 
 
 fail : AuthScheme -> AuthScheme
 fail authScheme =
     case authScheme of
-        BasicAuth auth ->
-            BasicAuth <| BasicAuth.fail auth
+        FormAuth auth ->
+            FormAuth <| FormAuth.fail auth
 
         Jwt _ ->
             Unset
@@ -63,12 +63,12 @@ unset =
 update : Msg -> AuthScheme -> ( AuthScheme, Cmd Msg )
 update msg authScheme =
     case msg of
-        BasicAuthChanged innerMsg ->
+        FormAuthChanged innerMsg ->
             case authScheme of
-                BasicAuth auth ->
-                    BasicAuth.update innerMsg auth
-                        |> Tuple.mapFirst BasicAuth
-                        |> Tuple.mapSecond (Cmd.map BasicAuthChanged)
+                FormAuth auth ->
+                    FormAuth.update innerMsg auth
+                        |> Tuple.mapFirst FormAuth
+                        |> Tuple.mapSecond (Cmd.map FormAuthChanged)
 
                 _ ->
                     ( Unset, Cmd.none )
@@ -81,8 +81,8 @@ update msg authScheme =
 view : AuthScheme -> Html Msg
 view authScheme =
     case authScheme of
-        BasicAuth auth ->
-            BasicAuth.view auth |> Html.map BasicAuthChanged
+        FormAuth auth ->
+            FormAuth.view auth |> Html.map FormAuthChanged
 
         Jwt _ ->
             text ""
@@ -94,8 +94,8 @@ view authScheme =
 toJwt : AuthScheme -> Maybe PG.JWT
 toJwt authScheme =
     case authScheme of
-        BasicAuth auth ->
-            BasicAuth.toJwt auth
+        FormAuth auth ->
+            FormAuth.toJwt auth
 
         Jwt token ->
             Just token

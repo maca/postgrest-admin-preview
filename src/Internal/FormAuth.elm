@@ -1,5 +1,5 @@
-module Internal.BasicAuth exposing
-    ( BasicAuth
+module Internal.FormAuth exposing
+    ( FormAuth
     , Msg
     , Session(..)
     , config
@@ -56,14 +56,14 @@ type Error
     | NetworkError
 
 
-type BasicAuth
+type FormAuth
     = Ready Params
     | Active Params
     | Success Params Session
     | Failure Params Error
 
 
-config : Decoder BasicAuth
+config : Decoder FormAuth
 config =
     let
         params =
@@ -100,7 +100,7 @@ isSuccessMsg msg =
             False
 
 
-fail : BasicAuth -> BasicAuth
+fail : FormAuth -> FormAuth
 fail auth =
     case auth of
         Ready params ->
@@ -120,7 +120,7 @@ fail auth =
 -- UPDATE
 
 
-update : Msg -> BasicAuth -> ( BasicAuth, Cmd Msg )
+update : Msg -> FormAuth -> ( FormAuth, Cmd Msg )
 update msg auth =
     let
         params =
@@ -173,7 +173,7 @@ clearPasswordHelp ( k, v ) =
         ( k, v )
 
 
-requestToken : BasicAuth -> Task Error Session
+requestToken : FormAuth -> Task Error Session
 requestToken auth =
     let
         params =
@@ -215,7 +215,7 @@ handleJsonResponse decoder response =
 -- VIEW
 
 
-view : BasicAuth -> Html Msg
+view : FormAuth -> Html Msg
 view auth =
     if requiresAuthentication auth then
         viewForm auth
@@ -224,7 +224,7 @@ view auth =
         text ""
 
 
-viewForm : BasicAuth -> Html Msg
+viewForm : FormAuth -> Html Msg
 viewForm auth =
     let
         { fields } =
@@ -289,7 +289,7 @@ fieldType fieldName =
             "input"
 
 
-toJwt : BasicAuth -> Maybe PG.JWT
+toJwt : FormAuth -> Maybe PG.JWT
 toJwt auth =
     case auth of
         Ready _ ->
@@ -305,7 +305,7 @@ toJwt auth =
             Nothing
 
 
-isFailed : BasicAuth -> Bool
+isFailed : FormAuth -> Bool
 isFailed auth =
     case auth of
         Failure _ _ ->
@@ -322,7 +322,7 @@ sessionToJwt session =
             token
 
 
-requiresAuthentication : BasicAuth -> Bool
+requiresAuthentication : FormAuth -> Bool
 requiresAuthentication auth =
     case auth of
         Ready _ ->
@@ -338,7 +338,7 @@ requiresAuthentication auth =
             True
 
 
-toParams : BasicAuth -> Params
+toParams : FormAuth -> Params
 toParams auth =
     case auth of
         Ready params ->
@@ -354,7 +354,7 @@ toParams auth =
             params
 
 
-errorMessage : BasicAuth -> Html Msg
+errorMessage : FormAuth -> Html Msg
 errorMessage auth =
     case auth of
         Failure _ error ->
@@ -402,12 +402,12 @@ errorWrapper html =
 -- DECODERS
 
 
-withAuthUrl : String -> Decoder BasicAuth -> Decoder BasicAuth
+withAuthUrl : String -> Decoder FormAuth -> Decoder FormAuth
 withAuthUrl urlStr decoder =
     decoder |> Decode.andThen (withAuthUrlDecoder urlStr)
 
 
-withAuthUrlDecoder : String -> BasicAuth -> Decoder BasicAuth
+withAuthUrlDecoder : String -> FormAuth -> Decoder FormAuth
 withAuthUrlDecoder urlStr auth =
     let
         params =
@@ -417,13 +417,13 @@ withAuthUrlDecoder urlStr auth =
         |> Maybe.map
             (\url -> updateParams { params | url = url } auth |> Decode.succeed)
         |> Maybe.withDefault
-            (Decode.fail "`BasicAuth.withAuthUrl` was given an invalid URL")
+            (Decode.fail "`FormAuth.withAuthUrl` was given an invalid URL")
 
 
 withEncoder :
     (Dict String String -> Value)
-    -> Decoder BasicAuth
-    -> Decoder BasicAuth
+    -> Decoder FormAuth
+    -> Decoder FormAuth
 withEncoder encoder decoder =
     decoder
         |> Decode.andThen
@@ -437,7 +437,7 @@ withEncoder encoder decoder =
             )
 
 
-withDecoder : Decoder String -> Decoder BasicAuth -> Decoder BasicAuth
+withDecoder : Decoder String -> Decoder FormAuth -> Decoder FormAuth
 withDecoder jwtDecoder decoder =
     decoder
         |> Decode.andThen
@@ -455,7 +455,7 @@ withDecoder jwtDecoder decoder =
             )
 
 
-updateParams : Params -> BasicAuth -> BasicAuth
+updateParams : Params -> FormAuth -> FormAuth
 updateParams params auth =
     case auth of
         Ready _ ->
@@ -471,6 +471,6 @@ updateParams params auth =
             Failure params error
 
 
-readyDecoder : Params -> Decoder BasicAuth
+readyDecoder : Params -> Decoder FormAuth
 readyDecoder params =
     Decode.succeed (Ready params)

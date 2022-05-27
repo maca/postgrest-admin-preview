@@ -6,7 +6,7 @@ import PostgrestAdmin
 import PostgrestAdmin.Client exposing (Client)
 import PostgrestAdmin.Cmd as AppCmd
 import PostgrestAdmin.Config as Config
-import PostgrestAdmin.Config.BasicAuth as BasicAuth
+import PostgrestAdmin.Config.FormAuth as FormAuth
 import Url.Parser as Parser exposing ((</>), s)
 
 
@@ -64,7 +64,7 @@ update msg model =
 main : PostgrestAdmin.Program Model Msg
 main =
     Config.init
-        |> Config.withBasicAuth BasicAuth.config
+        |> Config.withFormAuth FormAuth.config
         |> Config.withMountPoint
             { init = init
             , update = update

@@ -3,7 +3,7 @@ module PostgrestAdmin.Config exposing
     , init
     , withHost
     , withFormFields
-    , withBasicAuth
+    , withFormAuth
     , withJwt
     , withOnLogin
     , withMountPoint
@@ -27,7 +27,7 @@ module PostgrestAdmin.Config exposing
 
 # Auth
 
-@docs withBasicAuth
+@docs withFormAuth
 @docs withJwt
 @docs withOnLogin
 
@@ -46,7 +46,7 @@ import Internal.Msg exposing (Msg)
 import Internal.Route exposing (MountPoint(..), Route(..))
 import Json.Decode exposing (Decoder)
 import PostgrestAdmin.Client exposing (Client)
-import PostgrestAdmin.Config.BasicAuth exposing (BasicAuth)
+import PostgrestAdmin.Config.FormAuth exposing (FormAuth)
 import Url exposing (Protocol(..))
 import Url.Parser exposing (Parser)
 
@@ -95,20 +95,20 @@ withHost =
 {-| Enable user credentials form and configure the parameters. Credentials
 are be used to obtain a JWT.
 
-See [BasicAuth](PostgrestAdmin.BasicAuth) for configuration options.
+See [FormAuth](PostgrestAdmin.FormAuth) for configuration options.
 
-      import PostgrestAdmin.Config.BasicAuth as BasicAuth
+      import PostgrestAdmin.Config.FormAuth as FormAuth
 
       main : PostgrestAdmin.Program Never Never
       main =
           Config.init
-              |> Config.withBasicAuth BasicAuth.config
+              |> Config.withFormAuth FormAuth.config
               |> PostgrestAdmin.application
 
 -}
-withBasicAuth : BasicAuth -> Config m msg -> Config m msg
-withBasicAuth =
-    Config.withBasicAuth
+withFormAuth : FormAuth -> Config m msg -> Config m msg
+withFormAuth =
+    Config.withFormAuth
 
 
 {-| Set a JWT to authenticate postgREST requests. Even when using basic

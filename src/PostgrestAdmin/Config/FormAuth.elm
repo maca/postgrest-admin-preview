@@ -1,17 +1,29 @@
-module PostgrestAdmin.Config.BasicAuth exposing
-    ( BasicAuth
+module PostgrestAdmin.Config.FormAuth exposing
+    ( FormAuth
     , config
     , withAuthUrl
     , withEncoder
     , withDecoder
     )
 
-{-| Program configuration
+{-| Configuration for form based authentication.
+
+Tipically user credentials are exchanged for a
+[JWT](https://en.wikipedia.org/wiki/JSON_Web_Token), to the PostgREST instance
+or to an external authentication provided.
+
+This module provides configuration functions for defining what is the
+authentication form POST url, how the credentials are to be encoded and how the
+JWT is to be decoded.
+
+See
+[PostgREST documentation](https://postgrest.org/en/stable/auth.html?highlight=authentication#)
+to get a better understanding of JWT and roles in PostgREST.
 
 
 # Config
 
-@docs BasicAuth
+@docs FormAuth
 @docs config
 
 
@@ -28,22 +40,22 @@ module PostgrestAdmin.Config.BasicAuth exposing
 -}
 
 import Dict exposing (Dict)
-import Internal.BasicAuth as BasicAuth
+import Internal.FormAuth as FormAuth
 import Json.Decode exposing (Decoder)
 import Json.Encode exposing (Value)
 
 
 {-| Basic authentication configuration.
 -}
-type alias BasicAuth =
-    Decoder BasicAuth.BasicAuth
+type alias FormAuth =
+    Decoder FormAuth.FormAuth
 
 
 {-| Create a authentication configuration.
 -}
-config : BasicAuth
+config : FormAuth
 config =
-    BasicAuth.config
+    FormAuth.config
 
 
 {-| Set authentication request login url. Credentials are to be exchanged for a
@@ -60,9 +72,9 @@ Alternatively the host can be specified using flags, configuring using
       })
 
 -}
-withAuthUrl : String -> BasicAuth -> BasicAuth
+withAuthUrl : String -> FormAuth -> FormAuth
 withAuthUrl =
-    BasicAuth.withAuthUrl
+    FormAuth.withAuthUrl
 
 
 {-| Override the credentials JSON encoder to be used when posting to the login
@@ -81,10 +93,10 @@ url.
 -}
 withEncoder :
     (Dict String String -> Value)
-    -> BasicAuth
-    -> BasicAuth
+    -> FormAuth
+    -> FormAuth
 withEncoder =
-    BasicAuth.withEncoder
+    FormAuth.withEncoder
 
 
 {-| Override the JSON decoder used to obtain the JWT from the login response.
@@ -94,6 +106,6 @@ withEncoder =
             (Decode.at ["auth", "jwt"] Decode.string)
 
 -}
-withDecoder : Decoder String -> BasicAuth -> BasicAuth
+withDecoder : Decoder String -> FormAuth -> FormAuth
 withDecoder =
-    BasicAuth.withDecoder
+    FormAuth.withDecoder

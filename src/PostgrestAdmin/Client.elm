@@ -68,10 +68,9 @@ import Utils.Task as Internal exposing (Error)
 {-| Represents a client for a PostgREST instance, including authentication
 params.
 
-PostgREST expect the user to be authenticated with a
-[Json Web Token](https://en.wikipedia.org/wiki/JSON_Web_Token).
-See [PostgREST documentation](https://postgrest.org/en/stable/auth.html?highlight=authentication#)
-to get a better understanding of JWT and roles.
+See [Config](PostgrestAdmin.Config) and
+[Config.FormAuth](PostgrestAdmin.Config.FormAuth) for authentication configuration
+options.
 
 -}
 type alias Client =

@@ -2,7 +2,7 @@ module Internal.Config exposing
     ( Config
     , default
     , init
-    , withBasicAuth
+    , withFormAuth
     , withFormFields
     , withHost
     , withJwt
@@ -12,8 +12,8 @@ module Internal.Config exposing
 
 import Dict exposing (Dict)
 import Internal.AuthScheme as AuthScheme exposing (AuthScheme)
-import Internal.BasicAuth exposing (BasicAuth)
 import Internal.Flag as Flag
+import Internal.FormAuth exposing (FormAuth)
 import Internal.Msg exposing (Msg)
 import Internal.Route exposing (Application, MountPoint(..), Route(..))
 import Json.Decode as Decode exposing (Decoder)
@@ -50,11 +50,11 @@ withHostDecoder urlStr conf =
             (Decode.fail "`Config.withHost` was given an invalid URL")
 
 
-withBasicAuth :
-    Decoder BasicAuth
+withFormAuth :
+    Decoder FormAuth
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
-withBasicAuth authDecoder decoder =
+withFormAuth authDecoder decoder =
     Decode.map2 (\auth conf -> { conf | authScheme = AuthScheme.basic auth })
         authDecoder
         decoder
