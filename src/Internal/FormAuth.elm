@@ -10,6 +10,7 @@ module Internal.FormAuth exposing
     , update
     , view
     , withAuthUrl
+    , withAuthUrlDecoder
     , withDecoder
     , withEncoder
     )
@@ -19,7 +20,6 @@ import Html exposing (Html, button, div, fieldset, form, input, label, pre, text
 import Html.Attributes exposing (class, disabled, for, id, style, type_, value)
 import Html.Events exposing (onInput, onSubmit)
 import Http
-import Internal.Flag as Flag
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
 import Postgrest.Client as PG
@@ -87,7 +87,6 @@ config =
             |> Decode.map (\token -> Success params (Token <| PG.jwt token))
         , readyDecoder params
         ]
-        |> Flag.string "authUrl" withAuthUrlDecoder
 
 
 isSuccessMsg : Msg -> Bool

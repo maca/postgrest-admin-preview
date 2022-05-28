@@ -65,7 +65,7 @@ JWT via a post request.
           |> withAuthUrl "http://localhost:3000/rpc/login"
 
 Alternatively the host can be specified using flags, configuring using
-`withAuthUrl` function takes precedence.
+`withAuthUrl`. Program flags take precedence.
 
       Elm.Main.init({
           flags: { authUrl: "http://localhost:3000/rpc/login" }

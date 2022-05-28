@@ -79,8 +79,8 @@ init =
               |> Config.withHost "http://localhost:3000"
               |> PostgRestAdmin.application
 
-Alternatively the host can be specified using flags, configuring using `withHost`
-function takes precedence.
+Alternatively the host can be specified using flags, configuring using `withHost`.
+Program flags take precedence.
 
       Elm.Main.init({
           flags: { host: "http://localhost:3000" }
@@ -111,8 +111,8 @@ withFormAuth =
     Config.withFormAuth
 
 
-{-| Set a JWT to authenticate postgREST requests. Even when using basic
-authentication it's possible to set an initial JWT.
+{-| Set a JWT to authenticate postgREST requests. Even when using
+[withFormAuth](#withFormAuth) it's possible to set an initial JWT.
 
       main : PostgRestAdmin.Program Never Never
       main =
@@ -120,8 +120,8 @@ authentication it's possible to set an initial JWT.
               |> Config.withJwt "8abf3a...9ac36d"
               |> PostgRestAdmin.application
 
-Alternatively the token can be passed using flags, configuring using `withJwt`
-function takes precedence.
+Alternatively the token can be passed using flags, configuring using `withJwt`.
+Program flags take precedence.
 
       Elm.Main.init({
           flags: { jwt: sessionStorage.getItem("jwt") }
@@ -173,7 +173,7 @@ the forms.
               |> PostgRestAdmin.application
 
 Alternatively this parameter can be configured using flags, configuring using
-`withFormFields` function takes precedence.
+`withFormFields`. Program flags take precedence.
 
       Elm.Main.init({
           flags: { formFields: { posts: [ "id", "title", "content" ]} }

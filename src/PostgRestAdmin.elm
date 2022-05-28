@@ -28,6 +28,7 @@ import Internal.Application as Application exposing (Application(..))
 import Internal.Client as Client
 import Internal.Cmd as AppCmd
 import Internal.Config as Config exposing (Config)
+import Internal.Flag as Flag
 import Internal.Msg exposing (Msg(..))
 import Internal.Notification as Notification exposing (Notification)
 import Internal.PageDetail as PageDetail
@@ -85,7 +86,12 @@ options.
 -}
 application : Decoder (Config m msg) -> Program m msg
 application decoder =
-    Browser.application (applicationParams decoder)
+    Browser.application
+        (decoder
+            |> Flag.string "host" Config.withHostDecoder
+            |> Flag.stringDict "formFields" Config.withFormFieldsDecoder
+            |> applicationParams
+        )
 
 
 applicationParams : Decoder (Config m msg) -> Params m msg

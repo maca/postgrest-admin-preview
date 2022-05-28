@@ -4,7 +4,9 @@ module Internal.Config exposing
     , init
     , withFormAuth
     , withFormFields
+    , withFormFieldsDecoder
     , withHost
+    , withHostDecoder
     , withJwt
     , withMountPoint
     , withOnLogin
@@ -14,7 +16,7 @@ import Dict exposing (Dict)
 import Internal.Application exposing (Params)
 import Internal.AuthScheme as AuthScheme exposing (AuthScheme)
 import Internal.Flag as Flag
-import Internal.FormAuth exposing (FormAuth)
+import Internal.FormAuth as FormAuth exposing (FormAuth)
 import Internal.Msg exposing (Msg)
 import Internal.Route exposing (MountPoint, Route(..))
 import Json.Decode as Decode exposing (Decoder)
@@ -34,8 +36,6 @@ type alias Config m msg =
 init : Decoder (Config m msg)
 init =
     Decode.succeed default
-        |> Flag.string "host" withHostDecoder
-        |> Flag.stringDict "formFields" withFormFieldsDecoder
 
 
 withHost : String -> Decoder (Config m msg) -> Decoder (Config m msg)
@@ -57,7 +57,9 @@ withFormAuth :
     -> Decoder (Config m msg)
 withFormAuth authDecoder decoder =
     Decode.map2 (\auth conf -> { conf | authScheme = AuthScheme.basic auth })
-        authDecoder
+        (authDecoder
+            |> Flag.string "authUrl" FormAuth.withAuthUrlDecoder
+        )
         decoder
 
 
@@ -70,7 +72,10 @@ withJwt tokenStr decoder =
             )
 
 
-withOnLogin : (String -> Cmd a) -> Decoder (Config m msg) -> Decoder (Config m msg)
+withOnLogin :
+    (String -> Cmd a)
+    -> Decoder (Config m msg)
+    -> Decoder (Config m msg)
 withOnLogin onLogin decoder =
     decoder
         |> Decode.andThen
