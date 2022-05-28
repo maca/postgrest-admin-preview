@@ -24,6 +24,7 @@ import Dict.Extra as Dict
 import Html exposing (Html, a, aside, div, h1, li, pre, text, ul)
 import Html.Attributes exposing (class, href)
 import Inflect as String
+import Internal.Application as Application exposing (Application(..))
 import Internal.Client as Client
 import Internal.Cmd as AppCmd
 import Internal.Config as Config exposing (Config)
@@ -32,7 +33,7 @@ import Internal.Notification as Notification exposing (Notification)
 import Internal.PageDetail as PageDetail
 import Internal.PageForm as PageForm
 import Internal.PageListing as PageListing
-import Internal.Route as Route exposing (MountPoint(..), Route(..))
+import Internal.Route as Route exposing (MountPoint, Route(..))
 import Json.Decode as Decode exposing (Decoder, Value)
 import PostgrestAdmin.Client exposing (Client)
 import String.Extra as String
@@ -46,16 +47,16 @@ import Utils.Task exposing (Error(..), errorToString)
 PostgrestAdmin program.
 -}
 type alias Program model msg =
-    Platform.Program Decode.Value (Model model msg) (Msg msg)
+    Platform.Program Decode.Value (Model model msg) (Msg model msg)
 
 
 type alias Params m msg =
-    { init : Value -> Url.Url -> Nav.Key -> ( Model m msg, Cmd (Msg msg) )
-    , view : Model m msg -> Browser.Document (Msg msg)
-    , update : Msg msg -> Model m msg -> ( Model m msg, Cmd (Msg msg) )
-    , subscriptions : Model m msg -> Sub (Msg msg)
-    , onUrlRequest : Browser.UrlRequest -> Msg msg
-    , onUrlChange : Url -> Msg msg
+    { init : Value -> Url.Url -> Nav.Key -> ( Model m msg, Cmd (Msg m msg) )
+    , view : Model m msg -> Browser.Document (Msg m msg)
+    , update : Msg m msg -> Model m msg -> ( Model m msg, Cmd (Msg m msg) )
+    , subscriptions : Model m msg -> Sub (Msg m msg)
+    , onUrlRequest : Browser.UrlRequest -> Msg m msg
+    , onUrlChange : Url -> Msg m msg
     }
 
 
@@ -67,7 +68,8 @@ type alias Model m msg =
     , formFields : Dict String (List String)
     , application : Maybe (MountPoint m msg)
     , client : Client
-    , onLogin : Maybe String -> Cmd (Msg msg)
+    , onLogin : Maybe String -> Cmd (Msg m msg)
+    , mountedApp : Application.Application m msg
     }
 
 
@@ -101,7 +103,7 @@ init :
     -> Value
     -> Url.Url
     -> Nav.Key
-    -> ( Model m msg, Cmd (Msg msg) )
+    -> ( Model m msg, Cmd (Msg m msg) )
 init decoder flags url key =
     let
         makeModel config =
@@ -116,6 +118,7 @@ init decoder flags url key =
                 Maybe.withDefault ""
                     >> config.onLogin
                     >> Cmd.map (always NoOp)
+            , mountedApp = Application.none
             }
     in
     case Decode.decodeValue decoder flags of
@@ -143,9 +146,22 @@ init decoder flags url key =
 -- UPDATE
 
 
-update : Msg msg -> Model m msg -> ( Model m msg, Cmd (Msg msg) )
+update : Msg m msg -> Model m msg -> ( Model m msg, Cmd (Msg m msg) )
 update msg model =
     case msg of
+        ApplicationInit ( params, m ) cmds ->
+            ( { model
+                | mountedApp =
+                    case model.mountedApp of
+                        Application _ _ ->
+                            model.mountedApp
+
+                        None ->
+                            Application params m
+              }
+            , Cmd.batch (List.map (mapAppCmd PageApplicationChanged) cmds)
+            )
+
         ClientChanged childMsg ->
             let
                 ( client, clientCmd ) =
@@ -190,13 +206,21 @@ update msg model =
                             , clientMsg = childMsg
                             }
 
-                RouteApplication program _ ->
-                    model
-                        |> clientChanged
-                            { loginMsg = program.onLogin
-                            , tagger = PageApplicationChanged
-                            , clientMsg = childMsg
-                            }
+                RouteApplication ->
+                    let
+                        ( app, cmd ) =
+                            updateApplicationClient client model
+                    in
+                    ( { model | client = client, mountedApp = app }
+                    , Cmd.batch
+                        [ Cmd.map ClientChanged clientCmd
+                        , if Client.isAuthSuccessMsg childMsg then
+                            cmd
+
+                          else
+                            Cmd.none
+                        ]
+                    )
 
                 _ ->
                     ( { model | client = client }
@@ -252,18 +276,13 @@ update msg model =
                     ( model, Cmd.none )
 
         PageApplicationChanged childMsg ->
-            case model.route of
-                RouteApplication program prevChildModel ->
-                    let
-                        ( appModel, cmd ) =
-                            program.update childMsg prevChildModel
-                    in
-                    ( { model | route = RouteApplication program appModel }
-                    , mapAppCmd PageApplicationChanged cmd
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
+            let
+                ( app, cmd ) =
+                    Application.update childMsg model.mountedApp
+            in
+            ( { model | mountedApp = app }
+            , mapAppCmd PageApplicationChanged cmd
+            )
 
         NotificationChanged childMsg ->
             ( { model | notification = Notification.update childMsg }
@@ -291,22 +310,26 @@ update msg model =
 
 clientChanged :
     { loginMsg : Client -> a
-    , tagger : a -> Msg msg
+    , tagger : a -> Msg m msg
     , clientMsg : Client.Msg
     }
     -> Model m msg
-    -> ( Model m msg, Cmd (Msg msg) )
+    -> ( Model m msg, Cmd (Msg m msg) )
 clientChanged { loginMsg, tagger, clientMsg } model =
     let
         ( client, clientCmd ) =
             Client.update clientMsg model.client
+
+        ( mountedApp, appCmd ) =
+            updateApplicationClient client model
     in
-    ( { model | client = client }
+    ( { model | client = client, mountedApp = mountedApp }
     , Cmd.batch
         [ Cmd.map ClientChanged clientCmd
         , if Client.isAuthSuccessMsg clientMsg then
             Cmd.batch
-                [ loginMsg client
+                [ appCmd
+                , loginMsg client
                     |> Task.succeed
                     |> Task.perform identity
                     |> Cmd.map tagger
@@ -319,11 +342,26 @@ clientChanged { loginMsg, tagger, clientMsg } model =
     )
 
 
+updateApplicationClient :
+    Client
+    -> Model m msg
+    -> ( Application m msg, Cmd (Msg m msg) )
+updateApplicationClient client model =
+    case model.mountedApp of
+        Application params _ ->
+            model.mountedApp
+                |> Application.update (params.onLogin client)
+                |> Tuple.mapSecond (mapAppCmd PageApplicationChanged)
+
+        None ->
+            ( model.mountedApp, Cmd.none )
+
+
 
 -- VIEW
 
 
-view : Model m msg -> Browser.Document (Msg msg)
+view : Model m msg -> Browser.Document (Msg m msg)
 view model =
     { title = "Admin"
     , body =
@@ -349,14 +387,14 @@ view model =
     }
 
 
-body : Model m msg -> List (Html (Msg msg))
+body : Model m msg -> List (Html (Msg m msg))
 body model =
     [ Notification.view model.notification |> Html.map NotificationChanged
     , mainContent model
     ]
 
 
-sideMenu : Model m msg -> Html (Msg msg)
+sideMenu : Model m msg -> Html (Msg m msg)
 sideMenu model =
     aside
         [ class "resources-menu" ]
@@ -369,14 +407,14 @@ sideMenu model =
         ]
 
 
-menuItem : String -> Html (Msg msg)
+menuItem : String -> Html (Msg m msg)
 menuItem name =
     li
         []
         [ a [ href <| "/" ++ name ] [ text <| String.humanize name ] ]
 
 
-mainContent : Model m msg -> Html (Msg msg)
+mainContent : Model m msg -> Html (Msg m msg)
 mainContent model =
     case model.route of
         RouteRoot ->
@@ -395,19 +433,24 @@ mainContent model =
         RouteForm form ->
             Html.map PageFormChanged (PageForm.view form)
 
-        RouteApplication program childModel ->
-            Html.map PageApplicationChanged (program.view childModel)
+        RouteApplication ->
+            case model.mountedApp of
+                Application program childModel ->
+                    Html.map PageApplicationChanged (program.view childModel)
+
+                None ->
+                    notFound
 
         RouteNotFound ->
             notFound
 
 
-notFound : Html (Msg msg)
+notFound : Html (Msg m msg)
 notFound =
     text "Not found"
 
 
-loading : Html (Msg msg)
+loading : Html (Msg m msg)
 loading =
     text ""
 
@@ -416,7 +459,7 @@ loading =
 -- SUBSCRIPTIONS
 
 
-subscriptions : Model m msg -> Sub (Msg msg)
+subscriptions : Model m msg -> Sub (Msg m msg)
 subscriptions _ =
     Sub.none
 
@@ -425,7 +468,7 @@ subscriptions _ =
 -- ROUTES
 
 
-parseRoute : Url -> Model m msg -> ( Route m msg, Cmd (Msg msg) )
+parseRoute : Url -> Model m msg -> ( Route m msg, Cmd (Msg m msg) )
 parseRoute url model =
     let
         initTuple params =
@@ -449,7 +492,7 @@ parseRoute url model =
 routeParser :
     Url
     -> Route.InitParams m msg
-    -> Parser (( Route m msg, Cmd (Msg msg) ) -> a) a
+    -> Parser (( Route m msg, Cmd (Msg m msg) ) -> a) a
 routeParser url model =
     let
         mountPoint =
@@ -474,7 +517,7 @@ initListing :
     Route.InitParams m msg
     -> Url
     -> String
-    -> ( Route m msg, Cmd (Msg msg) )
+    -> ( Route m msg, Cmd (Msg m msg) )
 initListing model url tableName =
     case Client.getTable tableName model.client of
         Just table ->
@@ -492,7 +535,7 @@ initListing model url tableName =
             ( RouteNotFound, Cmd.none )
 
 
-initNewForm : Route.InitParams m msg -> String -> ( Route m msg, Cmd (Msg msg) )
+initNewForm : Route.InitParams m msg -> String -> ( Route m msg, Cmd (Msg m msg) )
 initNewForm model tableName =
     initFormHelp model tableName Nothing
 
@@ -501,7 +544,7 @@ initForm :
     Route.InitParams m msg
     -> String
     -> String
-    -> ( Route m msg, Cmd (Msg msg) )
+    -> ( Route m msg, Cmd (Msg m msg) )
 initForm model tableName id =
     initFormHelp model tableName (Just id)
 
@@ -510,7 +553,7 @@ initFormHelp :
     Route.InitParams m msg
     -> String
     -> Maybe String
-    -> ( Route m msg, Cmd (Msg msg) )
+    -> ( Route m msg, Cmd (Msg m msg) )
 initFormHelp model tableName id =
     case Client.getTable tableName model.client of
         Just table ->
@@ -536,7 +579,7 @@ initDetail :
     Route.InitParams m msg
     -> String
     -> String
-    -> ( Route m msg, Cmd (Msg msg) )
+    -> ( Route m msg, Cmd (Msg m msg) )
 initDetail model tableName id =
     case Client.getTable tableName model.client of
         Just table ->
@@ -562,13 +605,25 @@ initDetail model tableName id =
 applicationParser :
     Route.InitParams m msg
     -> MountPoint m msg
-    -> Parser (( Route m msg, Cmd (Msg msg) ) -> a) a
-applicationParser { client } (MountPoint program parser) =
+    -> Parser (( Route m msg, Cmd (Msg m msg) ) -> a) a
+applicationParser { client } ( program, parser ) =
     Parser.map
-        (\() ->
-            program.init client
-                |> Tuple.mapFirst (RouteApplication program)
-                |> Tuple.mapSecond (mapAppCmd PageApplicationChanged)
+        (\msg ->
+            let
+                ( model, cmd ) =
+                    program.init client
+            in
+            ( RouteApplication
+            , Task.succeed
+                (ApplicationInit ( program, model )
+                    [ Task.succeed msg
+                        |> Task.perform identity
+                        |> AppCmd.wrap
+                    , cmd
+                    ]
+                )
+                |> Task.perform identity
+            )
         )
         parser
 
@@ -577,7 +632,7 @@ applicationParser { client } (MountPoint program parser) =
 -- UTILS
 
 
-mapAppCmd : (a -> Msg b) -> AppCmd.Cmd a -> Cmd (Msg b)
+mapAppCmd : (a -> Msg m b) -> AppCmd.Cmd a -> Cmd (Msg m b)
 mapAppCmd tagger appCmd =
     case appCmd of
         AppCmd.ChildCmd cmd ->

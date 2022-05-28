@@ -11,11 +11,12 @@ module Internal.Config exposing
     )
 
 import Dict exposing (Dict)
+import Internal.Application exposing (Params)
 import Internal.AuthScheme as AuthScheme exposing (AuthScheme)
 import Internal.Flag as Flag
 import Internal.FormAuth exposing (FormAuth)
 import Internal.Msg exposing (Msg)
-import Internal.Route exposing (Application, MountPoint(..), Route(..))
+import Internal.Route exposing (MountPoint, Route(..))
 import Json.Decode as Decode exposing (Decoder)
 import Url exposing (Protocol(..), Url)
 import Url.Parser exposing (Parser)
@@ -96,18 +97,18 @@ withFormFieldsDecoder fields conf =
 
 
 withMountPoint :
-    Application m msg
+    Params m msg
     ->
         Parser
-            (() -> ( Route m msg, Cmd (Msg msg) ))
-            ( Route m msg, Cmd (Msg msg) )
+            (msg -> ( Route m msg, Cmd (Msg m msg) ))
+            ( Route m msg, Cmd (Msg m msg) )
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
 withMountPoint program parser =
     Decode.andThen
         (\conf ->
             Decode.succeed
-                { conf | application = Just (MountPoint program parser) }
+                { conf | application = Just ( program, parser ) }
         )
 
 

@@ -43,7 +43,7 @@ import Html exposing (Html)
 import Internal.Cmd as AppCmd
 import Internal.Config as Config
 import Internal.Msg exposing (Msg)
-import Internal.Route exposing (MountPoint(..), Route(..))
+import Internal.Route exposing (Route(..))
 import Json.Decode exposing (Decoder)
 import PostgrestAdmin.Client exposing (Client)
 import PostgrestAdmin.Config.FormAuth exposing (FormAuth)
@@ -204,23 +204,24 @@ sent on successful login.
                 , init = init
                 , onLogin = LoggedIn
                 }
-                (Parser.map (always ())
+                (Parser.map MyPostLoadedMsg
                     (s "posts" </> Parser.string </> s "comments")
                 )
             |> PostgrestAdmin.application
 
 -}
 withMountPoint :
-    { init : Client -> ( m, AppCmd.Cmd msg )
-    , view : m -> Html msg
-    , update : msg -> m -> ( m, AppCmd.Cmd msg )
+    { init : Client -> ( model, AppCmd.Cmd msg )
+    , view : model -> Html msg
+    , update : msg -> model -> ( model, AppCmd.Cmd msg )
     , onLogin : Client -> msg
     }
-    ->
-        Parser
-            (() -> ( Route m msg, Cmd (Msg msg) ))
-            ( Route m msg, Cmd (Msg msg) )
-    -> Config m msg
-    -> Config m msg
+    -> Parser (msg -> Element model msg) (Element model msg)
+    -> Config model msg
+    -> Config model msg
 withMountPoint =
     Config.withMountPoint
+
+
+type alias Element m msg =
+    ( Route m msg, Cmd (Msg m msg) )

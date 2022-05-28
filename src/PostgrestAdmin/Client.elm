@@ -1,10 +1,8 @@
 module PostgrestAdmin.Client exposing
     ( Client
-    , Table
     , toHostUrl
+    , Table
     , getTable
-    , isAuthenticated
-    , toJwtString
     , fetchRecord
     , fetchRecordList
     , saveRecord
@@ -13,6 +11,8 @@ module PostgrestAdmin.Client exposing
     , errorToString
     , expectRecord
     , expectRecordList
+    , isAuthenticated
+    , toJwtString
     )
 
 {-|
@@ -21,15 +21,13 @@ module PostgrestAdmin.Client exposing
 # Client
 
 @docs Client
-@docs Table
 @docs toHostUrl
+
+
+# Table
+
+@docs Table
 @docs getTable
-
-
-# Authentication
-
-@docs isAuthenticated
-@docs toJwtString
 
 
 # Requests
@@ -51,6 +49,12 @@ but a [PostgrestAdmin.Cmd](PostgrestAdmin.Cmd).
 
 @docs expectRecord
 @docs expectRecordList
+
+
+# Authentication
+
+@docs isAuthenticated
+@docs toJwtString
 
 -}
 

@@ -14,19 +14,24 @@ type Msg
     = LoggedIn Client
     | Up
     | Down
+    | GotId String
 
 
 type alias Model =
     { count : Int
     , client : Client
+    , id : String
     }
 
 
 view : Model -> Html Msg
-view _ =
+view { count, id } =
     div
         []
-        [ button
+        [ text id
+        , text " - "
+        , text (String.fromInt count)
+        , button
             [ onClick Up ]
             [ text "+" ]
         , button
@@ -37,7 +42,7 @@ view _ =
 
 init : Client -> ( Model, AppCmd.Cmd Msg )
 init client =
-    ( { count = 1, client = client }
+    ( { count = 1, client = client, id = "" }
     , AppCmd.wrap Cmd.none
     )
 
@@ -60,6 +65,9 @@ update msg model =
             , AppCmd.none
             )
 
+        GotId string ->
+            ( { model | id = string }, AppCmd.none )
+
 
 main : PostgrestAdmin.Program Model Msg
 main =
@@ -71,7 +79,7 @@ main =
             , view = view
             , onLogin = LoggedIn
             }
-            (Parser.map (always ())
+            (Parser.map GotId
                 (s "workflows" </> Parser.string </> s "forms")
             )
         |> PostgrestAdmin.application
