@@ -2,11 +2,11 @@ module Main exposing (main)
 
 import Html exposing (Html, button, div, text)
 import Html.Events exposing (onClick)
-import PostgrestAdmin
-import PostgrestAdmin.Client exposing (Client)
-import PostgrestAdmin.Cmd as AppCmd
-import PostgrestAdmin.Config as Config
-import PostgrestAdmin.Config.FormAuth as FormAuth
+import PostgRestAdmin
+import PostgRestAdmin.Client exposing (Client)
+import PostgRestAdmin.Cmd as AppCmd
+import PostgRestAdmin.Config as Config
+import PostgRestAdmin.Config.FormAuth as FormAuth
 import Url.Parser as Parser exposing ((</>), s)
 
 
@@ -69,7 +69,7 @@ update msg model =
             ( { model | id = string }, AppCmd.none )
 
 
-main : PostgrestAdmin.Program Model Msg
+main : PostgRestAdmin.Program Model Msg
 main =
     Config.init
         |> Config.withFormAuth FormAuth.config
@@ -82,4 +82,4 @@ main =
             (Parser.map GotId
                 (s "workflows" </> Parser.string </> s "forms")
             )
-        |> PostgrestAdmin.application
+        |> PostgRestAdmin.application

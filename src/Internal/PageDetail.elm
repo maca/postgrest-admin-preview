@@ -35,7 +35,7 @@ import Internal.Notification as Notification
 import Internal.Record as Record exposing (Record)
 import Internal.Schema exposing (Constraint(..), Reference, Schema, Table)
 import Internal.Value exposing (Value(..))
-import PostgrestAdmin.Client as Client exposing (Client)
+import PostgRestAdmin.Client as Client exposing (Client)
 import String.Extra as String
 import Task exposing (Task)
 import Url

@@ -4,13 +4,13 @@ import Dict
 import Expect exposing (Expectation)
 import Filter exposing (..)
 import Fuzz exposing (Fuzzer, int, list, string)
-import Postgrest.Client as PG
-import Postgrest.Schema.Table as Table
+import PostgRest.Client as PG
+import PostgRest.Schema.Table as Table
     exposing
         ( Column(..)
         , Table
         )
-import Postgrest.Value exposing (Value(..))
+import PostgRest.Value exposing (Value(..))
 import Test exposing (..)
 
 

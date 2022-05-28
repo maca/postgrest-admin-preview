@@ -1,4 +1,4 @@
-module PostgrestAdmin.Config exposing
+module PostgRestAdmin.Config exposing
     ( Config
     , init
     , withHost
@@ -45,25 +45,25 @@ import Internal.Config as Config
 import Internal.Msg exposing (Msg)
 import Internal.Route exposing (Route(..))
 import Json.Decode exposing (Decoder)
-import PostgrestAdmin.Client exposing (Client)
-import PostgrestAdmin.Config.FormAuth exposing (FormAuth)
+import PostgRestAdmin.Client exposing (Client)
+import PostgRestAdmin.Config.FormAuth exposing (FormAuth)
 import Url exposing (Protocol(..))
 import Url.Parser exposing (Parser)
 
 
-{-| [PostgrestAdmin.application](PostgrestAdmin#application) configuration
+{-| [PostgRestAdmin.application](PostgRestAdmin#application) configuration
 params.
 -}
 type alias Config m msg =
     Decoder (Config.Config m msg)
 
 
-{-| [PostgrestAdmin.application](PostgrestAdmin#application) decoder with
+{-| [PostgRestAdmin.application](PostgRestAdmin#application) decoder with
 defaults.
 
-    main : PostgrestAdmin.Program Model Msg
+    main : PostgRestAdmin.Program Model Msg
     main =
-        PostgrestAdmin.application Config.init
+        PostgRestAdmin.application Config.init
 
 -}
 init : Config m msg
@@ -73,11 +73,11 @@ init =
 
 {-| Specify the postgREST host.
 
-      main : PostgrestAdmin.Program Never Never
+      main : PostgRestAdmin.Program Never Never
       main =
           Config.init
               |> Config.withHost "http://localhost:3000"
-              |> PostgrestAdmin.application
+              |> PostgRestAdmin.application
 
 Alternatively the host can be specified using flags, configuring using `withHost`
 function takes precedence.
@@ -95,15 +95,15 @@ withHost =
 {-| Enable user credentials form and configure the parameters. Credentials
 are be used to obtain a JWT.
 
-See [FormAuth](PostgrestAdmin.FormAuth) for configuration options.
+See [FormAuth](PostgRestAdmin.FormAuth) for configuration options.
 
-      import PostgrestAdmin.Config.FormAuth as FormAuth
+      import PostgRestAdmin.Config.FormAuth as FormAuth
 
-      main : PostgrestAdmin.Program Never Never
+      main : PostgRestAdmin.Program Never Never
       main =
           Config.init
               |> Config.withFormAuth FormAuth.config
-              |> PostgrestAdmin.application
+              |> PostgRestAdmin.application
 
 -}
 withFormAuth : FormAuth -> Config m msg -> Config m msg
@@ -114,11 +114,11 @@ withFormAuth =
 {-| Set a JWT to authenticate postgREST requests. Even when using basic
 authentication it's possible to set an initial JWT.
 
-      main : PostgrestAdmin.Program Never Never
+      main : PostgRestAdmin.Program Never Never
       main =
           Config.init
               |> Config.withJwt "8abf3a...9ac36d"
-              |> PostgrestAdmin.application
+              |> PostgRestAdmin.application
 
 Alternatively the token can be passed using flags, configuring using `withJwt`
 function takes precedence.
@@ -138,11 +138,11 @@ Tipically used to persist the JWT to session storage.
 
           port loginSuccess : String -> Cmd msg
 
-          main : PostgrestAdmin.Program Never Never
+          main : PostgRestAdmin.Program Never Never
           main =
               Config.init
                   |> Config.withOnLogin loginSuccess
-                  |> PostgrestAdmin.application
+                  |> PostgRestAdmin.application
 
 Elm init
 
@@ -164,13 +164,13 @@ withOnLogin =
 overriding the table schema. By default a primary key field is not present in
 the forms.
 
-      main : PostgrestAdmin.Program Never Never
+      main : PostgRestAdmin.Program Never Never
       main =
           Config.init
               |> Config.withFormFields
                   (Dict.fromList
                        [("posts", ["id", "title", "content"])])
-              |> PostgrestAdmin.application
+              |> PostgRestAdmin.application
 
 Alternatively this parameter can be configured using flags, configuring using
 `withFormFields` function takes precedence.
@@ -195,7 +195,7 @@ The component specification is similar to the specification for
 with the addition of `onLogin` param for which a msg should be provided to be
 sent on successful login.
 
-    main : PostgrestAdmin.Program Model Msg
+    main : PostgRestAdmin.Program Model Msg
     main =
         Config.init
             |> Config.withMountPoint
@@ -207,7 +207,7 @@ sent on successful login.
                 (Parser.map MyPostLoadedMsg
                     (s "posts" </> Parser.string </> s "comments")
                 )
-            |> PostgrestAdmin.application
+            |> PostgRestAdmin.application
 
 -}
 withMountPoint :

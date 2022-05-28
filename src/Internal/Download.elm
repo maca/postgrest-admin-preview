@@ -3,7 +3,7 @@ module Internal.Download exposing (Download, Format(..), fetch, init, save)
 import Bytes exposing (Bytes)
 import File.Download as Download
 import Http exposing (header)
-import PostgrestAdmin.Client as Client exposing (Client)
+import PostgRestAdmin.Client as Client exposing (Client)
 import Task exposing (Task)
 import Url
 import Utils.Task exposing (Error(..), handleResponse)

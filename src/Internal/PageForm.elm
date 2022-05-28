@@ -20,8 +20,8 @@ import Internal.Input as Input exposing (Input)
 import Internal.Notification as Notification
 import Internal.Schema exposing (Table)
 import Internal.Value exposing (Value(..))
-import PostgrestAdmin.Client as Client exposing (Client)
-import PostgrestAdmin.Record as Record exposing (Record)
+import PostgRestAdmin.Client as Client exposing (Client)
+import PostgRestAdmin.Record as Record exposing (Record)
 import String.Extra as String
 import Task exposing (Task)
 import Url

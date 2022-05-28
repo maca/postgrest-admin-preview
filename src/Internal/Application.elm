@@ -2,7 +2,7 @@ module Internal.Application exposing (Application(..), Params, none, update)
 
 import Html exposing (Html)
 import Internal.Cmd as AppCmd
-import PostgrestAdmin.Client exposing (Client)
+import PostgRestAdmin.Client exposing (Client)
 
 
 type alias Params model msg =

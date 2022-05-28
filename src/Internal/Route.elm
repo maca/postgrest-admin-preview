@@ -11,7 +11,7 @@ import Internal.Msg exposing (Msg)
 import Internal.PageDetail exposing (PageDetail)
 import Internal.PageForm exposing (PageForm)
 import Internal.PageListing exposing (PageListing)
-import PostgrestAdmin.Client exposing (Client)
+import PostgRestAdmin.Client exposing (Client)
 import Url.Parser exposing (Parser)
 
 

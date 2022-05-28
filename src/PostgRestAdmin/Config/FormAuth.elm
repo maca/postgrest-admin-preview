@@ -1,4 +1,4 @@
-module PostgrestAdmin.Config.FormAuth exposing
+module PostgRestAdmin.Config.FormAuth exposing
     ( FormAuth
     , config
     , withAuthUrl

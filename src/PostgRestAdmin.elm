@@ -1,4 +1,4 @@
-module PostgrestAdmin exposing
+module PostgRestAdmin exposing
     ( Program
     , application
     )
@@ -35,7 +35,7 @@ import Internal.PageForm as PageForm
 import Internal.PageListing as PageListing
 import Internal.Route as Route exposing (MountPoint, Route(..))
 import Json.Decode as Decode exposing (Decoder, Value)
-import PostgrestAdmin.Client exposing (Client)
+import PostgRestAdmin.Client exposing (Client)
 import String.Extra as String
 import Task
 import Url exposing (Url)
@@ -44,7 +44,7 @@ import Utils.Task exposing (Error(..), errorToString)
 
 
 {-| An alias to elm's Platform.Program providing the type signature for a
-PostgrestAdmin program.
+PostgRestAdmin program.
 -}
 type alias Program model msg =
     Platform.Program Decode.Value (Model model msg) (Msg model msg)
@@ -73,13 +73,14 @@ type alias Model m msg =
     }
 
 
-{-| Takes a Config and creates a PostgrestAdmin application.
-See [Config](PostgrestAdmin.Config) to check all configuration
+{-| Takes a Config and creates a PostgRestAdmin application.
+
+See [Config](PostgRestAdmin.Config) to check all configuration
 options.
 
-      main : PostgrestAdmin.Program Never Never
+      main : PostgRestAdmin.Program Never Never
       main =
-          PostgrestAdmin.application Config.init
+          PostgRestAdmin.application Config.init
 
 -}
 application : Decoder (Config m msg) -> Program m msg

@@ -2,7 +2,7 @@ module Internal.Upload exposing (post)
 
 import Http exposing (header)
 import Json.Encode exposing (Value)
-import PostgrestAdmin.Client as Client exposing (Client)
+import PostgRestAdmin.Client as Client exposing (Client)
 import Task exposing (Task)
 import Url
 import Utils.Task exposing (Error(..), handleResponse)

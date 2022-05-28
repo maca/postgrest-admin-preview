@@ -8,7 +8,7 @@ import Internal.Notification as Notification
 import Internal.PageDetail as PageDetail
 import Internal.PageForm as PageForm
 import Internal.PageListing as PageListing
-import PostgrestAdmin.Client as Client exposing (Client)
+import PostgRestAdmin.Client as Client exposing (Client)
 import Url exposing (Url)
 import Utils.Task exposing (Error(..))
 

@@ -36,7 +36,7 @@ import Internal.Schema exposing (Constraint(..), ForeignKeyParams)
 import Internal.Value as Value exposing (Value(..))
 import Maybe.Extra as Maybe
 import Postgrest.Client as PG exposing (PostgrestErrorJSON)
-import PostgrestAdmin.Client as Client exposing (Client)
+import PostgRestAdmin.Client as Client exposing (Client)
 import String.Extra as String
 import Url.Builder as Url
 import Utils.Task exposing (Error(..))

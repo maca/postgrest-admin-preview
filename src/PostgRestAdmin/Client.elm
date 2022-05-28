@@ -1,4 +1,4 @@
-module PostgrestAdmin.Client exposing
+module PostgRestAdmin.Client exposing
     ( Client
     , toHostUrl
     , Table
@@ -34,7 +34,7 @@ module PostgrestAdmin.Client exposing
 
 Note that the request functions **do not produce a vanilla Elm
 [Cmd](https://package.elm-lang.org/packages/elm/core/latest/Platform-Cmd#Cmd)**
-but a [PostgrestAdmin.Cmd](PostgrestAdmin.Cmd).
+but a [PostgRestAdmin.Cmd](PostgRestAdmin.Cmd).
 
 @docs fetchRecord
 @docs fetchRecordList
@@ -62,9 +62,9 @@ import Internal.Client as Client
 import Internal.Cmd as Internal
 import Internal.Schema as Schema
 import Json.Decode as Decode exposing (Decoder, Value)
+import PostgRestAdmin.Cmd as AppCmd
+import PostgRestAdmin.Record as Record exposing (Record)
 import Postgrest.Client as PG
-import PostgrestAdmin.Cmd as AppCmd
-import PostgrestAdmin.Record as Record exposing (Record)
 import Url exposing (Url)
 import Utils.Task as Internal exposing (Error)
 
@@ -72,8 +72,8 @@ import Utils.Task as Internal exposing (Error)
 {-| Represents a client for a PostgREST instance, including authentication
 params.
 
-See [Config](PostgrestAdmin.Config) and
-[Config.FormAuth](PostgrestAdmin.Config.FormAuth) for authentication configuration
+See [Config](PostgRestAdmin.Config) and
+[Config.FormAuth](PostgRestAdmin.Config.FormAuth) for authentication configuration
 options.
 
 -}
@@ -136,9 +136,9 @@ errorToString =
 `expect` param requires a function that returns a `Msg`.
 
 You can use [expectRecord](#expectRecord) to interpret the result as a
-[Record](PostgrestAdmin.Record).
+[Record](PostgRestAdmin.Record).
 
-    import PostgrestAdmin.Cmd as AppCmd
+    import PostgRestAdmin.Cmd as AppCmd
 
     fetch : String -> Client -> AppCmd.Cmd Msg
     fetch tableName client =
@@ -170,9 +170,9 @@ fetchRecord { client, table, expect, id } =
 `expect` param requires a function that returns a `Msg`.
 
 You can use [expectRecordList](#expectRecordList) to interpret the result as a
-list of [Record](PostgrestAdmin.Record)s.
+list of [Record](PostgRestAdmin.Record)s.
 
-    import PostgrestAdmin.Cmd as AppCmd
+    import PostgRestAdmin.Cmd as AppCmd
 
     fetchList : String -> Client -> AppCmd.Cmd Msg
     fetchList tableName client =
@@ -204,9 +204,9 @@ fetchRecordList { client, table, params, expect } =
 `expect` param requires a function that returns a `Msg`.
 
 You can use [expectRecord](#expectRecord) to interpret the result as a
-[Record](PostgrestAdmin.Record).
+[Record](PostgRestAdmin.Record).
 
-    import PostgrestAdmin.Cmd as AppCmd
+    import PostgRestAdmin.Cmd as AppCmd
 
     save : Record -> Maybe String -> Client -> AppCmd.Cmd Msg
     save record id client =
@@ -235,9 +235,9 @@ saveRecord { client, record, id, expect } =
 `expect` param requires a function that returns a `Msg`.
 
 You can use [expectRecord](#expectRecord) to interpret the result as a
-[Record](PostgrestAdmin.Record).
+[Record](PostgRestAdmin.Record).
 
-    import PostgrestAdmin.Cmd as AppCmd
+    import PostgRestAdmin.Cmd as AppCmd
 
     save : Record -> Client -> AppCmd.Cmd Msg
     save record client =

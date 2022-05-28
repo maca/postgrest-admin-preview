@@ -1,4 +1,4 @@
-module PostgrestAdmin.Cmd exposing
+module PostgRestAdmin.Cmd exposing
     ( Cmd
     , wrap
     , none
@@ -22,12 +22,12 @@ import Platform.Cmd as Platform
 [Cmd](https://package.elm-lang.org/packages/elm/core/latest/Platform-Cmd#Cmd)
 for internal communication.
 
-When mounting an application via [Config.withMountPoint](PostgrestAdmin.Config#withMountPoint),
+When mounting an application via [Config.withMountPoint](PostgRestAdmin.Config#withMountPoint),
 your app should use this type instead of
 [Platform.Cmd](https://package.elm-lang.org/packages/elm/core/latest/Platform-Cmd#Cmd),
 then it's just matter of using [wrap](#wrap) to wrap the Cmd.
 
-[PostgrestAdmin.Client](PostgrestAdmin.Client) speaks this language.
+[PostgRestAdmin.Client](PostgRestAdmin.Client) speaks this language.
 
 -}
 type alias Cmd msg =
@@ -38,10 +38,10 @@ type alias Cmd msg =
 
       import Time exposing (Posix)
 
-      getNewTime : (Posix -> Msg) -> PostgrestAdmin.Cmd Msg
+      getNewTime : (Posix -> Msg) -> PostgRestAdmin.Cmd Msg
       getNewTime tagger =
         Task.perform tagger Time.now
-            |> PostgrestAdmin.Cmd.wrap
+            |> PostgRestAdmin.Cmd.wrap
 
 -}
 wrap : Platform.Cmd msg -> Cmd msg

@@ -59,9 +59,9 @@ import Internal.Upload as Upload
 import Json.Decode as Decode
 import Json.Encode as Encode
 import List.Extra as List
+import PostgRestAdmin.Client as Client exposing (Client)
+import PostgRestAdmin.Record as Record exposing (Record)
 import Postgrest.Client as PG
-import PostgrestAdmin.Client as Client exposing (Client)
-import PostgrestAdmin.Record as Record exposing (Record)
 import String.Extra as String
 import Task
 import Time

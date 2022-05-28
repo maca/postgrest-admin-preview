@@ -1,4 +1,4 @@
-module PostgrestAdmin.Record exposing
+module PostgRestAdmin.Record exposing
     ( Record
     , fromTable
     , id
@@ -54,14 +54,14 @@ type alias Record =
     Record.Record
 
 
-{-| Create a blank record from a [Table](PostgrestAdmin.Client#Table).
+{-| Create a blank record from a [Table](PostgRestAdmin.Client#Table).
 -}
 fromTable : Table -> Record
 fromTable =
     Record.fromTable
 
 
-{-| Get the [Table](PostgrestAdmin.Client#Table) for the Record.
+{-| Get the [Table](PostgRestAdmin.Client#Table) for the Record.
 -}
 getTable : Record -> Table
 getTable =
@@ -75,21 +75,21 @@ id =
     Record.id
 
 
-{-| Get the Record [Table](PostgrestAdmin.Client#Table) name.
+{-| Get the Record [Table](PostgRestAdmin.Client#Table) name.
 -}
 tableName : Record -> String
 tableName =
     Record.tableName
 
 
-{-| Check if the Record has errors after [saving](PostgrestAdmin.Client#saveRecord).
+{-| Check if the Record has errors after [saving](PostgRestAdmin.Client#saveRecord).
 -}
 hasErrors : Record -> Bool
 hasErrors =
     Record.hasErrors
 
 
-{-| Get the Record errors after [saving](PostgrestAdmin.Client#saveRecord).
+{-| Get the Record errors after [saving](PostgRestAdmin.Client#saveRecord).
 -}
 errors : Record -> Dict String (Maybe String)
 errors =
