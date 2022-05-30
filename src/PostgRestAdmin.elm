@@ -67,9 +67,9 @@ type alias Model m msg =
     , notification : Notification
     , error : Maybe Error
     , formFields : Dict String (List String)
-    , application : Maybe (MountPoint m msg)
     , client : Client
     , onLogin : Maybe String -> Cmd (Msg m msg)
+    , applicationConfig : Maybe (MountPoint m msg)
     , mountedApp : Application.Application m msg
     }
 
@@ -120,11 +120,11 @@ init decoder flags url key =
             , error = Nothing
             , client = Client.init config.host config.authScheme
             , formFields = config.formFields
-            , application = config.application
             , onLogin =
                 Maybe.withDefault ""
                     >> config.onLogin
                     >> Cmd.map (always NoOp)
+            , applicationConfig = config.application
             , mountedApp = Application.none
             }
     in
@@ -182,7 +182,7 @@ update msg model =
                                 { client = client
                                 , formFields = model.formFields
                                 , key = model.key
-                                , application = model.application
+                                , application = model.applicationConfig
                                 }
                     in
                     ( { model | client = client, route = route }
@@ -265,7 +265,16 @@ update msg model =
 
         RequestPerformed client passedMsg ->
             ( { model | client = client }
-            , Task.perform identity (Task.succeed passedMsg)
+            , Cmd.batch
+                [ Task.perform identity (Task.succeed passedMsg)
+                , case Client.toResponse client of
+                    Ok _ ->
+                        Cmd.none
+
+                    Err err ->
+                        Notification.error (errorToString err)
+                            |> Task.perform NotificationChanged
+                ]
             )
 
         PageFormChanged childMsg ->
@@ -487,7 +496,7 @@ parseRoute url model =
             { client = model.client
             , formFields = model.formFields
             , key = model.key
-            , application = model.application
+            , application = model.applicationConfig
             }
 
     else
@@ -644,6 +653,12 @@ mapAppCmd tagger appCmd =
     case appCmd of
         AppCmd.ChildCmd cmd ->
             Cmd.map tagger cmd
+
+        AppCmd.Batch cmds ->
+            Cmd.batch (List.map (mapAppCmd tagger) cmds)
+
+        AppCmd.ChangeNotification cmd ->
+            Cmd.map NotificationChanged cmd
 
         AppCmd.Fetch decode task ->
             task

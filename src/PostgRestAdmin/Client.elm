@@ -7,6 +7,7 @@ module PostgRestAdmin.Client exposing
     , fetchRecordList
     , saveRecord
     , deleteRecord
+    , upsertValue
     , Error
     , errorToString
     , expectRecord
@@ -40,6 +41,7 @@ but a [PostgRestAdmin.Cmd](PostgRestAdmin.Cmd).
 @docs fetchRecordList
 @docs saveRecord
 @docs deleteRecord
+@docs upsertValue
 
 @docs Error
 @docs errorToString
@@ -258,6 +260,17 @@ deleteRecord :
     -> AppCmd.Cmd msg
 deleteRecord { client, record, expect } =
     Internal.Fetch expect (Client.deleteRecord client record)
+
+
+upsertValue :
+    { path : String
+    , client : Client
+    , value : Value
+    , expect : Result Error Value -> msg
+    }
+    -> AppCmd.Cmd msg
+upsertValue { client, path, value, expect } =
+    Internal.Fetch expect (Client.upsert client path value)
 
 
 {-| Decode the Value for successful Result as a record, decode as such and

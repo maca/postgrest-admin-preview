@@ -52,14 +52,13 @@ import Internal.Client exposing (selects)
 import Internal.Cmd as AppCmd
 import Internal.Download as Download exposing (Download, Format(..))
 import Internal.Field as Field
-import Internal.Notification as Notification
 import Internal.Schema exposing (Column, Constraint(..), Table)
 import Internal.Search as Search exposing (Search)
-import Internal.Upload as Upload
 import Json.Decode as Decode
 import Json.Encode as Encode
 import List.Extra as List
 import PostgRestAdmin.Client as Client exposing (Client)
+import PostgRestAdmin.Notification as Notification
 import PostgRestAdmin.Record as Record exposing (Record)
 import Postgrest.Client as PG
 import String.Extra as String
@@ -100,9 +99,8 @@ type Msg
     | CsvFileRequested
     | CsvFileSelected File
     | CsvFileLoaded String
-    | CsvFilePosted Int
+    | CsvFilePosted (Result Error Int)
     | ToggleSearchOpen
-    | NotificationChanged Notification.Msg
     | FetchFailed Error
 
 
@@ -370,33 +368,33 @@ update msg listing =
                                     >> Encode.dict identity Encode.string
                                 )
                                 records
-
-                        path =
-                            Url.absolute [ listing.table.name ] []
                     in
                     ( listing
-                    , Upload.post listing.client path json
-                        |> attemptWithError FetchFailed
-                            (\_ -> CsvFilePosted (List.length records))
-                        |> AppCmd.wrap
+                    , Client.upsertValue
+                        { client = listing.client
+                        , path = Url.absolute [ listing.table.name ] []
+                        , value = json
+                        , expect =
+                            Result.map (always (List.length records))
+                                >> CsvFilePosted
+                        }
                     )
 
                 Err _ ->
                     ( listing, AppCmd.none )
 
-        CsvFilePosted count ->
+        CsvFilePosted (Ok count) ->
             ( listing
-            , Cmd.batch
+            , AppCmd.batch
                 [ Dom.setViewportOf listing.table.name 0 0
                     |> Task.attempt (always Reload)
-                , (String.fromInt count ++ " records where saved.")
-                    |> Notification.confirm
-                    |> Task.perform NotificationChanged
+                    |> AppCmd.wrap
+                , Notification.confirm
+                    (String.fromInt count ++ " records where saved.")
                 ]
-                |> AppCmd.wrap
             )
 
-        NotificationChanged _ ->
+        CsvFilePosted (Err _) ->
             ( listing, AppCmd.none )
 
         FetchFailed _ ->

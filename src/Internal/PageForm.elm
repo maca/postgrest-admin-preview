@@ -17,10 +17,10 @@ import Html.Events exposing (onSubmit)
 import Internal.Cmd as AppCmd
 import Internal.Field as Field
 import Internal.Input as Input exposing (Input)
-import Internal.Notification as Notification
 import Internal.Schema exposing (Table)
 import Internal.Value exposing (Value(..))
 import PostgRestAdmin.Client as Client exposing (Client)
+import PostgRestAdmin.Notification as Notification
 import PostgRestAdmin.Record as Record exposing (Record)
 import String.Extra as String
 import Task exposing (Task)
@@ -34,7 +34,6 @@ type Msg
     | Fetched (Result Error Record)
     | Saved (Result Error Record)
     | InputChanged Input.Msg
-    | NotificationChanged Notification.Msg
     | Submitted
 
 
@@ -129,8 +128,12 @@ update msg (PageForm params) =
 
         Saved (Ok record) ->
             ( PageForm params
-            , Notification.confirm "The record was saved"
-                |> navigate params.key params.table.name (Record.id record)
+            , AppCmd.batch
+                [ Url.absolute [ params.table.name, Maybe.withDefault "" (Record.id record) ] []
+                    |> Nav.pushUrl params.key
+                    |> AppCmd.wrap
+                , Notification.confirm "The record was saved"
+                ]
             )
 
         Saved (Err _) ->
@@ -142,8 +145,7 @@ update msg (PageForm params) =
                     Input.update params.client inputMsg params.inputs
             in
             ( PageForm { params | inputs = inputs }
-            , AppCmd.map InputChanged cmd
-              -- , Notification.dismiss |> Task.perform NotificationChanged
+            , AppCmd.batch [ AppCmd.map InputChanged cmd, Notification.dismiss ]
             )
 
         Submitted ->
@@ -156,27 +158,9 @@ update msg (PageForm params) =
                 }
             )
 
-        NotificationChanged _ ->
-            ( PageForm params, AppCmd.none )
 
 
-navigate :
-    Nav.Key
-    -> String
-    -> Maybe String
-    -> Task Never Notification.Msg
-    -> AppCmd.Cmd Msg
-navigate key resourcesName resourceId notificationTask =
-    Cmd.batch
-        [ Url.absolute [ resourcesName, Maybe.withDefault "" resourceId ] []
-            |> Nav.pushUrl key
-        , Task.perform NotificationChanged notificationTask
-        ]
-        |> AppCmd.wrap
-
-
-
--- Utils
+-- UTILS
 
 
 toRecord : PageForm -> Record
@@ -242,7 +226,7 @@ toId (PageForm params) =
 
 
 
--- View
+-- VIEW
 
 
 view : PageForm -> Html Msg

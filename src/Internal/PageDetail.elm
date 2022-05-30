@@ -31,11 +31,11 @@ import Html.Attributes exposing (class, href)
 import Html.Events exposing (onClick)
 import Internal.Cmd as AppCmd
 import Internal.Field as Field exposing (Field)
-import Internal.Notification as Notification
 import Internal.Record as Record exposing (Record)
 import Internal.Schema exposing (Constraint(..), Reference, Schema, Table)
 import Internal.Value exposing (Value(..))
 import PostgRestAdmin.Client as Client exposing (Client)
+import PostgRestAdmin.Notification as Notification
 import String.Extra as String
 import Task exposing (Task)
 import Url
@@ -50,7 +50,6 @@ type Msg
     | DeleteModalOpened
     | DeleteModalClosed
     | DeleteConfirmed
-    | NotificationChanged Notification.Msg
 
 
 type PageDetail
@@ -118,8 +117,12 @@ update msg (PageDetail params) =
 
         Deleted (Ok _) ->
             ( PageDetail params
-            , Notification.confirm "The record was deleted"
-                |> navigate params.key params.table.name
+            , AppCmd.batch
+                [ Url.absolute [ params.table.name ] []
+                    |> Nav.pushUrl params.key
+                    |> AppCmd.wrap
+                , Notification.confirm "The record was deleted"
+                ]
             )
 
         Deleted (Err _) ->
@@ -144,18 +147,6 @@ update msg (PageDetail params) =
                 Nothing ->
                     AppCmd.none
             )
-
-        NotificationChanged _ ->
-            ( PageDetail params, AppCmd.none )
-
-
-navigate : Nav.Key -> String -> Task Never Notification.Msg -> AppCmd.Cmd Msg
-navigate key resourcesName notificationTask =
-    Cmd.batch
-        [ Url.absolute [ resourcesName ] [] |> Nav.pushUrl key
-        , Task.perform NotificationChanged notificationTask
-        ]
-        |> AppCmd.wrap
 
 
 

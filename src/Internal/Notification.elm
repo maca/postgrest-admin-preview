@@ -1,6 +1,6 @@
 module Internal.Notification exposing
     ( Msg
-    , Notification
+    , Notification(..)
     , confirm
     , dismiss
     , error
@@ -9,7 +9,7 @@ module Internal.Notification exposing
     , view
     )
 
-import Html exposing (Html, div, i, p, text)
+import Html exposing (Html, div, i, p, pre, text)
 import Html.Attributes exposing (class)
 import Html.Events exposing (onClick)
 import Task exposing (Task)
@@ -35,22 +35,17 @@ none =
 
 error : String -> Task Never Msg
 error message =
-    task (Alert message)
+    Task.succeed (Alert message)
 
 
 confirm : String -> Task Never Msg
 confirm message =
-    task (Confirm message)
+    Task.succeed (Confirm message)
 
 
 dismiss : Task Never Msg
 dismiss =
-    task Dismiss
-
-
-task : Msg -> Task Never Msg
-task msg =
-    Time.now |> Task.andThen (always <| Task.succeed msg)
+    Task.succeed Dismiss
 
 
 update : Msg -> Notification
@@ -81,8 +76,11 @@ view notification =
 
 viewHelp : String -> String -> Html Msg
 viewHelp notificationType message =
-    div [ class "notification", class notificationType ]
-        [ p [] [ text message ]
+    div
+        [ class "notification"
+        , class notificationType
+        ]
+        [ pre [] [ text message ]
         , div [ class "close" ]
             [ i [ class "icono-cross", onClick Dismiss ] [] ]
         ]

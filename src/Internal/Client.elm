@@ -17,12 +17,14 @@ module Internal.Client exposing
     , toResponse
     , toSchema
     , update
+    , upsert
     , view
     )
 
 import Dict
 import Dict.Extra as Dict
 import Html exposing (Html, text)
+import Http exposing (header)
 import Internal.AuthScheme as AuthScheme exposing (AuthScheme)
 import Internal.Field as Field
 import Internal.Record as Record exposing (Record)
@@ -34,11 +36,11 @@ import Internal.Schema as Schema
         , Table
         )
 import Json.Decode as Decode exposing (Value)
-import Json.Encode as Encode
+import Json.Encode as Encode exposing (Value)
 import Postgrest.Client as PG exposing (Endpoint, Request, Selectable)
 import Task exposing (Task)
 import Url exposing (Url)
-import Utils.Task exposing (Error(..))
+import Utils.Task exposing (Error(..), handleResponse)
 
 
 type Client
@@ -260,6 +262,35 @@ deleteRecord ((Client params) as client) record =
 
         Nothing ->
             missingPrimaryKey client
+
+
+upsert : Client -> String -> Value -> Task Never Client
+upsert (Client params) path value =
+    let
+        host =
+            params.host
+    in
+    case toJwtString (Client params) of
+        Just token ->
+            Http.task
+                { method = "POST"
+                , headers =
+                    [ header "Authorization" ("Bearer " ++ token)
+                    , header "Prefer" "resolution=merge-duplicates"
+                    ]
+                , url = Url.toString { host | path = path }
+                , body = Http.jsonBody value
+                , resolver = Http.stringResolver (handleResponse (\_ -> Ok ()))
+                , timeout = Nothing
+                }
+                |> Task.map (\_ -> Client { params | response = Ok Encode.null })
+                |> Task.onError
+                    (\err ->
+                        Task.succeed (Client { params | response = Err err })
+                    )
+
+        Nothing ->
+            authFailed (Client params)
 
 
 

@@ -2,6 +2,7 @@ module PostgRestAdmin.Cmd exposing
     ( Cmd
     , wrap
     , none
+    , batch
     , map
     )
 
@@ -10,6 +11,7 @@ module PostgRestAdmin.Cmd exposing
 @docs Cmd
 @docs wrap
 @docs none
+@docs batch
 @docs map
 
 -}
@@ -59,8 +61,22 @@ none =
     wrap Cmd.none
 
 
-{-| Transform the messages produced by a command. Similar to
-[Platform.Cmd](https://package.elm-lang.org/packages/elm/core/latest/Platform-Cmd#map).
+{-| Pass a bunch of commands to the runtime, execution order is not guaranteed.
+
+Equivalent to
+[Platform.Cmd.batch](https://package.elm-lang.org/packages/elm/core/latest/Platform-Cmd#batch).
+
+-}
+batch : List (Cmd msg) -> Cmd msg
+batch =
+    Internal.batch
+
+
+{-| Transform the messages produced by a command.
+
+Equivalent to
+[Platform.Cmd.map](https://package.elm-lang.org/packages/elm/core/latest/Platform-Cmd#map).
+
 -}
 map : (a -> b) -> Cmd a -> Cmd b
 map =
