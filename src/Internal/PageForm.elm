@@ -23,7 +23,6 @@ import PostgRestAdmin.Client as Client exposing (Client)
 import PostgRestAdmin.Notification as Notification
 import PostgRestAdmin.Record as Record exposing (Record)
 import String.Extra as String
-import Task exposing (Task)
 import Url
 import Url.Builder as Url
 import Utils.Task exposing (Error(..))

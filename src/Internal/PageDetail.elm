@@ -37,7 +37,6 @@ import Internal.Value exposing (Value(..))
 import PostgRestAdmin.Client as Client exposing (Client)
 import PostgRestAdmin.Notification as Notification
 import String.Extra as String
-import Task exposing (Task)
 import Url
 import Url.Builder as Url
 import Utils.Task exposing (Error(..))

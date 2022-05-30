@@ -96,10 +96,10 @@ type Msg
     | SelectOff
     | DownloadRequested Format
     | Downloaded Download
-    | CsvFileRequested
-    | CsvFileSelected File
-    | CsvFileLoaded String
-    | CsvFilePosted (Result Error Int)
+    | CsvUploadRequested
+    | CsvUploadSelected File
+    | CsvUploadLoaded String
+    | CsvUploadPosted (Result Error Int)
     | ToggleSearchOpen
     | FetchFailed Error
 
@@ -345,19 +345,19 @@ update msg listing =
                 |> AppCmd.wrap
             )
 
-        CsvFileRequested ->
+        CsvUploadRequested ->
             ( listing
-            , Select.file [ "text/csv" ] CsvFileSelected
+            , Select.file [ "text/csv" ] CsvUploadSelected
                 |> AppCmd.wrap
             )
 
-        CsvFileSelected file ->
+        CsvUploadSelected file ->
             ( listing
-            , Task.perform CsvFileLoaded (File.toString file)
+            , Task.perform CsvUploadLoaded (File.toString file)
                 |> AppCmd.wrap
             )
 
-        CsvFileLoaded string ->
+        CsvUploadLoaded string ->
             case Csv.parse string of
                 Ok { headers, records } ->
                     let
@@ -376,14 +376,14 @@ update msg listing =
                         , value = json
                         , expect =
                             Result.map (always (List.length records))
-                                >> CsvFilePosted
+                                >> CsvUploadPosted
                         }
                     )
 
                 Err _ ->
                     ( listing, AppCmd.none )
 
-        CsvFilePosted (Ok count) ->
+        CsvUploadPosted (Ok count) ->
             ( listing
             , AppCmd.batch
                 [ Dom.setViewportOf listing.table.name 0 0
@@ -394,7 +394,7 @@ update msg listing =
                 ]
             )
 
-        CsvFilePosted (Err _) ->
+        CsvUploadPosted (Err _) ->
             ( listing, AppCmd.none )
 
         FetchFailed _ ->
@@ -501,7 +501,7 @@ view listing =
                         [ text "Download CSV" ]
                     , button
                         [ class "button-clear"
-                        , onClick CsvFileRequested
+                        , onClick CsvUploadRequested
                         ]
                         [ text "Upload CSV" ]
                     ]

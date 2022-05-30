@@ -7,10 +7,9 @@ module PostgRestAdmin.Notification exposing
     )
 
 import Internal.Cmd as Internal
-import Internal.Notification as Notification exposing (Msg)
+import Internal.Notification as Notification
 import PostgRestAdmin.Cmd as AppCmd
 import Task exposing (Task)
-import Time
 
 
 type alias Notification =

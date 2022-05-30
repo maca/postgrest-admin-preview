@@ -13,7 +13,6 @@ import Html exposing (Html, div, i, p, pre, text)
 import Html.Attributes exposing (class)
 import Html.Events exposing (onClick)
 import Task exposing (Task)
-import Time
 
 
 type Msg
