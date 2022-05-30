@@ -61,7 +61,7 @@ type alias Config m msg =
 {-| [PostgRestAdmin.application](PostgRestAdmin#application) decoder with
 defaults.
 
-    main : PostgRestAdmin.Program Model Msg
+    main : PostgRestAdmin.Program Never Never
     main =
         PostgRestAdmin.application Config.init
 
@@ -191,9 +191,19 @@ This is usefull if you want to override an existing page or add additional
 behaviour.
 
 The component specification is similar to the specification for
-[Browser.application](https://package.elm-lang.org/packages/elm/browser/latest/Browser#application),
+[Browser.element](https://package.elm-lang.org/packages/elm/browser/latest/Browser#element),
 with the addition of `onLogin` param for which a msg should be provided to be
 sent on successful login.
+
+Note that the type signature changes from
+`PostgRestAdmin.Program Nothing Nothing`.
+`Model` and `Msg` are defined by your application.
+
+The url parser should map to a Msg to be used to `update` your application when
+navigating to this route built the parameters that the parser defines, you can
+use
+[Url.Parser.oneOf](https://package.elm-lang.org/packages/elm/url/latest/Url.Parser#oneOf)
+to parse many routes.
 
     main : PostgRestAdmin.Program Model Msg
     main =
@@ -208,6 +218,9 @@ sent on successful login.
                     (s "posts" </> Parser.string </> s "comments")
                 )
             |> PostgRestAdmin.application
+
+The `application` is initialized with a [Client](PostgRestAdmin-Client) you can
+use to perform requests.
 
 -}
 withMountPoint :

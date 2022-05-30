@@ -5,9 +5,6 @@ module PostgRestAdmin exposing
 
 {-|
 
-
-# Program configuration
-
 @docs Program
 
 
