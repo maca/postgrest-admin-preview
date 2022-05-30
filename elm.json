@@ -1,6 +1,6 @@
 {
     "type": "package",
-    "name": "maca/postgres-admin-preview",
+    "name": "maca/postgrest-admin-preview",
     "summary": "Backoffice interface for PostgREST",
     "license": "BSD-3-Clause",
     "version": "1.0.0",
