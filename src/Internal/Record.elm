@@ -9,6 +9,7 @@ module Internal.Record exposing
     , hasErrors
     , id
     , label
+    , location
     , primaryKey
     , primaryKeyName
     , referencedBy
@@ -64,6 +65,13 @@ getTable record =
 id : Record -> Maybe String
 id record =
     primaryKey record |> Maybe.andThen (.value >> Value.toString)
+
+
+location : Record -> Maybe String
+location record =
+    id record
+        |> Maybe.map
+            (\i -> "/" ++ tableName record ++ "?id=eq." ++ i)
 
 
 tableName : Record -> String

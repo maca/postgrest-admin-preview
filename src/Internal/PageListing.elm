@@ -370,7 +370,7 @@ update msg listing =
                                 records
                     in
                     ( listing
-                    , Client.upsert
+                    , Client.post
                         { client = listing.client
                         , path = Url.absolute [ listing.table.name ] []
                         , value = json

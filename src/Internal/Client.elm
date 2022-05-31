@@ -9,6 +9,7 @@ module Internal.Client exposing
     , init
     , isAuthSuccessMsg
     , isAuthenticated
+    , post
     , saveRecord
     , schemaIsLoaded
     , selects
@@ -17,7 +18,6 @@ module Internal.Client exposing
     , toResponse
     , toSchema
     , update
-    , upsert
     , view
     )
 
@@ -264,8 +264,8 @@ deleteRecord ((Client params) as client) record =
             missingPrimaryKey client
 
 
-upsert : Client -> String -> Value -> Task Never Client
-upsert (Client params) path value =
+post : Client -> String -> Value -> Task Never Client
+post (Client params) path value =
     let
         host =
             params.host

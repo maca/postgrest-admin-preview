@@ -2,6 +2,7 @@ module PostgRestAdmin.Record exposing
     ( Record
     , fromTable
     , id
+    , location
     , label
     , errors
     , hasErrors
@@ -19,6 +20,7 @@ module PostgRestAdmin.Record exposing
 @docs Record
 @docs fromTable
 @docs id
+@docs location
 @docs label
 
 
@@ -75,6 +77,21 @@ id =
     Record.id
 
 
+{-| Obtain the location for a record
+
+    tableName record == "posts"
+    -- True
+    id record == Just 1
+    -- True
+    location record == Just "/posts?id=eq.1"
+    -- True
+
+-}
+location : Record -> Maybe String
+location =
+    Record.location
+
+
 {-| Get the Record [Table](PostgRestAdmin.Client#Table) name.
 -}
 tableName : Record -> String
@@ -82,7 +99,8 @@ tableName =
     Record.tableName
 
 
-{-| Check if the Record has errors after [saving](PostgRestAdmin.Client#saveRecord).
+{-| Check if the Record has errors after
+[saving](PostgRestAdmin.Client#saveRecord).
 -}
 hasErrors : Record -> Bool
 hasErrors =

@@ -7,7 +7,7 @@ module PostgRestAdmin.Client exposing
     , fetchRecordList
     , saveRecord
     , deleteRecord
-    , upsert
+    , post
     , Error
     , errorToString
     , expectRecord
@@ -41,7 +41,7 @@ but a [PostgRestAdmin.Cmd](PostgRestAdmin.Cmd).
 @docs fetchRecordList
 @docs saveRecord
 @docs deleteRecord
-@docs upsert
+@docs post
 
 @docs Error
 @docs errorToString
@@ -262,20 +262,22 @@ deleteRecord { client, record, expect } =
     Internal.Fetch expect (Client.deleteRecord client record)
 
 
-{-| POST to a PostgREST resource url.
+{-| POST to a PostgREST path.
 
-See [fetchRecord](#fetchRecord).
+The path can identify a plural resource such as `/posts` in which case an
+[upsert](https://postgrest.org/en/stable/api.html?highlight=upsert#upsert)
+operation will be performed, or a singular resource such as '/posts?id=eq.1'.
 
 -}
-upsert :
+post :
     { path : String
     , client : Client
     , value : Value
     , expect : Result Error Value -> msg
     }
     -> AppCmd.Cmd msg
-upsert { client, path, value, expect } =
-    Internal.Fetch expect (Client.upsert client path value)
+post { client, path, value, expect } =
+    Internal.Fetch expect (Client.post client path value)
 
 
 {-| Decode the Value for successful Result as a record, decode as such and
