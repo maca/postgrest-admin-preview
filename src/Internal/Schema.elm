@@ -25,6 +25,7 @@ import Json.Decode as Decode
         , maybe
         , string
         )
+import Json.Encode as Encode
 import Regex exposing (Regex)
 import Task exposing (Task)
 import Time.Extra as Time
@@ -181,7 +182,15 @@ columnDecoder columnNames requiredColumns columnName =
                             mapValue PText string
 
                         else if format == "json" then
-                            mapValue PJson Decode.value
+                            Decode.map
+                                (makeColumn (Decode.map PJson Decode.value))
+                                (Decode.map PJson
+                                    (Decode.oneOf
+                                        [ field "default" Decode.value
+                                        , Decode.succeed Encode.null
+                                        ]
+                                    )
+                                )
 
                         else if not (List.isEmpty enum) then
                             mapValue (flip PEnum enum) string

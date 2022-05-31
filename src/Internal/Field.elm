@@ -139,10 +139,9 @@ valueToHtml value =
         PText maybe ->
             maybeToHtml identity maybe
 
-        PJson maybe ->
-            maybe
-                |> Maybe.andThen
-                    (Decode.decodeValue Decode.string >> Result.toMaybe)
+        PJson jsonValue ->
+            Decode.decodeValue Decode.string jsonValue
+                |> Result.toMaybe
                 |> maybeToHtml identity
 
         Unknown _ ->
