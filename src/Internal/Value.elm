@@ -24,6 +24,7 @@ type Value
     | PBool (Maybe Bool)
     | PTime (Maybe Time.Posix)
     | PDate (Maybe Time.Posix)
+    | PJson (Maybe Decode.Value)
     | Unknown Decode.Value
 
 
@@ -57,6 +58,9 @@ encode value =
 
         PDate maybe ->
             encodeWith Encode.string (Maybe.map Iso8601.fromTime maybe)
+
+        PJson maybe ->
+            Maybe.withDefault Encode.null maybe
 
         Unknown _ ->
             Encode.null
@@ -97,22 +101,22 @@ updateWithString : String -> Value -> Value
 updateWithString string value =
     case value of
         PString _ ->
-            PString <| String.nonBlank string
+            PString (String.nonBlank string)
 
         PText _ ->
-            PText <| String.nonBlank string
+            PText (String.nonBlank string)
 
         PEnum _ opts ->
             PEnum (String.nonBlank string) opts
 
         PFloat _ ->
-            PFloat <| String.toFloat string
+            PFloat (String.toFloat string)
 
         PInt _ ->
-            PInt <| String.toInt string
+            PInt (String.toInt string)
 
         PBool prev ->
-            PBool <| Maybe.map not prev
+            PBool (Maybe.map not prev)
 
         PTime _ ->
             let
@@ -123,10 +127,13 @@ updateWithString string value =
                     else
                         string
             in
-            PTime <| Result.toMaybe <| Iso8601.toTime string_
+            PTime (Result.toMaybe (Iso8601.toTime string_))
 
         PDate _ ->
-            PDate <| Result.toMaybe <| Iso8601.toTime string
+            PDate (Result.toMaybe (Iso8601.toTime string))
+
+        PJson _ ->
+            PJson (Just (Encode.string string))
 
         Unknown _ ->
             value
@@ -166,11 +173,18 @@ toString value =
         PBool (Just False) ->
             Just "false"
 
+        PBool Nothing ->
+            Nothing
+
         PTime maybe ->
             Maybe.map (Iso8601.fromTime >> String.slice 0 19) maybe
 
         PDate maybe ->
             Maybe.map (Iso8601.fromTime >> String.slice 0 10) maybe
 
-        _ ->
+        PJson maybe ->
+            Maybe.andThen (Decode.decodeValue Decode.string >> Result.toMaybe)
+                maybe
+
+        Unknown _ ->
             Nothing

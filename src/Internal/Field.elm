@@ -13,6 +13,7 @@ import Html exposing (Html, a, text)
 import Html.Attributes exposing (href, target)
 import Internal.Schema exposing (Constraint(..))
 import Internal.Value as Value exposing (Value(..))
+import Json.Decode as Decode
 import List.Extra as List
 import Postgrest.Client as PG
 import String.Extra as String
@@ -106,38 +107,51 @@ toHtml onClick resourcesName { constraint, value } =
 valueToHtml : Value -> Html msg
 valueToHtml value =
     case value of
-        PFloat (Just float) ->
-            text (String.fromFloat float)
+        PFloat maybe ->
+            maybeToHtml String.fromFloat maybe
 
-        PInt (Just int) ->
-            text (String.fromInt int)
+        PInt maybe ->
+            maybeToHtml String.fromInt maybe
 
-        PString (Just string) ->
-            text string
+        PString maybe ->
+            maybeToHtml identity maybe
 
-        PEnum (Just string) _ ->
-            text (String.humanize string)
+        PEnum maybe _ ->
+            maybeToHtml String.humanize maybe
 
-        PBool (Just True) ->
-            text "true"
+        PBool maybe ->
+            maybeToHtml
+                (\bool ->
+                    if bool then
+                        "true"
 
-        PBool (Just False) ->
-            text "false"
+                    else
+                        "false"
+                )
+                maybe
 
-        PTime (Just time) ->
-            text (Time.format time)
+        PTime maybe ->
+            maybeToHtml Time.format maybe
 
-        PDate (Just time) ->
-            text (Time.toDateString time)
+        PDate maybe ->
+            maybeToHtml Time.toDateString maybe
 
-        PText (Just string) ->
-            text string
+        PText maybe ->
+            maybeToHtml identity maybe
+
+        PJson maybe ->
+            maybe
+                |> Maybe.andThen
+                    (Decode.decodeValue Decode.string >> Result.toMaybe)
+                |> maybeToHtml identity
 
         Unknown _ ->
             text "?"
 
-        _ ->
-            text ""
+
+maybeToHtml : (a -> String) -> Maybe a -> Html msg
+maybeToHtml func maybe =
+    Maybe.map func maybe |> Maybe.withDefault "" |> text
 
 
 recordLink :

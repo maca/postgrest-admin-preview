@@ -94,31 +94,34 @@ operation (Filter _ op) =
 
 
 fromColumn : String -> Column -> Maybe Filter
-fromColumn name col =
+fromColumn colName col =
     case .value col of
         PString _ ->
-            Just <| text name equals ""
+            Just (text colName equals "")
 
         PText _ ->
-            Just <| text name equals ""
+            Just (text colName equals "")
 
         PInt _ ->
-            Just <| int name equals ""
+            Just (int colName equals "")
 
         PFloat _ ->
-            Just <| float name equals ""
+            Just (float colName equals "")
 
         PBool _ ->
-            Just <| isTrue name
+            Just (isTrue colName)
 
         PTime _ ->
-            Just <| time name inDate ""
+            Just (time colName inDate "")
 
         PDate _ ->
-            Just <| date name inDate ""
+            Just (date colName inDate "")
 
         PEnum _ choices ->
-            Just <| oneOf name choices Set.empty
+            Just (oneOf colName choices Set.empty)
+
+        PJson _ ->
+            Just (text colName equals "")
 
         Unknown _ ->
             Nothing

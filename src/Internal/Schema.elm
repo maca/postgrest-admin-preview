@@ -180,6 +180,9 @@ columnDecoder columnNames requiredColumns columnName =
                         else if format == "text" then
                             mapValue PText string
 
+                        else if format == "json" then
+                            mapValue PJson Decode.value
+
                         else if not (List.isEmpty enum) then
                             mapValue (flip PEnum enum) string
 

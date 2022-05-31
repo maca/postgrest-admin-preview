@@ -9,7 +9,7 @@ module Internal.Notification exposing
     , view
     )
 
-import Html exposing (Html, div, i, p, pre, text)
+import Html exposing (Html, div, i, pre, text)
 import Html.Attributes exposing (class)
 import Html.Events exposing (onClick)
 import Task exposing (Task)

@@ -117,7 +117,9 @@ configured with
             |> Config.withHost "https://postgrest.example.com"
             |> Config.withFormAuth
                 (FormAuth.config
-                    |> withAuthUrl "https://postgrest.example.com/rpc/login")
+                    |> FormAuth.withAuthUrl
+                        "https://postgrest.example.com/rpc/login"
+                )
             |> Config.withOnLogin loginSuccess
             |> PostgRestAdmin.application
 
