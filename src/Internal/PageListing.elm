@@ -47,6 +47,7 @@ import Html.Attributes
         , id
         )
 import Html.Events as Events exposing (on, onClick, onMouseDown, onMouseUp)
+import Http
 import Inflect as String
 import Internal.Client exposing (selects)
 import Internal.Cmd as AppCmd
@@ -208,7 +209,7 @@ fetch { search, page, table, order, client } =
         { client = client
         , table = table
         , params = params ++ pgOrder ++ Search.toPGQuery search
-        , expect = Client.expectRecordList Fetched table
+        , expect = Fetched
         }
 
 
@@ -237,15 +238,15 @@ update msg listing =
             , AppCmd.none
             )
 
+        Fetched (Err _) ->
+            ( listing, AppCmd.none )
+
         RecordLinkClicked tableName id ->
             ( listing
             , Url.absolute [ tableName, id ] []
                 |> Nav.pushUrl listing.key
                 |> AppCmd.wrap
             )
-
-        Fetched (Err _) ->
-            ( listing, AppCmd.none )
 
         ApplyFilters ->
             ( listing
@@ -370,13 +371,18 @@ update msg listing =
                                 records
                     in
                     ( listing
-                    , Client.post
+                    , Client.request
                         { client = listing.client
+                        , method = "POST"
+                        , headers =
+                            [ Http.header "Prefer" "resolution=merge-duplicates" ]
                         , path = Url.absolute [ listing.table.name ] []
-                        , value = json
+                        , body = Http.jsonBody json
+                        , resolver = Client.resolveWhatever
                         , expect =
                             Result.map (always (List.length records))
                                 >> CsvUploadPosted
+                        , timeout = Nothing
                         }
                     )
 

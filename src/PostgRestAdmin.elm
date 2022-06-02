@@ -260,17 +260,22 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        RequestPerformed client passedMsg ->
-            ( { model | client = client }
-            , Cmd.batch
-                [ Task.perform identity (Task.succeed passedMsg)
-                , case Client.toResponse client of
-                    Ok _ ->
-                        Cmd.none
+        RequestPerformed mapper (Ok passedMsg) ->
+            ( model
+            , Task.attempt mapper (Task.succeed passedMsg)
+            )
 
-                    Err err ->
-                        Notification.error (errorToString err)
-                            |> Task.perform NotificationChanged
+        RequestPerformed _ (Err AuthError) ->
+            ( { model | client = Client.authFailed model.client }
+            , Cmd.none
+            )
+
+        RequestPerformed mapper (Err err) ->
+            ( model
+            , Cmd.batch
+                [ Task.attempt mapper (Task.fail err)
+                , Notification.error (errorToString err)
+                    |> Task.perform NotificationChanged
                 ]
             )
 
@@ -657,11 +662,5 @@ mapAppCmd tagger appCmd =
         AppCmd.ChangeNotification cmd ->
             Cmd.map NotificationChanged cmd
 
-        AppCmd.Fetch decode task ->
-            task
-                |> Task.map
-                    (\client ->
-                        tagger (decode (Client.toResponse client))
-                            |> RequestPerformed client
-                    )
-                |> Task.perform identity
+        AppCmd.Fetch mapper task ->
+            Task.attempt (RequestPerformed (mapper >> tagger)) task

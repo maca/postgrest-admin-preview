@@ -2,7 +2,6 @@ module Internal.Field exposing
     ( Field
     , compareTuple
     , isPrimaryKey
-    , setError
     , toHtml
     , update
     , updateWithString
@@ -15,7 +14,6 @@ import Internal.Schema exposing (Constraint(..))
 import Internal.Value as Value exposing (Value(..))
 import Json.Decode as Decode
 import List.Extra as List
-import Postgrest.Client as PG
 import String.Extra as String
 import Time
 import Time.Extra as Time
@@ -75,16 +73,6 @@ compareTuple ( name, column ) ( name_, column_ ) =
 
         _ ->
             compare (columnNameIndex name) (columnNameIndex name_)
-
-
-setError : PG.PostgrestErrorJSON -> Field -> Field
-setError { code } field =
-    case code of
-        Just "23502" ->
-            { field | error = Just "This field is required" }
-
-        _ ->
-            field
 
 
 

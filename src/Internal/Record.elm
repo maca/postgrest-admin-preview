@@ -127,12 +127,7 @@ decoderHelp :
     -> Decoder (Dict String Field)
 decoderHelp name column =
     Decode.andThen
-        (\dict ->
-            Decode.oneOf
-                [ fieldDecoder dict name column
-                , Decode.succeed dict
-                ]
-        )
+        (\dict -> fieldDecoder dict name column)
 
 
 fieldDecoder :

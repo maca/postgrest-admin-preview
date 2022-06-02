@@ -3,7 +3,6 @@ module Internal.Input exposing
     , Msg
     , fromField
     , isRequired
-    , setError
     , toField
     , toValue
     , update
@@ -36,7 +35,7 @@ import Internal.Schema exposing (Constraint(..), ForeignKeyParams)
 import Internal.Value as Value exposing (Value(..))
 import Maybe.Extra as Maybe
 import PostgRestAdmin.Client as Client exposing (Client)
-import Postgrest.Client as PG exposing (PostgrestErrorJSON)
+import Postgrest.Client as PG
 import String.Extra as String
 import Url.Builder as Url
 import Utils.Task exposing (Error(..))
@@ -273,11 +272,6 @@ toValue input =
 isRequired : Input -> Bool
 isRequired input =
     .required <| toField input
-
-
-setError : PostgrestErrorJSON -> Input -> Input
-setError error input =
-    toField input |> Field.setError error |> fromField
 
 
 toError : Input -> Maybe String
@@ -531,7 +525,7 @@ fetchRecords client name { tableName, labelColumnName } userInput =
                 { client = client
                 , table = table
                 , params = [ PG.select selects, PG.or queries, PG.limit 40 ]
-                , expect = Client.expectRecordList (ListingFetched name) table
+                , expect = ListingFetched name
                 }
 
         Nothing ->

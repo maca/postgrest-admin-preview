@@ -31,7 +31,7 @@ import Utils.Task exposing (Error(..))
 type Msg
     = LoggedIn Client
     | Fetched (Result Error Record)
-    | Saved (Result Error Record)
+    | Saved (Result Error ())
     | InputChanged Input.Msg
     | Submitted
 
@@ -85,7 +85,7 @@ fetchRecord (PageForm { id, client, table }) =
                 { client = client
                 , table = table
                 , id = recordId
-                , expect = Client.expectRecord Fetched table
+                , expect = Fetched
                 }
 
         Nothing ->
@@ -125,10 +125,12 @@ update msg (PageForm params) =
         Fetched (Err _) ->
             ( PageForm params, AppCmd.none )
 
-        Saved (Ok record) ->
+        Saved (Ok _) ->
             ( PageForm params
             , AppCmd.batch
-                [ Url.absolute [ params.table.name, Maybe.withDefault "" (Record.id record) ] []
+                [ Url.absolute
+                    [ params.table.name, Maybe.withDefault "" params.id ]
+                    []
                     |> Nav.pushUrl params.key
                     |> AppCmd.wrap
                 , Notification.confirm "The record was saved"
@@ -153,7 +155,7 @@ update msg (PageForm params) =
                 { client = params.client
                 , record = toFormFields (PageForm params)
                 , id = params.id
-                , expect = Client.expectRecord Saved params.table
+                , expect = Saved
                 }
             )
 

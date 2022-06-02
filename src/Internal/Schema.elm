@@ -6,12 +6,10 @@ module Internal.Schema exposing
     , Schema
     , Table
     , decoder
-    , fetchSchema
     )
 
 import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
-import Http
 import Internal.Value exposing (Value(..))
 import Json.Decode as Decode
     exposing
@@ -27,11 +25,8 @@ import Json.Decode as Decode
         )
 import Json.Encode as Encode
 import Regex exposing (Regex)
-import Task exposing (Task)
 import Time.Extra as Time
-import Url exposing (Url)
-import Url.Builder as Url
-import Utils.Task exposing (Error(..), fail, handleJsonResponse, toError)
+import Utils.Task exposing (Error(..), fail, toError)
 
 
 type alias ColumnNames =
@@ -83,18 +78,6 @@ type alias ColumnDefinition =
     , description : Maybe String
     , enum : List String
     }
-
-
-fetchSchema : Url -> Task Error Schema
-fetchSchema url =
-    Http.task
-        { method = "GET"
-        , headers = []
-        , url = Url.toString url
-        , body = Http.emptyBody
-        , resolver = Http.stringResolver <| handleJsonResponse <| decoder
-        , timeout = Nothing
-        }
 
 
 decoder : Decoder Schema

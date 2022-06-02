@@ -7,13 +7,11 @@ module PostgRestAdmin.Client exposing
     , fetchRecordList
     , saveRecord
     , deleteRecord
-    , post
     , Error
     , errorToString
-    , expectRecord
-    , expectRecordList
     , isAuthenticated
     , toJwtString
+    , request, resolveWhatever
     )
 
 {-|
@@ -29,6 +27,7 @@ module PostgRestAdmin.Client exposing
 
 @docs Table
 @docs getTable
+@docs tableName
 
 
 # Requests
@@ -47,12 +46,6 @@ but a [PostgRestAdmin.Cmd](PostgRestAdmin.Cmd).
 @docs errorToString
 
 
-# Result interpreting
-
-@docs expectRecord
-@docs expectRecordList
-
-
 # Authentication
 
 @docs isAuthenticated
@@ -60,15 +53,26 @@ but a [PostgRestAdmin.Cmd](PostgRestAdmin.Cmd).
 
 -}
 
-import Internal.Client as Client
+import Dict
+import Dict.Extra as Dict
+import Http exposing (header)
+import Internal.Client as Client exposing (Client)
 import Internal.Cmd as Internal
-import Internal.Schema as Schema
+import Internal.Field as Field
+import Internal.Schema as Schema exposing (Column, Constraint(..), Table)
 import Json.Decode as Decode exposing (Decoder, Value)
+import Json.Encode as Encode
 import PostgRestAdmin.Cmd as AppCmd
 import PostgRestAdmin.Record as Record exposing (Record)
-import Postgrest.Client as PG
+import Postgrest.Client as PG exposing (Selectable)
+import Task exposing (Task)
 import Url exposing (Url)
-import Utils.Task as Internal exposing (Error)
+import Utils.Task as Internal
+    exposing
+        ( Error(..)
+        , handleJsonResponse
+        , handleResponse
+        )
 
 
 {-| Represents a client for a PostgREST instance, including authentication
@@ -123,6 +127,13 @@ getTable =
     Client.getTable
 
 
+{-| Obtain the name of a table
+-}
+tableName : Table -> String
+tableName table =
+    table.name
+
+
 {-| Transform [Error](#Error) to an error explanation.
 -}
 errorToString : Error -> String
@@ -142,15 +153,15 @@ You can use [expectRecord](#expectRecord) to interpret the result as a
 
     import PostgRestAdmin.Cmd as AppCmd
 
-    fetch : String -> Client -> AppCmd.Cmd Msg
-    fetch tableName client =
+    fetch : (Result Error Record -> msg) -> String -> Client -> AppCmd.Cmd Msg
+    fetch tagger tableName client =
         case getTable tableName client of
             Just table ->
-                fetchRecordList
+                fetchRecord
                     { client = client
                     , table = table
                     , params = []
-                    , expect = Client.expectRecord MyFetchedMsg table
+                    , expect = tagger
                     }
 
             Nothing ->
@@ -161,11 +172,39 @@ fetchRecord :
     { client : Client
     , table : Table
     , id : String
-    , expect : Result Error Value -> msg
+    , expect : Result Error Record -> msg
     }
     -> AppCmd.Cmd msg
 fetchRecord { client, table, expect, id } =
-    Internal.Fetch expect (Client.fetchRecord client table id)
+    let
+        mapper =
+            mapResult expect (Record.decoder table)
+    in
+    case tablePrimaryKeyName table of
+        Just primaryKeyName ->
+            let
+                queryString =
+                    PG.toQueryString
+                        [ PG.select (selects table)
+                        , PG.eq (PG.string id) |> PG.param primaryKeyName
+                        , PG.limit 1
+                        ]
+            in
+            request
+                { client = client
+                , method = "GET"
+                , headers =
+                    [ header "Accept" "application/vnd.pgrst.object+json" ]
+                , path = "/" ++ tableName table ++ "?" ++ queryString
+                , body = Http.emptyBody
+                , timeout = Nothing
+                , resolver =
+                    Http.stringResolver (handleJsonResponse Decode.value)
+                , expect = mapper
+                }
+
+        Nothing ->
+            Internal.Fetch mapper missingPrimaryKey
 
 
 {-| Fetches a list of records for a given table.
@@ -176,15 +215,15 @@ list of [Record](PostgRestAdmin.Record)s.
 
     import PostgRestAdmin.Cmd as AppCmd
 
-    fetchList : String -> Client -> AppCmd.Cmd Msg
-    fetchList tableName client =
+    fetchList : (Result Error (List Record) -> Msg) -> String -> Client -> AppCmd.Cmd Msg
+    fetchList tagger tableName client =
         case getTable tableName client of
             Just table ->
                 fetchRecordList
                     { client = client
                     , table = table
                     , params = []
-                    , expect = Client.expectRecordList MyListFetchedMsg table
+                    , expect = Client.expectRecordList tagger table
                     }
 
             Nothing ->
@@ -195,11 +234,27 @@ fetchRecordList :
     { client : Client
     , table : Table
     , params : PG.Params
-    , expect : Result Error Value -> msg
+    , expect : Result Error (List Record) -> msg
     }
     -> AppCmd.Cmd msg
 fetchRecordList { client, table, params, expect } =
-    Internal.Fetch expect (Client.fetchRecordList client table params)
+    let
+        queryString =
+            PG.toQueryString
+                (PG.select (selects table) :: params)
+    in
+    request
+        { client = client
+        , method = "GET"
+        , headers = []
+        , path = "/" ++ tableName table ++ "?" ++ queryString
+        , body = Http.emptyBody
+        , timeout = Nothing
+        , resolver =
+            Http.stringResolver
+                (handleJsonResponse Decode.value)
+        , expect = mapResult expect (Decode.list (Record.decoder table))
+        }
 
 
 {-| Saves a record.
@@ -210,15 +265,14 @@ You can use [expectRecord](#expectRecord) to interpret the result as a
 
     import PostgRestAdmin.Cmd as AppCmd
 
-    save : Record -> Maybe String -> Client -> AppCmd.Cmd Msg
-    save record id client =
+    save : (Result Error Record -> Msg) -> Record -> Maybe String -> Client -> AppCmd.Cmd Msg
+    save tagger record id client =
         saveRecord
             { client = client
             , record = record
             , id = id
             , expect =
-                Client.expectRecord MySavedMsg
-                    (Record.getTable record)
+                Client.expectRecord tagger (Record.getTable record)
             }
 
 -}
@@ -226,11 +280,40 @@ saveRecord :
     { client : Client
     , record : Record
     , id : Maybe String
-    , expect : Result Error Value -> msg
+    , expect : Result Error () -> msg
     }
     -> AppCmd.Cmd msg
 saveRecord { client, record, id, expect } =
-    Internal.Fetch expect (Client.saveRecord client record id)
+    let
+        queryString =
+            PG.toQueryString
+                [ PG.select (selects record.table)
+                , PG.limit 1
+                ]
+
+        path =
+            Record.location record
+                |> Maybe.map (\p -> p ++ "&" ++ queryString)
+                |> Maybe.withDefault
+                    ("/" ++ Record.tableName record ++ "?" ++ queryString)
+
+        params =
+            { client = client
+            , method = "PATCH"
+            , headers = []
+            , path = path
+            , body = Http.jsonBody (Record.encode record)
+            , timeout = Nothing
+            , resolver = resolveWhatever
+            , expect = mapResult expect (Decode.succeed ())
+            }
+    in
+    case id of
+        Just _ ->
+            request params
+
+        Nothing ->
+            request { params | method = "POST" }
 
 
 {-| Deletes a record.
@@ -241,76 +324,122 @@ You can use [expectRecord](#expectRecord) to interpret the result as a
 
     import PostgRestAdmin.Cmd as AppCmd
 
-    save : Record -> Client -> AppCmd.Cmd Msg
-    save record client =
+    delete : (Result Error Record -> Msg) -> Record -> Client -> AppCmd.Cmd Msg
+    delete tagger record client =
         deleteRecord
             { client = client
             , record = record
             , expect =
-                Client.expectRecord MyDeletedMsg
+                Client.expectRecord tagger
                     (Record.getTable record)
             }
 
 -}
 deleteRecord :
-    { client : Client
-    , record : Record
-    , expect : Result Error Value -> msg
+    { record : Record
+    , expect : Result Error () -> msg
     }
+    -> Client
     -> AppCmd.Cmd msg
-deleteRecord { client, record, expect } =
-    Internal.Fetch expect (Client.deleteRecord client record)
+deleteRecord { record, expect } client =
+    let
+        mapper =
+            mapResult expect (Decode.succeed ())
+    in
+    case Record.location record of
+        Just path ->
+            request
+                { client = client
+                , method = "DELETE"
+                , headers = []
+                , path = path
+                , body = Http.emptyBody
+                , timeout = Nothing
+                , resolver = resolveWhatever
+                , expect = mapper
+                }
+
+        Nothing ->
+            Internal.Fetch mapper missingPrimaryKey
 
 
-{-| POST to a PostgREST path.
+{-| Perform a request to a PostgREST instance resource.
 
 The path can identify a plural resource such as `/posts` in which case an
 [upsert](https://postgrest.org/en/stable/api.html?highlight=upsert#upsert)
 operation will be performed, or a singular resource such as '/posts?id=eq.1'.
 
 -}
-post :
-    { path : String
-    , client : Client
-    , value : Value
+request :
+    { client : Client
+    , method : String
+    , headers : List Http.Header
+    , path : String
+    , body : Http.Body
+    , resolver : Http.Resolver Error Value
     , expect : Result Error Value -> msg
+    , timeout : Maybe Float
     }
     -> AppCmd.Cmd msg
-post { client, path, value, expect } =
-    Internal.Fetch expect (Client.post client path value)
+request { client, method, headers, path, body, resolver, expect, timeout } =
+    Client.task
+        { client = client
+        , method = method
+        , headers = headers
+        , path = path
+        , body = body
+        , resolver = resolver
+        , timeout = timeout
+        }
+        |> Internal.Fetch expect
 
 
-{-| Decode the Value for successful Result as a record, decode as such and
-map the success of the Result to a msg.
--}
-expectRecord :
-    (Result Error Record -> msg)
-    -> Table
-    -> (Result Error Value -> msg)
-expectRecord tagger table =
-    handleResponse (Record.decoder table) >> tagger
+
+-- UTILS
 
 
-{-| Decode the Value for successful Result as a list of records, decode as such
-and map the success of the Result to a msg.
-
-See [fetchRecordList](#fetchRecordList).
-
--}
-expectRecordList :
-    (Result Error (List Record) -> msg)
-    -> Table
-    -> (Result Error Value -> msg)
-expectRecordList tagger table =
-    handleResponse (Decode.list (Record.decoder table)) >> tagger
+missingPrimaryKey : Task Error a
+missingPrimaryKey =
+    Task.fail (Internal.RequestError "No primary id in table")
 
 
-handleResponse : Decoder a -> Result Error Value -> Result Error a
-handleResponse decoder result =
-    case result of
-        Ok value ->
-            Result.mapError Internal.DecodeError
-                (Decode.decodeValue decoder value)
+selects : Table -> List Selectable
+selects table =
+    Dict.values table.columns
+        |> List.filterMap associationJoin
+        |> (++) (Dict.keys table.columns |> List.map PG.attribute)
 
-        Err err ->
-            Err err
+
+associationJoin : Column -> Maybe Selectable
+associationJoin { constraint } =
+    case constraint of
+        ForeignKey foreignKey ->
+            foreignKey.labelColumnName
+                |> Maybe.map
+                    (\n ->
+                        PG.resource foreignKey.tableName
+                            (PG.attributes [ n, "id" ])
+                    )
+
+        _ ->
+            Nothing
+
+
+tablePrimaryKeyName : Table -> Maybe String
+tablePrimaryKeyName table =
+    Dict.find (\_ column -> Field.isPrimaryKey column) table.columns
+        |> Maybe.map Tuple.first
+
+
+mapResult : (Result Error a -> msg) -> Decoder a -> Result Error Value -> msg
+mapResult expect decoder result =
+    result
+        |> Result.andThen
+            (Decode.decodeValue decoder >> Result.mapError DecodeError)
+        |> expect
+
+
+resolveWhatever : Http.Resolver Error Value
+resolveWhatever =
+    Http.bytesResolver
+        (handleResponse (always (Ok Encode.null)))

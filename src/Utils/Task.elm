@@ -10,14 +10,12 @@ module Utils.Task exposing
 
 import Http
 import Json.Decode as Decode exposing (Decoder)
-import Postgrest.Client as PG
 import Task exposing (Task)
 
 
 type Error
     = HttpError Http.Error
     | DecodeError Decode.Error
-    | PGError PG.Error
     | BadSchema String
     | AutocompleteError String
     | RequestError String
@@ -62,16 +60,21 @@ handleResponse : (body -> Result Error a) -> Http.Response body -> Result Error 
 handleResponse toResult response =
     case response of
         Http.BadUrl_ url ->
-            Err <| HttpError (Http.BadUrl url)
+            Err (HttpError (Http.BadUrl url))
 
         Http.Timeout_ ->
-            Err <| HttpError Http.Timeout
+            Err (HttpError Http.Timeout)
 
         Http.BadStatus_ { statusCode } _ ->
-            Err <| HttpError (Http.BadStatus statusCode)
+            case statusCode of
+                401 ->
+                    Err AuthError
+
+                _ ->
+                    Err (HttpError (Http.BadStatus statusCode))
 
         Http.NetworkError_ ->
-            Err <| HttpError Http.NetworkError
+            Err (HttpError Http.NetworkError)
 
         Http.GoodStatus_ _ body ->
             toResult body
@@ -90,14 +93,6 @@ toError result =
 errorToString : Error -> String
 errorToString error =
     case error of
-        PGError (PG.BadStatus 403 _ _) ->
-            "You are not authorized to perform this action"
-
-        PGError (PG.BadStatus _ _ { message }) ->
-            message
-                |> Maybe.map (\msg -> "The server responded with error: " ++ msg)
-                |> Maybe.withDefault genericError
-
         HttpError _ ->
             "Something went wrong with the connection, please try again later"
 

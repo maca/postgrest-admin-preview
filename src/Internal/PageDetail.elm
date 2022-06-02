@@ -45,7 +45,7 @@ import Utils.Task exposing (Error(..))
 type Msg
     = LoggedIn Client
     | Fetched (Result Error Record)
-    | Deleted (Result Error Record)
+    | Deleted (Result Error ())
     | DeleteModalOpened
     | DeleteModalClosed
     | DeleteConfirmed
@@ -87,7 +87,7 @@ fetch (PageDetail { client, table, id }) =
         { client = client
         , table = table
         , id = id
-        , expect = Client.expectRecord Fetched table
+        , expect = Fetched
         }
 
 
@@ -138,10 +138,10 @@ update msg (PageDetail params) =
             , case params.record of
                 Just record ->
                     Client.deleteRecord
-                        { client = params.client
-                        , record = record
-                        , expect = Client.expectRecord Deleted params.table
+                        { record = record
+                        , expect = Deleted
                         }
+                        params.client
 
                 Nothing ->
                     AppCmd.none

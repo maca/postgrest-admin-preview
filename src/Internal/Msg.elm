@@ -8,7 +8,7 @@ import Internal.Notification as Notification
 import Internal.PageDetail as PageDetail
 import Internal.PageForm as PageForm
 import Internal.PageListing as PageListing
-import PostgRestAdmin.Client as Client exposing (Client)
+import Json.Encode exposing (Value)
 import Url exposing (Url)
 import Utils.Task exposing (Error(..))
 
@@ -20,7 +20,7 @@ type Msg m msg
     | PageDetailChanged PageDetail.Msg
     | PageFormChanged PageForm.Msg
     | PageApplicationChanged msg
-    | RequestPerformed Client (Msg m msg)
+    | RequestPerformed (Result Error Value -> Msg m msg) (Result Error Value)
     | NotificationChanged Notification.Msg
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
