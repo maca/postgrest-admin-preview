@@ -14,21 +14,18 @@ module Internal.Config exposing
     )
 
 import Dict exposing (Dict)
-import Internal.Application exposing (Params)
+import Internal.Application as Application
 import Internal.AuthScheme as AuthScheme exposing (AuthScheme)
 import Internal.Flag as Flag
 import Internal.FormAuth as FormAuth exposing (FormAuth)
-import Internal.Msg exposing (Msg)
 import Json.Decode as Decode exposing (Decoder)
 import Url exposing (Protocol(..), Url)
 import Url.Parser exposing (Parser)
 
 
 type alias MountPoint m msg =
-    ( Params m msg
-    , Parser
-        (msg -> Cmd (Msg m msg))
-        (Cmd (Msg m msg))
+    ( Application.Params m msg
+    , Parser (msg -> msg) msg
     )
 
 
@@ -110,8 +107,8 @@ withFormFieldsDecoder fields conf =
 
 
 withMountPoint :
-    Params m msg
-    -> Parser (msg -> Cmd (Msg m msg)) (Cmd (Msg m msg))
+    Application.Params m msg
+    -> Parser (msg -> msg) msg
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
 withMountPoint program parser =

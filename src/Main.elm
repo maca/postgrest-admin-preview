@@ -79,7 +79,5 @@ main =
             , view = view
             , onLogin = LoggedIn
             }
-            (Parser.map GotId
-                (s "workflows" </> Parser.string </> s "forms")
-            )
+            (Parser.map GotId (s "workflows" </> Parser.string </> s "forms"))
         |> PostgRestAdmin.application

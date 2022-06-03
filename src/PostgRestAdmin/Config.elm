@@ -42,7 +42,6 @@ import Dict exposing (Dict)
 import Html exposing (Html)
 import Internal.Cmd as AppCmd
 import Internal.Config as Config
-import Internal.Msg exposing (Msg)
 import Json.Decode exposing (Decoder)
 import PostgRestAdmin.Client exposing (Client)
 import PostgRestAdmin.Config.FormAuth exposing (FormAuth)
@@ -228,12 +227,8 @@ withMountPoint :
     , update : msg -> model -> ( model, AppCmd.Cmd msg )
     , onLogin : Client -> msg
     }
-    -> Parser (msg -> Element model msg) (Element model msg)
+    -> Parser (msg -> msg) msg
     -> Config model msg
     -> Config model msg
 withMountPoint =
     Config.withMountPoint
-
-
-type alias Element m msg =
-    Cmd (Msg m msg)

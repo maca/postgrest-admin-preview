@@ -23,14 +23,14 @@ import Inflect as String
 import Internal.Application as Application exposing (Application(..), Params)
 import Internal.Client as Client
 import Internal.Cmd as AppCmd
-import Internal.Config as Config exposing (Config, MountPoint)
+import Internal.Config as Config exposing (Config)
 import Internal.Flag as Flag
-import Internal.Msg exposing (Msg(..))
 import Internal.Notification as Notification exposing (Notification)
 import Internal.PageDetail as PageDetail exposing (PageDetail)
 import Internal.PageForm as PageForm exposing (PageForm)
 import Internal.PageListing as PageListing exposing (PageListing)
 import Json.Decode as Decode exposing (Decoder, Value)
+import Json.Encode exposing (Value)
 import PostgRestAdmin.Client exposing (Client)
 import String.Extra as String
 import Task
@@ -73,6 +73,20 @@ type alias InitParams m msg =
     , key : Nav.Key
     , config : Config m msg
     }
+
+
+type Msg m msg
+    = ApplicationInit ( Application.Params m msg, msg )
+    | ClientChanged Client.Msg
+    | PageListingChanged PageListing.Msg
+    | PageDetailChanged PageDetail.Msg
+    | PageFormChanged PageForm.Msg
+    | PageApplicationChanged msg
+    | RequestPerformed (Result Error Value -> Msg m msg) (Result Error Value)
+    | NotificationChanged Notification.Msg
+    | LinkClicked Browser.UrlRequest
+    | UrlChanged Url
+    | NoOp
 
 
 type Route m msg
@@ -166,17 +180,28 @@ init decoder flags url key =
 update : Msg m msg -> Model m msg -> ( Model m msg, Cmd (Msg m msg) )
 update msg model =
     case msg of
-        ApplicationInit ( params, m ) cmds ->
-            ( { model
-                | mountedApp =
+        ApplicationInit ( params, childMsg ) ->
+            let
+                ( app, initCmd ) =
                     case model.mountedApp of
                         Application _ _ ->
-                            model.mountedApp
+                            ( model.mountedApp, AppCmd.none )
 
                         None ->
-                            Application params m
+                            params.init model.client
+                                |> Tuple.mapFirst (Application params)
+
+                ( app_, cmd ) =
+                    Application.update childMsg app
+            in
+            ( { model
+                | mountedApp = app_
+                , route = RouteApplication
               }
-            , Cmd.batch (List.map (mapAppCmd PageApplicationChanged) cmds)
+            , Cmd.batch
+                [ mapAppCmd PageApplicationChanged initCmd
+                , mapAppCmd PageApplicationChanged cmd
+                ]
             )
 
         ClientChanged childMsg ->
@@ -496,9 +521,15 @@ routeParser url params =
     let
         mountPoint =
             case params.config.application of
-                Just app ->
-                    [ Parser.map (\cmd -> ( RouteApplication, cmd ))
-                        (applicationParser params app)
+                Just ( appParams, parser ) ->
+                    [ Parser.map
+                        (\msg ->
+                            ( RouteApplication
+                            , Task.succeed ( appParams, msg )
+                                |> Task.perform ApplicationInit
+                            )
+                        )
+                        (Parser.map identity parser)
                     ]
 
                 Nothing ->
@@ -584,7 +615,7 @@ initDetail :
     -> String
     -> String
     -> ( Route m msg, Cmd (Msg m msg) )
-initDetail { client, config, key } tableName id =
+initDetail { client, key } tableName id =
     case Client.getTable tableName client of
         Just table ->
             let
@@ -592,9 +623,6 @@ initDetail { client, config, key } tableName id =
                     { client = client
                     , table = table
                     , id = id
-                    , detailActions =
-                        Dict.get tableName config.detailActions
-                            |> Maybe.withDefault []
                     }
             in
             PageDetail.init detailParams key
@@ -603,34 +631,6 @@ initDetail { client, config, key } tableName id =
 
         Nothing ->
             ( RouteNotFound, Cmd.none )
-
-
-
--- MOUNTS
-
-
-applicationParser :
-    InitParams m msg
-    -> MountPoint m msg
-    -> Parser (Cmd (Msg m msg) -> a) a
-applicationParser { client } ( program, parser ) =
-    Parser.map
-        (\msg ->
-            let
-                ( params, cmd ) =
-                    program.init client
-            in
-            Task.succeed
-                (ApplicationInit ( program, params )
-                    [ Task.succeed msg
-                        |> Task.perform identity
-                        |> AppCmd.wrap
-                    , cmd
-                    ]
-                )
-                |> Task.perform identity
-        )
-        parser
 
 
 
