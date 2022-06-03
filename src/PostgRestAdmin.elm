@@ -16,8 +16,7 @@ module PostgRestAdmin exposing
 
 import Browser
 import Browser.Navigation as Nav
-import Dict exposing (Dict)
-import Dict.Extra as Dict
+import Dict
 import Html exposing (Html, a, aside, div, h1, li, pre, text, ul)
 import Html.Attributes exposing (class, href)
 import Inflect as String
@@ -38,24 +37,6 @@ import Task
 import Url exposing (Url)
 import Url.Parser as Parser exposing ((</>), Parser, s)
 import Utils.Task exposing (Error(..), errorToString)
-
-
-type alias InitParams m msg =
-    { client : Client
-    , formFields : Dict String (List String)
-    , key : Nav.Key
-    , application : Maybe (MountPoint m msg)
-    }
-
-
-type Route m msg
-    = RouteRoot
-    | RouteLoadingSchema (InitParams m msg -> ( Route m msg, Cmd (Msg m msg) ))
-    | RouteListing PageListing
-    | RouteDetail PageDetail
-    | RouteForm PageForm
-    | RouteApplication
-    | RouteNotFound
 
 
 {-| An alias to elm's Platform.Program providing the type signature for a
@@ -80,12 +61,28 @@ type alias Model m msg =
     , key : Nav.Key
     , notification : Notification
     , error : Maybe Error
-    , formFields : Dict String (List String)
     , client : Client
     , onLogin : Maybe String -> Cmd (Msg m msg)
-    , applicationConfig : Maybe (MountPoint m msg)
     , mountedApp : Application.Application m msg
+    , config : Config m msg
     }
+
+
+type alias InitParams m msg =
+    { client : Client
+    , key : Nav.Key
+    , config : Config m msg
+    }
+
+
+type Route m msg
+    = RouteRoot
+    | RouteLoadingSchema (InitParams m msg -> ( Route m msg, Cmd (Msg m msg) ))
+    | RouteListing PageListing
+    | RouteDetail PageDetail
+    | RouteForm PageForm
+    | RouteApplication
+    | RouteNotFound
 
 
 {-| Takes a Config and creates a PostgRestAdmin application.
@@ -133,13 +130,12 @@ init decoder flags url key =
             , notification = Notification.none
             , error = Nothing
             , client = Client.init config.host config.authScheme
-            , formFields = config.formFields
             , onLogin =
                 Maybe.withDefault ""
                     >> config.onLogin
                     >> Cmd.map (always NoOp)
-            , applicationConfig = config.application
             , mountedApp = Application.none
+            , config = config
             }
     in
     case Decode.decodeValue decoder flags of
@@ -194,9 +190,8 @@ update msg model =
                             if Client.schemaIsLoaded client then
                                 func
                                     { client = client
-                                    , formFields = model.formFields
                                     , key = model.key
-                                    , application = model.applicationConfig
+                                    , config = model.config
                                     }
 
                             else if Client.isAuthSuccessMsg childMsg then
@@ -483,9 +478,8 @@ parseRoute url model =
     if Client.schemaIsLoaded model.client then
         initTuple
             { client = model.client
-            , formFields = model.formFields
             , key = model.key
-            , application = model.applicationConfig
+            , config = model.config
             }
 
     else
@@ -498,13 +492,13 @@ routeParser :
     Url
     -> InitParams m msg
     -> Parser (( Route m msg, Cmd (Msg m msg) ) -> a) a
-routeParser url model =
+routeParser url params =
     let
         mountPoint =
-            case model.application of
+            case params.config.application of
                 Just app ->
                     [ Parser.map (\cmd -> ( RouteApplication, cmd ))
-                        (applicationParser model app)
+                        (applicationParser params app)
                     ]
 
                 Nothing ->
@@ -513,12 +507,12 @@ routeParser url model =
     Parser.oneOf
         (mountPoint
             ++ [ Parser.map ( RouteRoot, Cmd.none ) Parser.top
-               , Parser.map (initNewForm model) (Parser.string </> s "new")
-               , Parser.map (initForm model)
+               , Parser.map (initNewForm params) (Parser.string </> s "new")
+               , Parser.map (initForm params)
                     (Parser.string </> Parser.string </> s "edit")
-               , Parser.map (initDetail model)
+               , Parser.map (initDetail params)
                     (Parser.string </> Parser.string)
-               , Parser.map (initListing model url) Parser.string
+               , Parser.map (initListing params url) Parser.string
                ]
         )
 
@@ -528,16 +522,16 @@ initListing :
     -> Url
     -> String
     -> ( Route m msg, Cmd (Msg m msg) )
-initListing model url tableName =
-    case Client.getTable tableName model.client of
+initListing params url tableName =
+    case Client.getTable tableName params.client of
         Just table ->
             let
-                params =
-                    { client = model.client
+                listingParams =
+                    { client = params.client
                     , table = table
                     }
             in
-            PageListing.init params url model.key
+            PageListing.init listingParams url params.key
                 |> Tuple.mapFirst RouteListing
                 |> Tuple.mapSecond (mapAppCmd PageListingChanged)
 
@@ -546,8 +540,8 @@ initListing model url tableName =
 
 
 initNewForm : InitParams m msg -> String -> ( Route m msg, Cmd (Msg m msg) )
-initNewForm model tableName =
-    initFormHelp model tableName Nothing
+initNewForm params tableName =
+    initFormHelp params tableName Nothing
 
 
 initForm :
@@ -555,8 +549,8 @@ initForm :
     -> String
     -> String
     -> ( Route m msg, Cmd (Msg m msg) )
-initForm model tableName id =
-    initFormHelp model tableName (Just id)
+initForm params tableName id =
+    initFormHelp params tableName (Just id)
 
 
 initFormHelp :
@@ -564,20 +558,20 @@ initFormHelp :
     -> String
     -> Maybe String
     -> ( Route m msg, Cmd (Msg m msg) )
-initFormHelp model tableName id =
-    case Client.getTable tableName model.client of
+initFormHelp { client, key, config } tableName id =
+    case Client.getTable tableName client of
         Just table ->
             let
                 params =
-                    { client = model.client
+                    { client = client
                     , fieldNames =
-                        Dict.get tableName model.formFields
+                        Dict.get tableName config.formFields
                             |> Maybe.withDefault []
                     , id = id
                     , table = table
                     }
             in
-            PageForm.init params model.key
+            PageForm.init params key
                 |> Tuple.mapFirst RouteForm
                 |> Tuple.mapSecond (mapAppCmd PageFormChanged)
 
@@ -590,17 +584,17 @@ initDetail :
     -> String
     -> String
     -> ( Route m msg, Cmd (Msg m msg) )
-initDetail model tableName id =
-    case Client.getTable tableName model.client of
+initDetail params tableName id =
+    case Client.getTable tableName params.client of
         Just table ->
             let
-                params =
-                    { client = model.client
+                detailParams =
+                    { client = params.client
                     , table = table
                     , id = id
                     }
             in
-            PageDetail.init params model.key
+            PageDetail.init detailParams params.key
                 |> Tuple.mapFirst RouteDetail
                 |> Tuple.mapSecond (mapAppCmd PageDetailChanged)
 
@@ -620,11 +614,11 @@ applicationParser { client } ( program, parser ) =
     Parser.map
         (\msg ->
             let
-                ( model, cmd ) =
+                ( params, cmd ) =
                     program.init client
             in
             Task.succeed
-                (ApplicationInit ( program, model )
+                (ApplicationInit ( program, params )
                     [ Task.succeed msg
                         |> Task.perform identity
                         |> AppCmd.wrap
