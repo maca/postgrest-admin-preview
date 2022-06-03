@@ -97,17 +97,17 @@ options.
 -}
 application : Decoder (Config m msg) -> Program m msg
 application decoder =
-    Browser.application
-        (decoder
-            |> Flag.string "host" Config.withHostDecoder
-            |> Flag.stringDict "formFields" Config.withFormFieldsDecoder
-            |> applicationParams
-        )
+    Browser.application (applicationParams decoder)
 
 
 applicationParams : Decoder (Config m msg) -> Params m msg
 applicationParams decoder =
-    { init = init decoder
+    { init =
+        init
+            (decoder
+                |> Flag.string "host" Config.withHostDecoder
+                |> Flag.stringDict "formFields" Config.withFormFieldsDecoder
+            )
     , update = update
     , view = view
     , subscriptions = subscriptions
@@ -584,17 +584,20 @@ initDetail :
     -> String
     -> String
     -> ( Route m msg, Cmd (Msg m msg) )
-initDetail params tableName id =
-    case Client.getTable tableName params.client of
+initDetail { client, config, key } tableName id =
+    case Client.getTable tableName client of
         Just table ->
             let
                 detailParams =
-                    { client = params.client
+                    { client = client
                     , table = table
                     , id = id
+                    , detailActions =
+                        Dict.get tableName config.detailActions
+                            |> Maybe.withDefault []
                     }
             in
-            PageDetail.init detailParams params.key
+            PageDetail.init detailParams key
                 |> Tuple.mapFirst RouteDetail
                 |> Tuple.mapSecond (mapAppCmd PageDetailChanged)
 
