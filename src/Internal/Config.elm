@@ -29,7 +29,7 @@ type alias Config m msg =
     , authScheme : AuthScheme
     , formFields : Dict String (List String)
     , application : Maybe (MountPoint m msg)
-    , onLogin : String -> Cmd ()
+    , onLogin : String -> Cmd msg
     }
 
 
@@ -73,7 +73,7 @@ withJwt tokenStr decoder =
 
 
 withOnLogin :
-    (String -> Cmd a)
+    (String -> Cmd msg)
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
 withOnLogin onLogin decoder =
@@ -81,7 +81,7 @@ withOnLogin onLogin decoder =
         |> Decode.andThen
             (\conf ->
                 Decode.succeed
-                    { conf | onLogin = onLogin >> Cmd.map (always ()) }
+                    { conf | onLogin = onLogin }
             )
 
 

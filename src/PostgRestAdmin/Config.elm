@@ -155,7 +155,7 @@ Elm init
         });
 
 -}
-withOnLogin : (String -> Cmd a) -> Config m msg -> Config m msg
+withOnLogin : (String -> Cmd msg) -> Config m msg -> Config m msg
 withOnLogin =
     Config.withOnLogin
 
