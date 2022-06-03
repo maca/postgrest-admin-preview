@@ -497,7 +497,7 @@ displayError error =
 
 fetchRecords : Client -> String -> ForeignKeyParams -> String -> AppCmd.Cmd Msg
 fetchRecords client name { tableName, labelColumnName } userInput =
-    case Internal.Client.getTable tableName client of
+    case Client.getTable tableName client of
         Just table ->
             let
                 selects =

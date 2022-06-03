@@ -3,15 +3,18 @@ module PostgRestAdmin.Client exposing
     , toHostUrl
     , Table
     , getTable
+    , tableName
     , fetchRecord
     , fetchRecordList
     , saveRecord
     , deleteRecord
+    , task
+    , fetch
+    , resolveWhatever
     , Error
     , errorToString
     , isAuthenticated
     , toJwtString
-    , fetch, resolveWhatever, task
     )
 
 {-|
@@ -40,7 +43,9 @@ but a [PostgRestAdmin.Cmd](PostgRestAdmin.Cmd).
 @docs fetchRecordList
 @docs saveRecord
 @docs deleteRecord
-@docs post
+@docs task
+@docs fetch
+@docs resolveWhatever
 
 @docs Error
 @docs errorToString
@@ -148,13 +153,10 @@ errorToString =
 {-| Fetches a record for a given table.
 `expect` param requires a function that returns a `Msg`.
 
-You can use [expectRecord](#expectRecord) to interpret the result as a
-[Record](PostgRestAdmin.Record).
-
     import PostgRestAdmin.Cmd as AppCmd
 
-    fetch : (Result Error Record -> msg) -> String -> Client -> AppCmd.Cmd Msg
-    fetch tagger tableName client =
+    fetchOne : (Result Error Record -> msg) -> String -> Client -> AppCmd.Cmd Msg
+    fetchOne tagger tableName client =
         case getTable tableName client of
             Just table ->
                 fetchRecord
@@ -210,9 +212,6 @@ fetchRecord { client, table, expect, id } =
 {-| Fetches a list of records for a given table.
 `expect` param requires a function that returns a `Msg`.
 
-You can use [expectRecordList](#expectRecordList) to interpret the result as a
-list of [Record](PostgRestAdmin.Record)s.
-
     import PostgRestAdmin.Cmd as AppCmd
 
     fetchList : (Result Error (List Record) -> Msg) -> String -> Client -> AppCmd.Cmd Msg
@@ -223,7 +222,7 @@ list of [Record](PostgRestAdmin.Record)s.
                     { client = client
                     , table = table
                     , params = []
-                    , expect = Client.expectRecordList tagger table
+                    , expect = tagger
                     }
 
             Nothing ->
@@ -265,14 +264,13 @@ You can use [expectRecord](#expectRecord) to interpret the result as a
 
     import PostgRestAdmin.Cmd as AppCmd
 
-    save : (Result Error Record -> Msg) -> Record -> Maybe String -> Client -> AppCmd.Cmd Msg
+    save : (Result Error () -> Msg) -> Record -> Maybe String -> Client -> AppCmd.Cmd Msg
     save tagger record id client =
         saveRecord
             { client = client
             , record = record
             , id = id
-            , expect =
-                Client.expectRecord tagger (Record.getTable record)
+            , expect = tagger
             }
 
 -}
@@ -321,9 +319,6 @@ saveRecord { client, record, id, expect } =
 {-| Deletes a record.
 `expect` param requires a function that returns a `Msg`.
 
-You can use [expectRecord](#expectRecord) to interpret the result as a
-[Record](PostgRestAdmin.Record).
-
     import PostgRestAdmin.Cmd as AppCmd
 
     delete : (Result Error Record -> Msg) -> Record -> Client -> AppCmd.Cmd Msg
@@ -331,9 +326,7 @@ You can use [expectRecord](#expectRecord) to interpret the result as a
         deleteRecord
             { client = client
             , record = record
-            , expect =
-                Client.expectRecord tagger
-                    (Record.getTable record)
+            , expect = tagger
             }
 
 -}
@@ -365,7 +358,7 @@ deleteRecord { record, expect } client =
             fetch mapper missingPrimaryKey
 
 
-{-| Perform a request to a PostgREST instance resource.
+{-| Task to perform a request to a PostgREST instance resource.
 
 The path can identify a plural resource such as `/posts` in which case an
 [upsert](https://postgrest.org/en/stable/api.html?highlight=upsert#upsert)
@@ -394,9 +387,21 @@ task { client, method, headers, path, body, resolver, timeout } =
         }
 
 
+{-| Perform a task converting the result to a message.
+-}
 fetch : (Result Error Value -> msg) -> Task Error Value -> Internal.Cmd msg
 fetch =
     Internal.Fetch
+
+
+{-| Use this in combination with [task](PostgRestAdmin.Client#task) when you
+don't expect PostgREST response to have a body, as when performing a request
+with POST or PATCH.
+-}
+resolveWhatever : Http.Resolver Error Value
+resolveWhatever =
+    Http.bytesResolver
+        (handleResponse (always (Ok Encode.null)))
 
 
 
@@ -442,9 +447,3 @@ mapResult expect decoder result =
         |> Result.andThen
             (Decode.decodeValue decoder >> Result.mapError DecodeError)
         |> expect
-
-
-resolveWhatever : Http.Resolver Error Value
-resolveWhatever =
-    Http.bytesResolver
-        (handleResponse (always (Ok Encode.null)))
