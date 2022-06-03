@@ -11,7 +11,7 @@ module PostgRestAdmin.Client exposing
     , errorToString
     , isAuthenticated
     , toJwtString
-    , request, resolveWhatever
+    , fetch, resolveWhatever, task
     )
 
 {-|
@@ -190,21 +190,21 @@ fetchRecord { client, table, expect, id } =
                         , PG.limit 1
                         ]
             in
-            request
-                { client = client
-                , method = "GET"
-                , headers =
-                    [ header "Accept" "application/vnd.pgrst.object+json" ]
-                , path = "/" ++ tableName table ++ "?" ++ queryString
-                , body = Http.emptyBody
-                , timeout = Nothing
-                , resolver =
-                    Http.stringResolver (handleJsonResponse Decode.value)
-                , expect = mapper
-                }
+            fetch mapper <|
+                task
+                    { client = client
+                    , method = "GET"
+                    , headers =
+                        [ header "Accept" "application/vnd.pgrst.object+json" ]
+                    , path = "/" ++ tableName table ++ "?" ++ queryString
+                    , body = Http.emptyBody
+                    , timeout = Nothing
+                    , resolver =
+                        Http.stringResolver (handleJsonResponse Decode.value)
+                    }
 
         Nothing ->
-            Internal.Fetch mapper missingPrimaryKey
+            fetch mapper missingPrimaryKey
 
 
 {-| Fetches a list of records for a given table.
@@ -243,18 +243,18 @@ fetchRecordList { client, table, params, expect } =
             PG.toQueryString
                 (PG.select (selects table) :: params)
     in
-    request
-        { client = client
-        , method = "GET"
-        , headers = []
-        , path = "/" ++ tableName table ++ "?" ++ queryString
-        , body = Http.emptyBody
-        , timeout = Nothing
-        , resolver =
-            Http.stringResolver
-                (handleJsonResponse Decode.value)
-        , expect = mapResult expect (Decode.list (Record.decoder table))
-        }
+    fetch (mapResult expect (Decode.list (Record.decoder table))) <|
+        task
+            { client = client
+            , method = "GET"
+            , headers = []
+            , path = "/" ++ tableName table ++ "?" ++ queryString
+            , body = Http.emptyBody
+            , timeout = Nothing
+            , resolver =
+                Http.stringResolver
+                    (handleJsonResponse Decode.value)
+            }
 
 
 {-| Saves a record.
@@ -297,6 +297,9 @@ saveRecord { client, record, id, expect } =
                 |> Maybe.withDefault
                     ("/" ++ Record.tableName record ++ "?" ++ queryString)
 
+        mapper =
+            mapResult expect (Decode.succeed ())
+
         params =
             { client = client
             , method = "PATCH"
@@ -305,15 +308,14 @@ saveRecord { client, record, id, expect } =
             , body = Http.jsonBody (Record.encode record)
             , timeout = Nothing
             , resolver = resolveWhatever
-            , expect = mapResult expect (Decode.succeed ())
             }
     in
     case id of
         Just _ ->
-            request params
+            fetch mapper (task params)
 
         Nothing ->
-            request { params | method = "POST" }
+            fetch mapper (task { params | method = "POST" })
 
 
 {-| Deletes a record.
@@ -348,19 +350,19 @@ deleteRecord { record, expect } client =
     in
     case Record.location record of
         Just path ->
-            request
-                { client = client
-                , method = "DELETE"
-                , headers = []
-                , path = path
-                , body = Http.emptyBody
-                , timeout = Nothing
-                , resolver = resolveWhatever
-                , expect = mapper
-                }
+            fetch mapper <|
+                task
+                    { client = client
+                    , method = "DELETE"
+                    , headers = []
+                    , path = path
+                    , body = Http.emptyBody
+                    , timeout = Nothing
+                    , resolver = resolveWhatever
+                    }
 
         Nothing ->
-            Internal.Fetch mapper missingPrimaryKey
+            fetch mapper missingPrimaryKey
 
 
 {-| Perform a request to a PostgREST instance resource.
@@ -370,18 +372,17 @@ The path can identify a plural resource such as `/posts` in which case an
 operation will be performed, or a singular resource such as '/posts?id=eq.1'.
 
 -}
-request :
+task :
     { client : Client
     , method : String
     , headers : List Http.Header
     , path : String
     , body : Http.Body
-    , resolver : Http.Resolver Error Value
-    , expect : Result Error Value -> msg
+    , resolver : Http.Resolver Error body
     , timeout : Maybe Float
     }
-    -> AppCmd.Cmd msg
-request { client, method, headers, path, body, resolver, expect, timeout } =
+    -> Task Error body
+task { client, method, headers, path, body, resolver, timeout } =
     Client.task
         { client = client
         , method = method
@@ -391,7 +392,11 @@ request { client, method, headers, path, body, resolver, expect, timeout } =
         , resolver = resolver
         , timeout = timeout
         }
-        |> Internal.Fetch expect
+
+
+fetch : (Result Error Value -> msg) -> Task Error Value -> Internal.Cmd msg
+fetch =
+    Internal.Fetch
 
 
 

@@ -1,5 +1,6 @@
 module Internal.Cmd exposing (Cmd(..), batch, map, none, wrap)
 
+import Bytes exposing (Bytes)
 import Internal.Notification as Notification
 import Json.Decode exposing (Value)
 import Platform.Cmd as Platform

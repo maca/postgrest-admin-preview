@@ -369,21 +369,23 @@ update msg listing =
                                     >> Encode.dict identity Encode.string
                                 )
                                 records
-                    in
-                    ( listing
-                    , Client.request
-                        { client = listing.client
-                        , method = "POST"
-                        , headers =
-                            [ Http.header "Prefer" "resolution=merge-duplicates" ]
-                        , path = Url.absolute [ listing.table.name ] []
-                        , body = Http.jsonBody json
-                        , resolver = Client.resolveWhatever
-                        , expect =
+
+                        expect =
                             Result.map (always (List.length records))
                                 >> CsvUploadPosted
-                        , timeout = Nothing
-                        }
+                    in
+                    ( listing
+                    , Client.fetch expect <|
+                        Client.task
+                            { client = listing.client
+                            , method = "POST"
+                            , headers =
+                                [ Http.header "Prefer" "resolution=merge-duplicates" ]
+                            , path = Url.absolute [ listing.table.name ] []
+                            , body = Http.jsonBody json
+                            , resolver = Client.resolveWhatever
+                            , timeout = Nothing
+                            }
                     )
 
                 Err _ ->
