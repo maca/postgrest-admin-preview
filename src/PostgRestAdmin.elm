@@ -21,17 +21,16 @@ import Dict.Extra as Dict
 import Html exposing (Html, a, aside, div, h1, li, pre, text, ul)
 import Html.Attributes exposing (class, href)
 import Inflect as String
-import Internal.Application as Application exposing (Application(..))
+import Internal.Application as Application exposing (Application(..), Params)
 import Internal.Client as Client
 import Internal.Cmd as AppCmd
-import Internal.Config as Config exposing (Config)
+import Internal.Config as Config exposing (Config, MountPoint)
 import Internal.Flag as Flag
 import Internal.Msg exposing (Msg(..))
 import Internal.Notification as Notification exposing (Notification)
-import Internal.PageDetail as PageDetail
-import Internal.PageForm as PageForm
-import Internal.PageListing as PageListing
-import Internal.Route as Route exposing (MountPoint, Route(..))
+import Internal.PageDetail as PageDetail exposing (PageDetail)
+import Internal.PageForm as PageForm exposing (PageForm)
+import Internal.PageListing as PageListing exposing (PageListing)
 import Json.Decode as Decode exposing (Decoder, Value)
 import PostgRestAdmin.Client exposing (Client)
 import String.Extra as String
@@ -39,6 +38,24 @@ import Task
 import Url exposing (Url)
 import Url.Parser as Parser exposing ((</>), Parser, s)
 import Utils.Task exposing (Error(..), errorToString)
+
+
+type alias InitParams m msg =
+    { client : Client
+    , formFields : Dict String (List String)
+    , key : Nav.Key
+    , application : Maybe (MountPoint m msg)
+    }
+
+
+type Route m msg
+    = RouteRoot
+    | RouteLoadingSchema (InitParams m msg -> ( Route m msg, Cmd (Msg m msg) ))
+    | RouteListing PageListing
+    | RouteDetail PageDetail
+    | RouteForm PageForm
+    | RouteApplication
+    | RouteNotFound
 
 
 {-| An alias to elm's Platform.Program providing the type signature for a
@@ -479,7 +496,7 @@ parseRoute url model =
 
 routeParser :
     Url
-    -> Route.InitParams m msg
+    -> InitParams m msg
     -> Parser (( Route m msg, Cmd (Msg m msg) ) -> a) a
 routeParser url model =
     let
@@ -507,7 +524,7 @@ routeParser url model =
 
 
 initListing :
-    Route.InitParams m msg
+    InitParams m msg
     -> Url
     -> String
     -> ( Route m msg, Cmd (Msg m msg) )
@@ -528,13 +545,13 @@ initListing model url tableName =
             ( RouteNotFound, Cmd.none )
 
 
-initNewForm : Route.InitParams m msg -> String -> ( Route m msg, Cmd (Msg m msg) )
+initNewForm : InitParams m msg -> String -> ( Route m msg, Cmd (Msg m msg) )
 initNewForm model tableName =
     initFormHelp model tableName Nothing
 
 
 initForm :
-    Route.InitParams m msg
+    InitParams m msg
     -> String
     -> String
     -> ( Route m msg, Cmd (Msg m msg) )
@@ -543,7 +560,7 @@ initForm model tableName id =
 
 
 initFormHelp :
-    Route.InitParams m msg
+    InitParams m msg
     -> String
     -> Maybe String
     -> ( Route m msg, Cmd (Msg m msg) )
@@ -569,7 +586,7 @@ initFormHelp model tableName id =
 
 
 initDetail :
-    Route.InitParams m msg
+    InitParams m msg
     -> String
     -> String
     -> ( Route m msg, Cmd (Msg m msg) )
@@ -596,7 +613,7 @@ initDetail model tableName id =
 
 
 applicationParser :
-    Route.InitParams m msg
+    InitParams m msg
     -> MountPoint m msg
     -> Parser (Cmd (Msg m msg) -> a) a
 applicationParser { client } ( program, parser ) =

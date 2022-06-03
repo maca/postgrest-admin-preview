@@ -43,7 +43,6 @@ import Html exposing (Html)
 import Internal.Cmd as AppCmd
 import Internal.Config as Config
 import Internal.Msg exposing (Msg)
-import Internal.Route exposing (Route(..))
 import Json.Decode exposing (Decoder)
 import PostgRestAdmin.Client exposing (Client)
 import PostgRestAdmin.Config.FormAuth exposing (FormAuth)
