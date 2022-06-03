@@ -122,8 +122,15 @@ update msg client =
             , Cmd.none
             )
 
-        SchemaFetched (Err _) ->
-            ( client, Cmd.none )
+        SchemaFetched (Err err) ->
+            case err of
+                AuthError ->
+                    ( { client | authScheme = AuthScheme.fail client.authScheme }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( client, Cmd.none )
 
 
 fetchSchema : Client -> Cmd Msg
