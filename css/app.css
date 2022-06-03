@@ -14,7 +14,7 @@
 
 .main-container {
     display: grid;
-    grid-template-columns: 10% auto;
+    grid-template-columns: max(10%, 200px) auto;
     grid-template-rows: auto;
     grid-template-areas: "menu main-area";
 }
@@ -422,8 +422,7 @@ a:hover {
 
 /* ---------- */
 /* Detail */
-section.resource-form, section.record-detail
-{
+.main-area > *:not(.resources-listing) {
     padding: 4rem;
 }
 
@@ -505,6 +504,6 @@ a.button:hover {
     justify-content: flex-end;
 }
 
-.actions button {
+.actions button, .actions a {
     margin-left: 1.5rem;
 }

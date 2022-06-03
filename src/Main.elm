@@ -1,5 +1,6 @@
 module Main exposing (main)
 
+import Dict
 import Html exposing (Html, button, div, text)
 import Html.Events exposing (onClick)
 import PostgRestAdmin
@@ -7,6 +8,7 @@ import PostgRestAdmin.Client exposing (Client)
 import PostgRestAdmin.Cmd as AppCmd
 import PostgRestAdmin.Config as Config
 import PostgRestAdmin.Config.FormAuth as FormAuth
+import Url.Builder as Url
 import Url.Parser as Parser exposing ((</>), s)
 
 
@@ -73,11 +75,21 @@ main : PostgRestAdmin.Program Model Msg
 main =
     Config.init
         |> Config.withFormAuth FormAuth.config
+        |> Config.withDetailActions
+            (Dict.fromList
+                [ ( "workflows"
+                  , [ ( "Edit Workflow"
+                      , \id -> Url.absolute [ "workflows", id, "form" ] []
+                      )
+                    ]
+                  )
+                ]
+            )
         |> Config.withMountPoint
             { init = init
             , update = update
             , view = view
             , onLogin = LoggedIn
             }
-            (Parser.map GotId (s "workflows" </> Parser.string </> s "forms"))
+            (Parser.map GotId (s "workflows" </> Parser.string </> s "form"))
         |> PostgRestAdmin.application

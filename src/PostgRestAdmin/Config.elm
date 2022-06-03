@@ -3,6 +3,7 @@ module PostgRestAdmin.Config exposing
     , init
     , withHost
     , withFormFields
+    , withDetailActions
     , withFormAuth
     , withJwt
     , withOnLogin
@@ -23,6 +24,7 @@ module PostgRestAdmin.Config exposing
 
 @docs withHost
 @docs withFormFields
+@docs withDetailActions
 
 
 # Auth
@@ -41,7 +43,7 @@ module PostgRestAdmin.Config exposing
 import Dict exposing (Dict)
 import Html exposing (Html)
 import Internal.Cmd as AppCmd
-import Internal.Config as Config
+import Internal.Config as Config exposing (DetailActions)
 import Json.Decode exposing (Decoder)
 import PostgRestAdmin.Client exposing (Client)
 import PostgRestAdmin.Config.FormAuth exposing (FormAuth)
@@ -181,6 +183,41 @@ Alternatively this parameter can be configured using flags, configuring using
 withFormFields : Dict String (List String) -> Config m msg -> Config m msg
 withFormFields =
     Config.withFormFields
+
+
+{-| Specify a number of actions buttons to be shown in the detail page of a
+record along with Edit and Delete buttons.
+
+`withDetailActions` expect a dict where the keys correspond with the name of a
+table and the values are a list of tuples, the first element of the tuple
+corresponds to the button text and the second is a function that takes the id of
+the resource and returns a url string.
+
+      import Url.Builder as Url
+
+      main : PostgRestAdmin.Program Never Never
+      main =
+          Config.init
+              |> Config.withDetailActions
+                  (Dict.fromList
+                      [ ( "posts"
+                        , [ ( "View Comments"
+                            , \id ->
+                                  Url.absolute
+                                      [ "posts", id, "comments" ]
+                                      []
+                            )
+                          ]
+                        )
+                      ]
+                  )
+
+          |> PostgRestAdmin.application
+
+-}
+withDetailActions : Dict String DetailActions -> Config m msg -> Config m msg
+withDetailActions =
+    Config.withDetailActions
 
 
 {-| Mount an application on a give path using

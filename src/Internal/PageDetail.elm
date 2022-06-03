@@ -30,6 +30,7 @@ import Html
 import Html.Attributes exposing (class, href)
 import Html.Events exposing (onClick)
 import Internal.Cmd as AppCmd
+import Internal.Config exposing (DetailActions)
 import Internal.Field as Field exposing (Field)
 import Internal.Record as Record exposing (Record)
 import Internal.Schema exposing (Constraint(..), Reference, Schema, Table)
@@ -58,15 +59,20 @@ type PageDetail
         , table : Table
         , id : String
         , record : Maybe Record
+        , detailActions : DetailActions
         , confirmDelete : Bool
         }
 
 
 init :
-    { client : Client, table : Table, id : String }
+    { client : Client
+    , table : Table
+    , id : String
+    , detailActions : DetailActions
+    }
     -> Nav.Key
     -> ( PageDetail, AppCmd.Cmd Msg )
-init { client, table, id } key =
+init { client, table, id, detailActions } key =
     let
         pageDetail =
             PageDetail
@@ -75,6 +81,7 @@ init { client, table, id } key =
                 , table = table
                 , id = id
                 , record = Nothing
+                , detailActions = detailActions
                 , confirmDelete = False
                 }
     in
@@ -173,7 +180,7 @@ view schema (PageDetail params) =
                     [ table
                         []
                         (sortedFields record |> List.map (tableRow (Record.tableName record)))
-                    , actions record
+                    , actions params.detailActions record
                     ]
                 , if params.confirmDelete then
                     div
@@ -227,27 +234,39 @@ referenceToHtml { foreignKeyName, foreignKeyValue, table } =
         [ text (String.humanize table.name) ]
 
 
-actions : Record -> Html Msg
-actions record =
+actions : DetailActions -> Record -> Html Msg
+actions customActions record =
     case Record.id record of
         Just id ->
             div
                 [ class "actions" ]
-                [ a
-                    [ href
-                        (Url.absolute [ Record.tableName record, id, "edit" ] [])
-                    , class "button"
-                    ]
-                    [ text "Edit" ]
-                , button
-                    [ onClick DeleteModalOpened
-                    , class "button button-danger"
-                    ]
-                    [ text "Delete" ]
-                ]
+                (List.map
+                    (\( copy, url ) -> linkButton { url = url id, text = copy })
+                    customActions
+                    ++ [ linkButton
+                            { url =
+                                Url.absolute
+                                    [ Record.tableName record, id, "edit" ]
+                                    []
+                            , text = "Edit"
+                            }
+                       , button
+                            [ onClick DeleteModalOpened
+                            , class "button button-danger"
+                            ]
+                            [ text "Delete" ]
+                       ]
+                )
 
         Nothing ->
             text ""
+
+
+linkButton : { url : String, text : String } -> Html Msg
+linkButton params =
+    a
+        [ href params.url, class "button" ]
+        [ text params.text ]
 
 
 tableRow : String -> ( String, Field ) -> Html Msg

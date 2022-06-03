@@ -496,19 +496,19 @@ subscriptions _ =
 parseRoute : Url -> Model m msg -> ( Route m msg, Cmd (Msg m msg) )
 parseRoute url model =
     let
-        initTuple params =
+        routeTuple params =
             Parser.parse (routeParser url params) url
                 |> Maybe.withDefault ( RouteNotFound, Cmd.none )
     in
     if Client.schemaIsLoaded model.client then
-        initTuple
+        routeTuple
             { client = model.client
             , key = model.key
             , config = model.config
             }
 
     else
-        ( RouteLoadingSchema initTuple
+        ( RouteLoadingSchema routeTuple
         , Cmd.map ClientChanged (Client.fetchSchema model.client)
         )
 
@@ -615,7 +615,7 @@ initDetail :
     -> String
     -> String
     -> ( Route m msg, Cmd (Msg m msg) )
-initDetail { client, key } tableName id =
+initDetail { client, key, config } tableName id =
     case Client.getTable tableName client of
         Just table ->
             let
@@ -623,6 +623,10 @@ initDetail { client, key } tableName id =
                     { client = client
                     , table = table
                     , id = id
+                    , detailActions =
+                        config.detailActions
+                            |> Dict.get tableName
+                            |> Maybe.withDefault []
                     }
             in
             PageDetail.init detailParams key
