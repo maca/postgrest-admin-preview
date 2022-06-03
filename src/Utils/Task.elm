@@ -1,8 +1,6 @@
 module Utils.Task exposing
     ( Error(..)
-    , attemptWithError
     , errorToString
-    , fail
     , handleJsonResponse
     , handleResponse
     , toError
@@ -10,7 +8,6 @@ module Utils.Task exposing
 
 import Http
 import Json.Decode as Decode exposing (Decoder)
-import Task exposing (Task)
 
 
 type Error
@@ -21,26 +18,6 @@ type Error
     | RequestError String
     | NoError
     | AuthError
-
-
-attemptWithError : (error -> msg) -> (a -> msg) -> Task error a -> Cmd msg
-attemptWithError failure success task =
-    let
-        tagger result =
-            case result of
-                Ok a ->
-                    success a
-
-                Err err ->
-                    failure err
-    in
-    Task.attempt tagger task
-
-
-fail : (Error -> msg) -> Error -> Cmd msg
-fail tagger err =
-    Task.fail err
-        |> attemptWithError tagger tagger
 
 
 handleJsonResponse : Decoder a -> Http.Response String -> Result Error a

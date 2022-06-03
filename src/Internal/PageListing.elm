@@ -68,7 +68,7 @@ import Time
 import Time.Extra as Time
 import Url
 import Url.Builder as Url exposing (QueryParameter)
-import Utils.Task exposing (Error(..), attemptWithError)
+import Utils.Task exposing (Error(..))
 
 
 type Page
@@ -96,13 +96,12 @@ type Msg
     | SelectOn
     | SelectOff
     | DownloadRequested Format
-    | Downloaded Download
+    | Downloaded (Result Error Download)
     | CsvUploadRequested
     | CsvUploadSelected File
     | CsvUploadLoaded String
     | CsvUploadPosted (Result Error Int)
     | ToggleSearchOpen
-    | FetchFailed Error
 
 
 type TextSelect
@@ -336,15 +335,18 @@ update msg listing =
             ( listing
             , Download.init format (listingPath listing)
                 |> Download.fetch listing.client
-                |> attemptWithError FetchFailed Downloaded
+                |> Task.attempt Downloaded
                 |> AppCmd.wrap
             )
 
-        Downloaded download ->
+        Downloaded (Ok download) ->
             ( listing
             , Download.save listing.table.name download
                 |> AppCmd.wrap
             )
+
+        Downloaded (Err _) ->
+            ( listing, AppCmd.none )
 
         CsvUploadRequested ->
             ( listing
@@ -403,9 +405,6 @@ update msg listing =
             )
 
         CsvUploadPosted (Err _) ->
-            ( listing, AppCmd.none )
-
-        FetchFailed _ ->
             ( listing, AppCmd.none )
 
 

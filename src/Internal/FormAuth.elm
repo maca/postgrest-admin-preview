@@ -26,7 +26,6 @@ import Postgrest.Client as PG
 import String.Extra as String
 import Task exposing (Task)
 import Url exposing (Protocol(..), Url)
-import Utils.Task exposing (attemptWithError)
 
 
 type Session
@@ -36,8 +35,7 @@ type Session
 type Msg
     = InputChanged String String
     | Submitted
-    | Succeeded Session
-    | Failed Error
+    | GotToken (Result Error Session)
 
 
 type alias Params =
@@ -92,7 +90,7 @@ config =
 isSuccessMsg : Msg -> Bool
 isSuccessMsg msg =
     case msg of
-        Succeeded _ ->
+        GotToken (Ok _) ->
             True
 
         _ ->
@@ -143,16 +141,15 @@ update msg auth =
 
         Submitted ->
             ( auth
-            , requestToken auth
-                |> attemptWithError Failed Succeeded
+            , Task.attempt GotToken (requestToken auth)
             )
 
-        Succeeded session ->
+        GotToken (Ok session) ->
             ( Success { params | fields = clearPassword params.fields } session
             , Cmd.none
             )
 
-        Failed error ->
+        GotToken (Err error) ->
             ( Failure { params | fields = clearPassword params.fields } error
             , Cmd.none
             )
@@ -183,7 +180,7 @@ requestToken auth =
         , headers = []
         , url = Url.toString params.url
         , body = Http.jsonBody (Dict.fromList params.fields |> params.encoder)
-        , resolver = Http.stringResolver <| handleJsonResponse <| params.decoder
+        , resolver = Http.stringResolver (handleJsonResponse params.decoder)
         , timeout = Nothing
         }
 
@@ -193,21 +190,21 @@ handleJsonResponse decoder response =
     case response of
         Http.BadStatus_ { statusCode } _ ->
             if statusCode == 401 || statusCode == 403 then
-                Err <| Forbidden
+                Err Forbidden
 
             else
-                Err <| ServerError statusCode
+                Err (ServerError statusCode)
 
         Http.GoodStatus_ _ body ->
             case Decode.decodeString decoder body of
                 Err err ->
-                    Err <| DecodeError err
+                    Err (DecodeError err)
 
                 Ok result ->
                     Ok result
 
         _ ->
-            Err <| NetworkError
+            Err NetworkError
 
 
 
@@ -241,8 +238,8 @@ viewForm auth =
                 [ fieldset [] (List.map viewField fields)
                 , fieldset []
                     [ button
-                        [ disabled <|
-                            List.any (Tuple.second >> String.isEmpty) fields
+                        [ disabled
+                            (List.any (Tuple.second >> String.isEmpty) fields)
                         ]
                         [ text "Login" ]
                     ]
@@ -255,7 +252,7 @@ viewField : ( String, String ) -> Html Msg
 viewField ( fieldName, fieldValue ) =
     div
         [ class "field" ]
-        [ label [ for fieldName ] [ text <| String.humanize fieldName ]
+        [ label [ for fieldName ] [ text (String.humanize fieldName) ]
         , input
             [ id fieldName
             , value fieldValue

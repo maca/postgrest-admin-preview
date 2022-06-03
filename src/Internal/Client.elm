@@ -29,7 +29,6 @@ import Internal.Schema as Schema
         , Schema
         , Table
         )
-import Json.Encode as Encode exposing (Value)
 import Postgrest.Client as PG exposing (Selectable)
 import Task exposing (Task)
 import Url exposing (Url)
@@ -123,10 +122,8 @@ update msg client =
             , Cmd.none
             )
 
-        SchemaFetched (Err err) ->
-            ( client
-            , Cmd.none
-            )
+        SchemaFetched (Err _) ->
+            ( client, Cmd.none )
 
 
 fetchSchema : Client -> Cmd Msg

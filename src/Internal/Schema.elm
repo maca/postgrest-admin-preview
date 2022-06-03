@@ -26,7 +26,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Regex exposing (Regex)
 import Time.Extra as Time
-import Utils.Task exposing (Error(..), fail, toError)
+import Utils.Task exposing (Error(..), toError)
 
 
 type alias ColumnNames =

@@ -170,66 +170,43 @@ update msg model =
             let
                 ( client, clientCmd ) =
                     Client.update childMsg model.client
+
+                ( route, cmd ) =
+                    case model.route of
+                        RouteLoadingSchema func ->
+                            if Client.schemaIsLoaded client then
+                                func
+                                    { client = client
+                                    , formFields = model.formFields
+                                    , key = model.key
+                                    , application = model.applicationConfig
+                                    }
+
+                            else if Client.isAuthSuccessMsg childMsg then
+                                ( model.route
+                                , Cmd.map ClientChanged
+                                    (Client.fetchSchema client)
+                                )
+
+                            else
+                                ( model.route, Cmd.none )
+
+                        _ ->
+                            ( model.route, Cmd.none )
             in
-            case model.route of
-                RouteLoadingSchema func ->
-                    let
-                        ( route, cmd ) =
-                            func
-                                { client = client
-                                , formFields = model.formFields
-                                , key = model.key
-                                , application = model.applicationConfig
-                                }
-                    in
-                    ( { model | client = client, route = route }
-                    , Cmd.batch [ Cmd.map ClientChanged clientCmd, cmd ]
-                    )
+            if Client.isAuthSuccessMsg childMsg then
+                ( { model | client = client, route = route }
+                , Cmd.batch
+                    [ Cmd.map ClientChanged clientCmd
+                    , loginCmd model client
+                    , cmd
+                    ]
+                )
 
-                RouteListing _ ->
-                    model
-                        |> clientChanged
-                            { loginMsg = PageListing.onLogin
-                            , tagger = PageListingChanged
-                            , clientMsg = childMsg
-                            }
-
-                RouteDetail _ ->
-                    model
-                        |> clientChanged
-                            { loginMsg = PageDetail.onLogin
-                            , tagger = PageDetailChanged
-                            , clientMsg = childMsg
-                            }
-
-                RouteForm _ ->
-                    model
-                        |> clientChanged
-                            { loginMsg = PageForm.onLogin
-                            , tagger = PageFormChanged
-                            , clientMsg = childMsg
-                            }
-
-                RouteApplication ->
-                    let
-                        ( app, cmd ) =
-                            updateApplicationClient client model
-                    in
-                    ( { model | client = client, mountedApp = app }
-                    , Cmd.batch
-                        [ Cmd.map ClientChanged clientCmd
-                        , if Client.isAuthSuccessMsg childMsg then
-                            cmd
-
-                          else
-                            Cmd.none
-                        ]
-                    )
-
-                _ ->
-                    ( { model | client = client }
-                    , Cmd.map ClientChanged clientCmd
-                    )
+            else
+                ( { model | client = client, route = route }
+                , Cmd.batch [ Cmd.map ClientChanged clientCmd, cmd ]
+                )
 
         PageListingChanged childMsg ->
             case model.route of
@@ -326,53 +303,46 @@ update msg model =
             ( model, Cmd.none )
 
 
-clientChanged :
-    { loginMsg : Client -> a
-    , tagger : a -> Msg m msg
-    , clientMsg : Client.Msg
-    }
-    -> Model m msg
-    -> ( Model m msg, Cmd (Msg m msg) )
-clientChanged { loginMsg, tagger, clientMsg } model =
-    let
-        ( client, clientCmd ) =
-            Client.update clientMsg model.client
 
-        ( mountedApp, appCmd ) =
-            updateApplicationClient client model
+--
+
+
+loginCmd : Model m msg -> Client -> Cmd (Msg m msg)
+loginCmd model client =
+    let
+        appLoginCmd =
+            case model.mountedApp of
+                Application params _ ->
+                    Task.succeed (params.onLogin client)
+                        |> Task.perform PageApplicationChanged
+
+                None ->
+                    Cmd.none
     in
-    ( { model | client = client, mountedApp = mountedApp }
-    , Cmd.batch
-        [ Cmd.map ClientChanged clientCmd
-        , if Client.isAuthSuccessMsg clientMsg then
+    case model.route of
+        RouteListing _ ->
             Cmd.batch
-                [ appCmd
-                , loginMsg client
-                    |> Task.succeed
-                    |> Task.perform identity
-                    |> Cmd.map tagger
-                , model.onLogin (Client.toJwtString client)
+                [ Task.perform PageListingChanged
+                    (Task.succeed (PageListing.onLogin client))
+                , appLoginCmd
                 ]
 
-          else
-            Cmd.none
-        ]
-    )
+        RouteDetail _ ->
+            Cmd.batch
+                [ Task.perform PageDetailChanged
+                    (Task.succeed (PageDetail.onLogin client))
+                , appLoginCmd
+                ]
 
+        RouteForm _ ->
+            Cmd.batch
+                [ Task.perform PageFormChanged
+                    (Task.succeed (PageForm.onLogin client))
+                , appLoginCmd
+                ]
 
-updateApplicationClient :
-    Client
-    -> Model m msg
-    -> ( Application m msg, Cmd (Msg m msg) )
-updateApplicationClient client model =
-    case model.mountedApp of
-        Application params _ ->
-            model.mountedApp
-                |> Application.update (params.onLogin client)
-                |> Tuple.mapSecond (mapAppCmd PageApplicationChanged)
-
-        None ->
-            ( model.mountedApp, Cmd.none )
+        _ ->
+            appLoginCmd
 
 
 
