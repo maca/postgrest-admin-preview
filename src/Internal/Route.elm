@@ -26,8 +26,8 @@ type alias InitParams m msg =
 type alias MountPoint m msg =
     ( Params m msg
     , Parser
-        (msg -> ( Route m msg, Cmd (Msg m msg) ))
-        ( Route m msg, Cmd (Msg m msg) )
+        (msg -> Cmd (Msg m msg))
+        (Cmd (Msg m msg))
     )
 
 

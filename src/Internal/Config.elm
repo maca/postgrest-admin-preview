@@ -1,5 +1,6 @@
 module Internal.Config exposing
     ( Config
+    , MountPoint
     , default
     , init
     , withFormAuth
@@ -18,10 +19,17 @@ import Internal.AuthScheme as AuthScheme exposing (AuthScheme)
 import Internal.Flag as Flag
 import Internal.FormAuth as FormAuth exposing (FormAuth)
 import Internal.Msg exposing (Msg)
-import Internal.Route exposing (MountPoint, Route(..))
 import Json.Decode as Decode exposing (Decoder)
 import Url exposing (Protocol(..), Url)
 import Url.Parser exposing (Parser)
+
+
+type alias MountPoint m msg =
+    ( Params m msg
+    , Parser
+        (msg -> Cmd (Msg m msg))
+        (Cmd (Msg m msg))
+    )
 
 
 type alias Config m msg =
@@ -103,10 +111,7 @@ withFormFieldsDecoder fields conf =
 
 withMountPoint :
     Params m msg
-    ->
-        Parser
-            (msg -> ( Route m msg, Cmd (Msg m msg) ))
-            ( Route m msg, Cmd (Msg m msg) )
+    -> Parser (msg -> Cmd (Msg m msg)) (Cmd (Msg m msg))
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
 withMountPoint program parser =

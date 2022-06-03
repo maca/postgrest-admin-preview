@@ -484,9 +484,14 @@ routeParser :
 routeParser url model =
     let
         mountPoint =
-            model.application
-                |> Maybe.map (applicationParser model >> List.singleton)
-                |> Maybe.withDefault []
+            case model.application of
+                Just app ->
+                    [ Parser.map (\cmd -> ( RouteApplication, cmd ))
+                        (applicationParser model app)
+                    ]
+
+                Nothing ->
+                    []
     in
     Parser.oneOf
         (mountPoint
@@ -593,7 +598,7 @@ initDetail model tableName id =
 applicationParser :
     Route.InitParams m msg
     -> MountPoint m msg
-    -> Parser (( Route m msg, Cmd (Msg m msg) ) -> a) a
+    -> Parser (Cmd (Msg m msg) -> a) a
 applicationParser { client } ( program, parser ) =
     Parser.map
         (\msg ->
@@ -601,8 +606,7 @@ applicationParser { client } ( program, parser ) =
                 ( model, cmd ) =
                     program.init client
             in
-            ( RouteApplication
-            , Task.succeed
+            Task.succeed
                 (ApplicationInit ( program, model )
                     [ Task.succeed msg
                         |> Task.perform identity
@@ -611,7 +615,6 @@ applicationParser { client } ( program, parser ) =
                     ]
                 )
                 |> Task.perform identity
-            )
         )
         parser
 

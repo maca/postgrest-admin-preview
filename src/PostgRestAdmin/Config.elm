@@ -237,4 +237,4 @@ withMountPoint =
 
 
 type alias Element m msg =
-    ( Route m msg, Cmd (Msg m msg) )
+    Cmd (Msg m msg)

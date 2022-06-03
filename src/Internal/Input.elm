@@ -27,7 +27,6 @@ import Html.Attributes
         , target
         )
 import Html.Events exposing (onInput)
-import Internal.Client
 import Internal.Cmd as AppCmd
 import Internal.Field as Field exposing (Field)
 import Internal.Record as Record exposing (Record)
