@@ -79,8 +79,8 @@ import Utils.Task as Internal
 params.
 
 See [Config](PostgRestAdmin.Config) and
-[Config.FormAuth](PostgRestAdmin.Config.FormAuth) for authentication configuration
-options.
+[Config.FormAuth](PostgRestAdmin.Config.FormAuth) for authentication
+configuration options.
 
 -}
 type alias Client =
@@ -400,7 +400,7 @@ request { client, method, headers, path, body, resolver, expect, timeout } =
 
 missingPrimaryKey : Task Error a
 missingPrimaryKey =
-    Task.fail (Internal.RequestError "No primary id in table")
+    Task.fail (Internal.RequestError "I cound't figure the primary key")
 
 
 selects : Table -> List Selectable

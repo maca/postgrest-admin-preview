@@ -12,7 +12,6 @@ module Internal.Client exposing
     , task
     , toHostUrl
     , toJwtString
-    , toResponse
     , toSchema
     , update
     , view
@@ -41,7 +40,6 @@ type alias Client =
     { host : Url
     , authScheme : AuthScheme
     , schema : Schema
-    , response : Result Error Value
     }
 
 
@@ -55,7 +53,6 @@ init url authScheme =
     { host = url
     , authScheme = authScheme
     , schema = Dict.empty
-    , response = Ok Encode.null
     }
 
 
@@ -105,11 +102,6 @@ getTable tableName { schema } =
     Dict.get tableName schema
 
 
-toResponse : Client -> Result Error Value
-toResponse { response } =
-    response
-
-
 
 -- UPDATE
 
@@ -132,7 +124,7 @@ update msg client =
             )
 
         SchemaFetched (Err err) ->
-            ( { client | response = Err err }
+            ( client
             , Cmd.none
             )
 
