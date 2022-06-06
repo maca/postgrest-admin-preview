@@ -2,12 +2,14 @@ module Utils.Task exposing
     ( Error(..)
     , errorToString
     , handleJsonResponse
+    , handleJsonValue
     , handleResponse
     , toError
     )
 
 import Http
 import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode exposing (Value)
 
 
 type Error
@@ -18,6 +20,15 @@ type Error
     | RequestError String
     | NoError
     | AuthError
+
+
+handleJsonValue : Http.Response String -> Result Error Value
+handleJsonValue =
+    handleJsonResponse <|
+        Decode.oneOf
+            [ Decode.value
+            , Decode.succeed Encode.null
+            ]
 
 
 handleJsonResponse : Decoder a -> Http.Response String -> Result Error a

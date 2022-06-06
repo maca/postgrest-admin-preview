@@ -73,7 +73,7 @@ import Url exposing (Url)
 import Utils.Task as Internal
     exposing
         ( Error(..)
-        , handleJsonResponse
+        , handleJsonValue
         , handleResponse
         )
 
@@ -191,7 +191,7 @@ fetchRecord { client, table, expect, id } =
                         ]
             in
             fetch mapper <|
-                Client.task
+                task
                     { client = client
                     , method = "GET"
                     , headers =
@@ -199,8 +199,6 @@ fetchRecord { client, table, expect, id } =
                     , path = "/" ++ tableName table ++ "?" ++ queryString
                     , body = Http.emptyBody
                     , timeout = Nothing
-                    , resolver =
-                        Http.stringResolver (handleJsonResponse Decode.value)
                     }
 
         Nothing ->
@@ -241,16 +239,13 @@ fetchRecordList { client, table, params, expect } =
                 (PG.select (selects table) :: params)
     in
     fetch (mapResult expect (Decode.list (Record.decoder table))) <|
-        Client.task
+        task
             { client = client
             , method = "GET"
             , headers = []
             , path = "/" ++ tableName table ++ "?" ++ queryString
             , body = Http.emptyBody
             , timeout = Nothing
-            , resolver =
-                Http.stringResolver
-                    (handleJsonResponse Decode.value)
             }
 
 
@@ -303,15 +298,14 @@ saveRecord { client, record, id, expect } =
             , path = path
             , body = Http.jsonBody (Record.encode record)
             , timeout = Nothing
-            , resolver = resolveWhatever
             }
     in
     case id of
         Just _ ->
-            fetch mapper (Client.task params)
+            fetch mapper (task params)
 
         Nothing ->
-            fetch mapper (Client.task { params | method = "POST" })
+            fetch mapper (task { params | method = "POST" })
 
 
 {-| Deletes a record.
@@ -342,14 +336,13 @@ deleteRecord { record, expect } client =
     case Record.location record of
         Just path ->
             fetch mapper <|
-                Client.task
+                task
                     { client = client
                     , method = "DELETE"
                     , headers = []
                     , path = path
                     , body = Http.emptyBody
                     , timeout = Nothing
-                    , resolver = resolveWhatever
                     }
 
         Nothing ->
@@ -379,7 +372,7 @@ task { client, method, headers, path, body, timeout } =
         , headers = headers
         , path = path
         , body = body
-        , resolver = Http.stringResolver (handleJsonResponse Decode.value)
+        , resolver = Http.stringResolver handleJsonValue
         , timeout = timeout
         }
 
@@ -389,16 +382,6 @@ task { client, method, headers, path, body, timeout } =
 fetch : (Result Error Value -> msg) -> Task Error Value -> Internal.Cmd msg
 fetch =
     Internal.Fetch
-
-
-{-| Use this in combination with [task](PostgRestAdmin.Client#task) when you
-don't expect PostgREST response to have a body, as when performing a request
-with POST or PATCH.
--}
-resolveWhatever : Http.Resolver Error Value
-resolveWhatever =
-    Http.bytesResolver
-        (handleResponse (always (Ok Encode.null)))
 
 
 
