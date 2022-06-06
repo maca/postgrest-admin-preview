@@ -348,13 +348,16 @@ loginCmd : Model m msg -> Client -> Cmd (Msg m msg)
 loginCmd model client =
     let
         appLoginCmd =
-            case model.mountedApp of
-                Application params _ ->
-                    Task.succeed (params.onLogin client)
-                        |> Task.perform PageApplicationChanged
+            Cmd.batch
+                [ model.onLogin (Client.toJwtString client)
+                , case model.mountedApp of
+                    Application params _ ->
+                        Task.succeed (params.onLogin client)
+                            |> Task.perform PageApplicationChanged
 
-                None ->
-                    Cmd.none
+                    None ->
+                        Cmd.none
+                ]
     in
     case model.route of
         RouteListing _ ->
