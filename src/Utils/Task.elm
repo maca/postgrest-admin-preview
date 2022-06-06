@@ -24,11 +24,19 @@ type Error
 
 handleJsonValue : Http.Response String -> Result Error Value
 handleJsonValue =
-    handleJsonResponse <|
-        Decode.oneOf
-            [ Decode.value
-            , Decode.succeed Encode.null
-            ]
+    handleResponse
+        (\body ->
+            if String.isEmpty body then
+                Ok Encode.null
+
+            else
+                case Decode.decodeString Decode.value body of
+                    Err err ->
+                        Err (DecodeError err)
+
+                    Ok result ->
+                        Ok result
+        )
 
 
 handleJsonResponse : Decoder a -> Http.Response String -> Result Error a
