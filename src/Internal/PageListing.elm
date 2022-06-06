@@ -385,7 +385,6 @@ update msg listing =
                                 [ Http.header "Prefer" "resolution=merge-duplicates" ]
                             , path = Url.absolute [ listing.table.name ] []
                             , body = Http.jsonBody json
-                            , resolver = Client.resolveWhatever
                             , timeout = Nothing
                             }
                     )

@@ -10,7 +10,6 @@ module PostgRestAdmin.Client exposing
     , deleteRecord
     , task
     , fetch
-    , resolveWhatever
     , Error
     , errorToString
     , isAuthenticated
@@ -45,7 +44,6 @@ but a [PostgRestAdmin.Cmd](PostgRestAdmin.Cmd).
 @docs deleteRecord
 @docs task
 @docs fetch
-@docs resolveWhatever
 
 @docs Error
 @docs errorToString
@@ -193,7 +191,7 @@ fetchRecord { client, table, expect, id } =
                         ]
             in
             fetch mapper <|
-                task
+                Client.task
                     { client = client
                     , method = "GET"
                     , headers =
@@ -243,7 +241,7 @@ fetchRecordList { client, table, params, expect } =
                 (PG.select (selects table) :: params)
     in
     fetch (mapResult expect (Decode.list (Record.decoder table))) <|
-        task
+        Client.task
             { client = client
             , method = "GET"
             , headers = []
@@ -310,10 +308,10 @@ saveRecord { client, record, id, expect } =
     in
     case id of
         Just _ ->
-            fetch mapper (task params)
+            fetch mapper (Client.task params)
 
         Nothing ->
-            fetch mapper (task { params | method = "POST" })
+            fetch mapper (Client.task { params | method = "POST" })
 
 
 {-| Deletes a record.
@@ -344,7 +342,7 @@ deleteRecord { record, expect } client =
     case Record.location record of
         Just path ->
             fetch mapper <|
-                task
+                Client.task
                     { client = client
                     , method = "DELETE"
                     , headers = []
@@ -371,18 +369,17 @@ task :
     , headers : List Http.Header
     , path : String
     , body : Http.Body
-    , resolver : Http.Resolver Error body
     , timeout : Maybe Float
     }
-    -> Task Error body
-task { client, method, headers, path, body, resolver, timeout } =
+    -> Task Error Value
+task { client, method, headers, path, body, timeout } =
     Client.task
         { client = client
         , method = method
         , headers = headers
         , path = path
         , body = body
-        , resolver = resolver
+        , resolver = Http.stringResolver (handleJsonResponse Decode.value)
         , timeout = timeout
         }
 
