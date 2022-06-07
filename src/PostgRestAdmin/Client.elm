@@ -8,8 +8,8 @@ module PostgRestAdmin.Client exposing
     , fetchRecordList
     , saveRecord
     , deleteRecord
-    , task
-    , fetch
+    , request
+    , expectJson
     , Error
     , errorToString
     , isAuthenticated
@@ -42,8 +42,8 @@ but a [PostgRestAdmin.Cmd](PostgRestAdmin.Cmd).
 @docs fetchRecordList
 @docs saveRecord
 @docs deleteRecord
-@docs task
-@docs fetch
+@docs request
+@docs expectJson
 
 @docs Error
 @docs errorToString
@@ -178,7 +178,7 @@ fetchRecord :
 fetchRecord { client, table, expect, id } =
     let
         mapper =
-            mapResult expect (Record.decoder table)
+            expectJson expect (Record.decoder table)
     in
     case tablePrimaryKeyName table of
         Just primaryKeyName ->
@@ -190,16 +190,15 @@ fetchRecord { client, table, expect, id } =
                         , PG.limit 1
                         ]
             in
-            fetch mapper <|
-                task
-                    { client = client
-                    , method = "GET"
-                    , headers =
-                        [ header "Accept" "application/vnd.pgrst.object+json" ]
-                    , path = "/" ++ tableName table ++ "?" ++ queryString
-                    , body = Http.emptyBody
-                    , timeout = Nothing
-                    }
+            request
+                { client = client
+                , method = "GET"
+                , headers =
+                    [ header "Accept" "application/vnd.pgrst.object+json" ]
+                , path = "/" ++ tableName table ++ "?" ++ queryString
+                , body = Http.emptyBody
+                , expect = mapper
+                }
 
         Nothing ->
             fetch mapper missingPrimaryKey
@@ -238,13 +237,14 @@ fetchRecordList { client, table, params, expect } =
             PG.toQueryString
                 (PG.select (selects table) :: params)
     in
-    fetch (mapResult expect (Decode.list (Record.decoder table))) <|
+    fetch (expectJson expect (Decode.list (Record.decoder table))) <|
         task
             { client = client
             , method = "GET"
             , headers = []
             , path = "/" ++ tableName table ++ "?" ++ queryString
             , body = Http.emptyBody
+            , resolver = Http.stringResolver handleJsonValue
             , timeout = Nothing
             }
 
@@ -288,24 +288,21 @@ saveRecord { client, record, id, expect } =
                 |> Maybe.withDefault
                     ("/" ++ Record.tableName record ++ "?" ++ queryString)
 
-        mapper =
-            mapResult expect (Decode.succeed ())
-
         params =
             { client = client
             , method = "PATCH"
             , headers = []
             , path = path
             , body = Http.jsonBody (Record.encode record)
-            , timeout = Nothing
+            , expect = expectJson expect (Decode.succeed ())
             }
     in
     case id of
         Just _ ->
-            fetch mapper (task params)
+            request params
 
         Nothing ->
-            fetch mapper (task { params | method = "POST" })
+            request { params | method = "POST" }
 
 
 {-| Deletes a record.
@@ -331,30 +328,24 @@ deleteRecord :
 deleteRecord { record, expect } client =
     let
         mapper =
-            mapResult expect (Decode.succeed ())
+            expectJson expect (Decode.succeed ())
     in
     case Record.location record of
         Just path ->
-            fetch mapper <|
-                task
-                    { client = client
-                    , method = "DELETE"
-                    , headers = []
-                    , path = path
-                    , body = Http.emptyBody
-                    , timeout = Nothing
-                    }
+            request
+                { client = client
+                , method = "DELETE"
+                , headers = []
+                , path = path
+                , body = Http.emptyBody
+                , expect = mapper
+                }
 
         Nothing ->
             fetch mapper missingPrimaryKey
 
 
 {-| Task to perform a request to a PostgREST instance resource.
-
-The path can identify a plural resource such as `/posts` in which case an
-[upsert](https://postgrest.org/en/stable/api.html?highlight=upsert#upsert)
-operation will be performed, or a singular resource such as '/posts?id=eq.1'.
-
 -}
 task :
     { client : Client
@@ -362,19 +353,54 @@ task :
     , headers : List Http.Header
     , path : String
     , body : Http.Body
+    , resolver : Http.Resolver Error body
     , timeout : Maybe Float
     }
-    -> Task Error Value
-task { client, method, headers, path, body, timeout } =
+    -> Task Error body
+task { client, method, headers, resolver, path, body, timeout } =
     Client.task
         { client = client
         , method = method
         , headers = headers
         , path = path
         , body = body
-        , resolver = Http.stringResolver handleJsonValue
+        , resolver = resolver
         , timeout = timeout
         }
+
+
+{-| Perform a request
+-}
+request :
+    { client : Client
+    , method : String
+    , headers : List Http.Header
+    , path : String
+    , body : Http.Body
+    , expect : Result Error Value -> msg
+    }
+    -> AppCmd.Cmd msg
+request { client, method, headers, path, body, expect } =
+    fetch expect <|
+        Client.task
+            { client = client
+            , method = method
+            , headers = headers
+            , path = path
+            , body = body
+            , resolver = Http.stringResolver handleJsonValue
+            , timeout = Nothing
+            }
+
+
+{-| Expect the response to be JSON and decode.
+-}
+expectJson : (Result Error a -> msg) -> Decoder a -> Result Error Value -> msg
+expectJson expect decoder result =
+    result
+        |> Result.andThen
+            (Decode.decodeValue decoder >> Result.mapError DecodeError)
+        |> expect
 
 
 {-| Perform a task converting the result to a message.
@@ -419,11 +445,3 @@ tablePrimaryKeyName : Table -> Maybe String
 tablePrimaryKeyName table =
     Dict.find (\_ column -> Field.isPrimaryKey column) table.columns
         |> Maybe.map Tuple.first
-
-
-mapResult : (Result Error a -> msg) -> Decoder a -> Result Error Value -> msg
-mapResult expect decoder result =
-    result
-        |> Result.andThen
-            (Decode.decodeValue decoder >> Result.mapError DecodeError)
-        |> expect

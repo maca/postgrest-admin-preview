@@ -377,16 +377,15 @@ update msg listing =
                                 >> CsvUploadPosted
                     in
                     ( listing
-                    , Client.fetch expect <|
-                        Client.task
-                            { client = listing.client
-                            , method = "POST"
-                            , headers =
-                                [ Http.header "Prefer" "resolution=merge-duplicates" ]
-                            , path = Url.absolute [ listing.table.name ] []
-                            , body = Http.jsonBody json
-                            , timeout = Nothing
-                            }
+                    , Client.request
+                        { client = listing.client
+                        , method = "POST"
+                        , headers =
+                            [ Http.header "Prefer" "resolution=merge-duplicates" ]
+                        , path = Url.absolute [ listing.table.name ] []
+                        , body = Http.jsonBody json
+                        , expect = expect
+                        }
                     )
 
                 Err _ ->
