@@ -1,4 +1,10 @@
-module Internal.Application exposing (Application(..), Params, none, update)
+module Internal.Application exposing
+    ( Application(..)
+    , Params
+    , none
+    , subscriptions
+    , update
+    )
 
 import Html exposing (Html)
 import Internal.Cmd as AppCmd
@@ -9,6 +15,7 @@ type alias Params model msg =
     { init : Client -> ( model, AppCmd.Cmd msg )
     , view : model -> Html msg
     , update : msg -> model -> ( model, AppCmd.Cmd msg )
+    , subscriptions : model -> Sub msg
     , onLogin : Client -> msg
     }
 
@@ -31,3 +38,13 @@ update msg application =
 
         None ->
             ( application, AppCmd.none )
+
+
+subscriptions : Application m msg -> Sub msg
+subscriptions application =
+    case application of
+        Application params model ->
+            params.subscriptions model
+
+        None ->
+            Sub.none

@@ -89,6 +89,7 @@ main =
             { init = init
             , update = update
             , view = view
+            , subscriptions = always Sub.none
             , onLogin = LoggedIn
             }
             (Parser.map GotId (s "workflows" </> Parser.string </> s "form"))

@@ -488,8 +488,8 @@ loading =
 
 
 subscriptions : Model m msg -> Sub (Msg m msg)
-subscriptions _ =
-    Sub.none
+subscriptions { mountedApp } =
+    Sub.map PageApplicationChanged (Application.subscriptions mountedApp)
 
 
 

@@ -262,6 +262,7 @@ withMountPoint :
     { init : Client -> ( model, AppCmd.Cmd msg )
     , view : model -> Html msg
     , update : msg -> model -> ( model, AppCmd.Cmd msg )
+    , subscriptions : model -> Sub msg
     , onLogin : Client -> msg
     }
     -> Parser (msg -> msg) msg
