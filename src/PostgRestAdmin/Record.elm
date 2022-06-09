@@ -1,6 +1,8 @@
 module PostgRestAdmin.Record exposing
     ( Record
     , fromTable
+    , Value(..)
+    , value
     , id
     , location
     , label
@@ -19,6 +21,16 @@ module PostgRestAdmin.Record exposing
 
 @docs Record
 @docs fromTable
+
+
+# Record Values
+
+@docs Value
+@docs value
+
+
+# Properties
+
 @docs id
 @docs location
 @docs label
@@ -46,14 +58,26 @@ module PostgRestAdmin.Record exposing
 import Dict exposing (Dict)
 import Internal.Record as Record
 import Internal.Schema exposing (Table)
-import Json.Decode exposing (Decoder)
+import Internal.Value exposing (Value(..))
+import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
+import Time
 
 
 {-| A Record.
 -}
 type alias Record =
     Record.Record
+
+
+{-| -}
+type Value
+    = RFloat Float
+    | RInt Int
+    | RString String
+    | RBool Bool
+    | RPosix Time.Posix
+    | RValue Decode.Value
 
 
 {-| Create a blank record from a [Table](PostgRestAdmin.Client#Table).
@@ -75,6 +99,48 @@ getTable =
 id : Record -> Maybe String
 id =
     Record.id
+
+
+{-| -}
+value : String -> Record -> Maybe Value
+value fieldName { fields } =
+    Dict.get fieldName fields
+        |> Maybe.andThen
+            (\field ->
+                case field.value of
+                    PFloat (Just val) ->
+                        Just (RFloat val)
+
+                    PInt (Just val) ->
+                        Just (RInt val)
+
+                    PString (Just val) ->
+                        Just (RString val)
+
+                    PText (Just val) ->
+                        Just (RString val)
+
+                    PEnum (Just val) _ ->
+                        Just (RString val)
+
+                    PBool (Just val) ->
+                        Just (RBool val)
+
+                    PTime (Just val) ->
+                        Just (RPosix val)
+
+                    PDate (Just val) ->
+                        Just (RPosix val)
+
+                    PJson val ->
+                        Just (RValue val)
+
+                    Unknown val ->
+                        Just (RValue val)
+
+                    _ ->
+                        Nothing
+            )
 
 
 {-| Obtain the location for a record
