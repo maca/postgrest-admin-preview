@@ -21,12 +21,13 @@ import Internal.Flag as Flag
 import Internal.FormAuth as FormAuth exposing (FormAuth)
 import Json.Decode as Decode exposing (Decoder)
 import PostgRestAdmin.Client exposing (Table)
+import PostgRestAdmin.Record exposing (Record)
 import Url exposing (Protocol(..), Url)
 import Url.Parser exposing (Parser)
 
 
 type alias DetailActions =
-    List ( String, String -> String )
+    List ( String, Record -> String -> String )
 
 
 type alias Config m msg =
@@ -49,8 +50,8 @@ init =
 
 
 withHost : String -> Decoder (Config m msg) -> Decoder (Config m msg)
-withHost urlStr decoder =
-    decoder |> Decode.andThen (withHostDecoder urlStr)
+withHost urlStr =
+    Decode.andThen (withHostDecoder urlStr)
 
 
 withHostDecoder : String -> Config m msg -> Decoder (Config m msg)
@@ -65,42 +66,47 @@ withFormAuth :
     Decoder FormAuth
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
-withFormAuth authDecoder decoder =
+withFormAuth authDecoder =
     Decode.map2 (\auth conf -> { conf | authScheme = AuthScheme.basic auth })
         (authDecoder
             |> Flag.string "authUrl" FormAuth.withAuthUrlDecoder
         )
-        decoder
 
 
 withJwt : String -> Decoder (Config m msg) -> Decoder (Config m msg)
-withJwt tokenStr decoder =
-    decoder
-        |> Decode.andThen
-            (\conf ->
-                Decode.succeed { conf | authScheme = AuthScheme.jwt tokenStr }
-            )
+withJwt tokenStr =
+    Decode.andThen
+        (\conf ->
+            Decode.succeed { conf | authScheme = AuthScheme.jwt tokenStr }
+        )
 
 
 withOnLogin :
     (String -> Cmd msg)
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
-withOnLogin onLogin decoder =
-    decoder
-        |> Decode.andThen
-            (\conf ->
-                Decode.succeed
-                    { conf | onLogin = onLogin }
-            )
+withOnLogin onLogin =
+    Decode.andThen
+        (\conf ->
+            Decode.succeed
+                { conf | onLogin = onLogin }
+        )
 
 
 withFormFields :
-    Dict String (List String)
+    String
+    -> List String
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
-withFormFields fields =
-    Decode.andThen (withFormFieldsDecoder fields)
+withFormFields tableName fields =
+    Decode.andThen
+        (\conf ->
+            Decode.succeed
+                { conf
+                    | formFields =
+                        Dict.insert tableName fields conf.formFields
+                }
+        )
 
 
 withFormFieldsDecoder :
@@ -108,16 +114,23 @@ withFormFieldsDecoder :
     -> Config m msg
     -> Decoder (Config m msg)
 withFormFieldsDecoder fields conf =
-    Decode.succeed { conf | formFields = fields }
+    Decode.succeed { conf | formFields = Dict.union fields conf.formFields }
 
 
 withDetailActions :
-    Dict String DetailActions
+    String
+    -> DetailActions
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
-withDetailActions actions =
+withDetailActions tableName actions =
     Decode.andThen
-        (\conf -> Decode.succeed { conf | detailActions = actions })
+        (\conf ->
+            Decode.succeed
+                { conf
+                    | detailActions =
+                        Dict.insert tableName actions conf.detailActions
+                }
+        )
 
 
 withMountPoint :
@@ -128,8 +141,7 @@ withMountPoint :
 withMountPoint program parser =
     Decode.andThen
         (\conf ->
-            Decode.succeed
-                { conf | application = Just ( program, parser ) }
+            Decode.succeed { conf | application = Just ( program, parser ) }
         )
 
 

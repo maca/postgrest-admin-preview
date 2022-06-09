@@ -47,6 +47,7 @@ import Internal.Config as Config exposing (DetailActions)
 import Json.Decode exposing (Decoder)
 import PostgRestAdmin.Client exposing (Client)
 import PostgRestAdmin.Config.FormAuth exposing (FormAuth)
+import PostgRestAdmin.Record exposing (Record)
 import Url exposing (Protocol(..))
 import Url.Parser exposing (Parser)
 
@@ -167,9 +168,7 @@ the forms.
       main : PostgRestAdmin.Program Never Never
       main =
           Config.init
-              |> Config.withFormFields
-                  (Dict.fromList
-                       [("posts", ["id", "title", "content"])])
+              |> Config.withFormFields "posts" ["id", "title", "content"]
               |> PostgRestAdmin.application
 
 Alternatively this parameter can be configured using flags, configuring using
@@ -180,7 +179,7 @@ Alternatively this parameter can be configured using flags, configuring using
       })
 
 -}
-withFormFields : Dict String (List String) -> Config m msg -> Config m msg
+withFormFields : String -> List String -> Config m msg -> Config m msg
 withFormFields =
     Config.withFormFields
 
@@ -198,24 +197,20 @@ the resource and returns a url string.
       main : PostgRestAdmin.Program Never Never
       main =
           Config.init
-              |> Config.withDetailActions
-                  (Dict.fromList
-                      [ ( "posts"
-                        , [ ( "View Comments"
-                            , \id ->
-                                  Url.absolute
-                                      [ "posts", id, "comments" ]
-                                      []
-                            )
-                          ]
-                        )
-                      ]
-                  )
+              |> Config.withDetailActions "posts"
+                  [ ( "View Comments"
+                    , \_ id -> Url.absolute [ "posts", id, "comments" ] []
+                    )
+                  ]
 
           |> PostgRestAdmin.application
 
 -}
-withDetailActions : Dict String DetailActions -> Config m msg -> Config m msg
+withDetailActions :
+    String
+    -> List ( String, Record -> String -> String )
+    -> Config m msg
+    -> Config m msg
 withDetailActions =
     Config.withDetailActions
 

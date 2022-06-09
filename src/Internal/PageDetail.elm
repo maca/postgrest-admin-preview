@@ -241,7 +241,9 @@ actions customActions record =
             div
                 [ class "actions" ]
                 (List.map
-                    (\( copy, url ) -> linkButton { url = url id, text = copy })
+                    (\( copy, buildUrl ) ->
+                        linkButton { url = buildUrl record id, text = copy }
+                    )
                     customActions
                     ++ [ linkButton
                             { url =

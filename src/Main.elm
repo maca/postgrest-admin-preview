@@ -75,16 +75,11 @@ main : PostgRestAdmin.Program Model Msg
 main =
     Config.init
         |> Config.withFormAuth FormAuth.config
-        |> Config.withDetailActions
-            (Dict.fromList
-                [ ( "workflows"
-                  , [ ( "Edit Workflow"
-                      , \id -> Url.absolute [ "workflows", id, "form" ] []
-                      )
-                    ]
-                  )
-                ]
-            )
+        |> Config.withDetailActions "workflows"
+            [ ( "Edit Workflow"
+              , \_ id -> Url.absolute [ "workflows", id, "form" ] []
+              )
+            ]
         |> Config.withMountPoint
             { init = init
             , update = update
