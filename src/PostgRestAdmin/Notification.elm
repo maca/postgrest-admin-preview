@@ -1,10 +1,19 @@
 module PostgRestAdmin.Notification exposing
-    ( Notification
-    , confirm
-    , dismiss
+    ( confirm
     , error
-    , none
+    , dismiss
     )
+
+{-| Display notifications and errors.
+
+Note that this functions produce a [PostgRestAdmin.Cmd](PostgRestAdmin.Cmd) and
+not a vanilla Elm Cmd.
+
+@docs confirm
+@docs error
+@docs dismiss
+
+-}
 
 import Internal.Cmd as Internal
 import Internal.Notification as Notification
@@ -12,25 +21,22 @@ import PostgRestAdmin.Cmd as AppCmd
 import Task exposing (Task)
 
 
-type alias Notification =
-    Notification.Notification
-
-
-none : Notification
-none =
-    Notification.none
-
-
+{-| Display an error.
+-}
 error : String -> AppCmd.Cmd msg
 error =
     Notification.error >> performTask
 
 
+{-| Display an confirmation notification.
+-}
 confirm : String -> AppCmd.Cmd msg
 confirm =
     Notification.confirm >> performTask
 
 
+{-| Dismiss notification.
+-}
 dismiss : AppCmd.Cmd msg
 dismiss =
     performTask Notification.dismiss
