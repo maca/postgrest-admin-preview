@@ -6,13 +6,14 @@ module Internal.Application exposing
     , update
     )
 
+import Browser.Navigation as Nav
 import Html exposing (Html)
 import Internal.Cmd as AppCmd
 import PostgRestAdmin.Client exposing (Client)
 
 
 type alias Params model msg =
-    { init : Client -> ( model, AppCmd.Cmd msg )
+    { init : Client -> Nav.Key -> ( model, AppCmd.Cmd msg )
     , view : model -> Html msg
     , update : msg -> model -> ( model, AppCmd.Cmd msg )
     , subscriptions : model -> Sub msg

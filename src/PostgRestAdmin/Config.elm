@@ -40,6 +40,7 @@ module PostgRestAdmin.Config exposing
 
 -}
 
+import Browser.Navigation as Nav
 import Dict exposing (Dict)
 import Html exposing (Html)
 import Internal.Cmd as AppCmd
@@ -254,7 +255,7 @@ use to perform requests.
 
 -}
 withMountPoint :
-    { init : Client -> ( model, AppCmd.Cmd msg )
+    { init : Client -> Nav.Key -> ( model, AppCmd.Cmd msg )
     , view : model -> Html msg
     , update : msg -> model -> ( model, AppCmd.Cmd msg )
     , subscriptions : model -> Sub msg

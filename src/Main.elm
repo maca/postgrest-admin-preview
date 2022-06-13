@@ -1,5 +1,6 @@
 module Main exposing (main)
 
+import Browser.Navigation as Nav
 import Dict
 import Html exposing (Html, button, div, text)
 import Html.Events exposing (onClick)
@@ -42,8 +43,8 @@ view { count, id } =
         ]
 
 
-init : Client -> ( Model, AppCmd.Cmd Msg )
-init client =
+init : Client -> Nav.Key -> ( Model, AppCmd.Cmd Msg )
+init client _ =
     ( { count = 1, client = client, id = "" }
     , AppCmd.wrap Cmd.none
     )

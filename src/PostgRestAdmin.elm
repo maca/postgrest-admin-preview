@@ -188,7 +188,7 @@ update msg model =
                             ( model.mountedApp, AppCmd.none )
 
                         None ->
-                            params.init model.client
+                            params.init model.client model.key
                                 |> Tuple.mapFirst (Application params)
 
                 ( app_, cmd ) =
