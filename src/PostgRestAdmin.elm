@@ -455,8 +455,7 @@ mainContent model =
             Html.map PageListingChanged (PageListing.view listing)
 
         RouteDetail listing ->
-            Html.map PageDetailChanged
-                (PageDetail.view (Client.toSchema model.client) listing)
+            Html.map PageDetailChanged (PageDetail.view listing)
 
         RouteForm form ->
             Html.map PageFormChanged (PageForm.view form)

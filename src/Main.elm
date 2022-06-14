@@ -9,6 +9,7 @@ import PostgRestAdmin.Client exposing (Client)
 import PostgRestAdmin.Cmd as AppCmd
 import PostgRestAdmin.Config as Config
 import PostgRestAdmin.Config.FormAuth as FormAuth
+import PostgRestAdmin.Detail
 import Url.Builder as Url
 import Url.Parser as Parser exposing ((</>), s)
 

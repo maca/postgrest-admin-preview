@@ -159,8 +159,8 @@ update msg (PageDetail params) =
 -- View
 
 
-view : Schema -> PageDetail -> Html Msg
-view schema (PageDetail params) =
+view : PageDetail -> Html Msg
+view (PageDetail params) =
     case params.record of
         Nothing ->
             text ""
@@ -212,7 +212,7 @@ view schema (PageDetail params) =
                     text ""
                 , aside
                     [ class "associations" ]
-                    (Record.referencedBy schema record
+                    (Record.referencedBy params.client.schema record
                         |> List.map referenceToHtml
                     )
                 ]
