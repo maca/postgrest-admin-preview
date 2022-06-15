@@ -1,17 +1,17 @@
 module Internal.Cmd exposing (Cmd(..), batch, map, none, wrap)
 
+import Internal.Http exposing (Error(..), Response(..))
 import Internal.Notification as Notification
 import Json.Decode exposing (Value)
 import Platform.Cmd as Platform
 import Task exposing (Task)
-import Utils.Task exposing (Error(..))
 
 
 type Cmd msg
     = ChildCmd (Platform.Cmd msg)
     | Batch (List (Cmd msg))
     | ChangeNotification (Platform.Cmd Notification.Msg)
-    | Fetch (Result Error Value -> msg) (Task Error Value)
+    | Fetch (Result Error (Response Value) -> msg) (Task Error (Response Value))
 
 
 wrap : Platform.Cmd msg -> Cmd msg

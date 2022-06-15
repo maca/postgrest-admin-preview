@@ -25,6 +25,7 @@ import Internal.Client as Client
 import Internal.Cmd as AppCmd
 import Internal.Config as Config exposing (Config)
 import Internal.Flag as Flag
+import Internal.Http exposing (Error(..), Response, errorToString)
 import Internal.Notification as Notification exposing (Notification)
 import Internal.PageDetail as PageDetail exposing (PageDetail)
 import Internal.PageForm as PageForm exposing (PageForm)
@@ -36,7 +37,6 @@ import String.Extra as String
 import Task
 import Url exposing (Url)
 import Url.Parser as Parser exposing ((</>), Parser, s)
-import Utils.Task exposing (Error(..), errorToString)
 
 
 {-| An alias to elm's Platform.Program providing the type signature for a
@@ -82,7 +82,11 @@ type Msg m msg
     | PageDetailChanged PageDetail.Msg
     | PageFormChanged PageForm.Msg
     | PageApplicationChanged msg
-    | RequestPerformed (Result Error Value -> Msg m msg) (Result Error Value)
+    | RequestPerformed
+        (Result Error (Response Value)
+         -> Msg m msg
+        )
+        (Result Error (Response Value))
     | NotificationChanged Notification.Msg
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url

@@ -21,9 +21,9 @@ module PostgRestAdmin.Detail exposing
 -}
 
 import Browser.Navigation as Nav
-import Html exposing (Html, button, div, text)
+import Html exposing (Html)
 import Internal.PageDetail as PageDetail exposing (PageDetail)
-import Internal.Schema exposing (Constraint(..), Reference, Schema, Table)
+import Internal.Schema exposing (Constraint(..), Table)
 import PostgRestAdmin.Client exposing (Client)
 import PostgRestAdmin.Cmd as AppCmd
 import PostgRestAdmin.Record exposing (Record)

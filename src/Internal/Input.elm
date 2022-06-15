@@ -29,15 +29,15 @@ import Html.Attributes
 import Html.Events exposing (onInput)
 import Internal.Cmd as AppCmd
 import Internal.Field as Field exposing (Field)
+import Internal.Http exposing (Error(..))
 import Internal.Record as Record exposing (Record)
 import Internal.Schema exposing (Constraint(..), ForeignKeyParams)
 import Internal.Value as Value exposing (Value(..))
 import Maybe.Extra as Maybe
-import PostgRestAdmin.Client as Client exposing (Client)
+import PostgRestAdmin.Client as Client exposing (Client, Collection)
 import Postgrest.Client as PG
 import String.Extra as String
 import Url.Builder as Url
-import Utils.Task exposing (Error(..))
 
 
 type alias Fields =
@@ -53,7 +53,7 @@ type alias Autocomplete =
 
 type Msg
     = Changed ( String, Input ) String
-    | ListingFetched String (Result Error (List Record))
+    | ListingFetched String (Result Error (Collection Record))
 
 
 type Input
@@ -126,20 +126,20 @@ update client msg record =
             , AppCmd.none
             )
 
-        ListingFetched name (Ok results) ->
+        ListingFetched name (Ok { list }) ->
             case Dict.get name record of
                 Just (Association field params) ->
                     let
                         input =
                             Association field <|
-                                if List.isEmpty results then
+                                if List.isEmpty list then
                                     { params
                                         | results = []
                                         , blocked = True
                                     }
 
                                 else
-                                    { params | results = results }
+                                    { params | results = list }
                     in
                     ( Dict.insert name input record, AppCmd.none )
 

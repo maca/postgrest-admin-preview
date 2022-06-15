@@ -14,6 +14,7 @@ module PostgRestAdmin.Client exposing
     , errorToString
     , isAuthenticated
     , toJwtString
+    , Collection, requestMany
     )
 
 {-|
@@ -62,6 +63,14 @@ import Http exposing (header)
 import Internal.Client as Client exposing (Client)
 import Internal.Cmd as Internal
 import Internal.Field as Field
+import Internal.Http as Internal
+    exposing
+        ( Error(..)
+        , Response(..)
+        , handleMany
+        , handleNone
+        , handleOne
+        )
 import Internal.Schema as Schema exposing (Column, Constraint(..), Table)
 import Json.Decode as Decode exposing (Decoder, Value)
 import Json.Encode as Encode
@@ -70,12 +79,6 @@ import PostgRestAdmin.Record as Record exposing (Record)
 import Postgrest.Client as PG exposing (Selectable)
 import Task exposing (Task)
 import Url exposing (Url)
-import Utils.Task as Internal
-    exposing
-        ( Error(..)
-        , handleJsonValue
-        , handleResponse
-        )
 
 
 {-| Represents a client for a PostgREST instance, including authentication
@@ -100,6 +103,14 @@ type alias Table =
 -}
 type alias Error =
     Internal.Error
+
+
+type alias Collection a =
+    { from : Int
+    , to : Int
+    , total : Int
+    , list : List a
+    }
 
 
 {-| Obtain the PostgREST instance url.
@@ -178,7 +189,7 @@ fetchRecord :
 fetchRecord { client, table, expect, id } =
     let
         mapper =
-            expectJson expect (Record.decoder table)
+            decodeOne (Record.decoder table) >> expect
     in
     case tablePrimaryKeyName table of
         Just primaryKeyName ->
@@ -190,15 +201,17 @@ fetchRecord { client, table, expect, id } =
                         , PG.limit 1
                         ]
             in
-            request
-                { client = client
-                , method = "GET"
-                , headers =
-                    [ header "Accept" "application/vnd.pgrst.object+json" ]
-                , path = "/" ++ tableName table ++ "?" ++ queryString
-                , body = Http.emptyBody
-                , expect = mapper
-                }
+            fetch mapper <|
+                task
+                    { client = client
+                    , method = "GET"
+                    , headers =
+                        [ header "Accept" "application/vnd.pgrst.object+json" ]
+                    , path = "/" ++ tableName table ++ "?" ++ queryString
+                    , body = Http.emptyBody
+                    , resolver = Http.stringResolver handleOne
+                    , timeout = Nothing
+                    }
 
         Nothing ->
             fetch mapper missingPrimaryKey
@@ -228,7 +241,7 @@ fetchRecordList :
     { client : Client
     , table : Table
     , params : PG.Params
-    , expect : Result Error (List Record) -> msg
+    , expect : Result Error (Collection Record) -> msg
     }
     -> AppCmd.Cmd msg
 fetchRecordList { client, table, params, expect } =
@@ -237,14 +250,14 @@ fetchRecordList { client, table, params, expect } =
             PG.toQueryString
                 (PG.select (selects table) :: params)
     in
-    fetch (expectJson expect (Decode.list (Record.decoder table))) <|
+    fetch (decodeMany (Record.decoder table) >> expect) <|
         task
             { client = client
             , method = "GET"
-            , headers = []
+            , headers = [ header "Prefer" "count=planned" ]
             , path = "/" ++ tableName table ++ "?" ++ queryString
             , body = Http.emptyBody
-            , resolver = Http.stringResolver handleJsonValue
+            , resolver = Http.stringResolver handleMany
             , timeout = Nothing
             }
 
@@ -276,6 +289,9 @@ saveRecord :
     -> AppCmd.Cmd msg
 saveRecord { client, record, id, expect } =
     let
+        mapper =
+            Result.map (always ()) >> expect
+
         queryString =
             PG.toQueryString
                 [ PG.select (selects record.table)
@@ -294,15 +310,16 @@ saveRecord { client, record, id, expect } =
             , headers = []
             , path = path
             , body = Http.jsonBody (Record.encode record)
-            , expect = expectJson expect (Decode.succeed ())
+            , resolver = Http.stringResolver handleNone
+            , timeout = Nothing
             }
     in
     case id of
         Just _ ->
-            request params
+            fetch mapper (task params)
 
         Nothing ->
-            request { params | method = "POST" }
+            fetch mapper (task { params | method = "POST" })
 
 
 {-| Deletes a record.
@@ -328,18 +345,20 @@ deleteRecord :
 deleteRecord { record, expect } client =
     let
         mapper =
-            expectJson expect (Decode.succeed ())
+            Result.map (always ()) >> expect
     in
     case Record.location record of
         Just path ->
-            request
-                { client = client
-                , method = "DELETE"
-                , headers = []
-                , path = path
-                , body = Http.emptyBody
-                , expect = mapper
-                }
+            fetch mapper <|
+                task
+                    { client = client
+                    , method = "DELETE"
+                    , headers = []
+                    , path = path
+                    , body = Http.emptyBody
+                    , resolver = Http.stringResolver handleNone
+                    , timeout = Nothing
+                    }
 
         Nothing ->
             fetch mapper missingPrimaryKey
@@ -381,14 +400,36 @@ request :
     }
     -> AppCmd.Cmd msg
 request { client, method, headers, path, body, expect } =
-    fetch expect <|
+    fetch (decodeOne Decode.value >> expect) <|
         Client.task
             { client = client
             , method = method
             , headers = headers
             , path = path
             , body = body
-            , resolver = Http.stringResolver handleJsonValue
+            , resolver = Http.stringResolver handleOne
+            , timeout = Nothing
+            }
+
+
+requestMany :
+    { client : Client
+    , method : String
+    , headers : List Http.Header
+    , path : String
+    , body : Http.Body
+    , expect : Result Error (Collection Value) -> msg
+    }
+    -> AppCmd.Cmd msg
+requestMany { client, method, headers, path, body, expect } =
+    fetch (decodeMany Decode.value >> expect) <|
+        Client.task
+            { client = client
+            , method = method
+            , headers = headers
+            , path = path
+            , body = body
+            , resolver = Http.stringResolver handleMany
             , timeout = Nothing
             }
 
@@ -405,7 +446,10 @@ expectJson expect decoder result =
 
 {-| Perform a task converting the result to a message.
 -}
-fetch : (Result Error Value -> msg) -> Task Error Value -> Internal.Cmd msg
+fetch :
+    (Result Error (Response Value) -> msg)
+    -> Task Error (Response Value)
+    -> Internal.Cmd msg
 fetch =
     Internal.Fetch
 
@@ -445,3 +489,48 @@ tablePrimaryKeyName : Table -> Maybe String
 tablePrimaryKeyName table =
     Dict.find (\_ column -> Field.isPrimaryKey column) table.columns
         |> Maybe.map Tuple.first
+
+
+
+-- DECODE
+
+
+decodeOne : Decoder a -> Result Error (Response Value) -> Result Error a
+decodeOne decoder result =
+    result
+        |> Result.andThen
+            (\response ->
+                case response of
+                    One value ->
+                        Decode.decodeValue decoder value
+                            |> Result.mapError DecodeError
+
+                    Many _ _ ->
+                        Err ExpectedRecord
+
+                    None ->
+                        Err ExpectedRecord
+            )
+
+
+decodeMany :
+    Decoder a
+    -> Result Error (Response Value)
+    -> Result Error (Collection a)
+decodeMany decoder result =
+    result
+        |> Result.andThen
+            (\response ->
+                case response of
+                    Many { from, to, total } list ->
+                        Encode.list identity list
+                            |> Decode.decodeValue (Decode.list decoder)
+                            |> Result.mapError DecodeError
+                            |> Result.map (Collection from to total)
+
+                    One _ ->
+                        Err ExpectedRecordList
+
+                    None ->
+                        Err ExpectedRecordList
+            )

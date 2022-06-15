@@ -41,10 +41,9 @@ module PostgRestAdmin.Config exposing
 -}
 
 import Browser.Navigation as Nav
-import Dict exposing (Dict)
 import Html exposing (Html)
 import Internal.Cmd as AppCmd
-import Internal.Config as Config exposing (DetailActions)
+import Internal.Config as Config
 import Json.Decode exposing (Decoder)
 import PostgRestAdmin.Client exposing (Client)
 import PostgRestAdmin.Config.FormAuth exposing (FormAuth)

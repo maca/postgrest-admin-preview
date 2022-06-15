@@ -3,10 +3,10 @@ module Internal.Download exposing (Download, Format(..), fetch, init, save)
 import Bytes exposing (Bytes)
 import File.Download as Download
 import Http exposing (header)
+import Internal.Http exposing (Error(..), handleResponse)
 import PostgRestAdmin.Client as Client exposing (Client)
 import Task exposing (Task)
 import Url
-import Utils.Task exposing (Error(..), handleResponse)
 
 
 type Format
@@ -65,7 +65,8 @@ fetch client download =
                     ]
                 , url = Url.toString { host | path = url download }
                 , body = Http.emptyBody
-                , resolver = Http.bytesResolver (handleResponse Ok)
+                , resolver =
+                    Http.bytesResolver (handleResponse (\_ body -> Ok body))
                 , timeout = Nothing
                 }
                 |> Task.map (Complete (format download) (url download))

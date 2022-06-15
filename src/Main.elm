@@ -1,7 +1,6 @@
 module Main exposing (main)
 
 import Browser.Navigation as Nav
-import Dict
 import Html exposing (Html, button, div, text)
 import Html.Events exposing (onClick)
 import PostgRestAdmin
@@ -9,7 +8,6 @@ import PostgRestAdmin.Client exposing (Client)
 import PostgRestAdmin.Cmd as AppCmd
 import PostgRestAdmin.Config as Config
 import PostgRestAdmin.Config.FormAuth as FormAuth
-import PostgRestAdmin.Detail
 import Url.Builder as Url
 import Url.Parser as Parser exposing ((</>), s)
 

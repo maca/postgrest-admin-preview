@@ -22,6 +22,7 @@ import Dict.Extra as Dict
 import Html exposing (Html, text)
 import Http exposing (header)
 import Internal.AuthScheme as AuthScheme exposing (AuthScheme)
+import Internal.Http exposing (Error(..), handleJsonResponse)
 import Internal.Schema as Schema
     exposing
         ( Column
@@ -32,7 +33,6 @@ import Internal.Schema as Schema
 import Postgrest.Client as PG exposing (Selectable)
 import Task exposing (Task)
 import Url exposing (Url)
-import Utils.Task exposing (Error(..), handleJsonResponse)
 
 
 type alias Client =

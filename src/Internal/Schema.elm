@@ -10,6 +10,7 @@ module Internal.Schema exposing
 
 import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
+import Internal.Http exposing (Error(..), toError)
 import Internal.Value exposing (Value(..))
 import Json.Decode as Decode
     exposing
@@ -26,7 +27,6 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Regex exposing (Regex)
 import Time.Extra as Time
-import Utils.Task exposing (Error(..), toError)
 
 
 type alias ColumnNames =

@@ -20,7 +20,6 @@ import Internal.AuthScheme as AuthScheme exposing (AuthScheme)
 import Internal.Flag as Flag
 import Internal.FormAuth as FormAuth exposing (FormAuth)
 import Json.Decode as Decode exposing (Decoder)
-import PostgRestAdmin.Client exposing (Table)
 import PostgRestAdmin.Record exposing (Record)
 import Url exposing (Protocol(..), Url)
 import Url.Parser exposing (Parser)

@@ -16,6 +16,7 @@ import Html.Attributes exposing (autocomplete, class, disabled, href, novalidate
 import Html.Events exposing (onSubmit)
 import Internal.Cmd as AppCmd
 import Internal.Field as Field
+import Internal.Http exposing (Error(..))
 import Internal.Input as Input exposing (Input)
 import Internal.Schema exposing (Table)
 import Internal.Value exposing (Value(..))
@@ -25,7 +26,6 @@ import PostgRestAdmin.Record as Record exposing (Record)
 import String.Extra as String
 import Url
 import Url.Builder as Url
-import Utils.Task exposing (Error(..))
 
 
 type Msg

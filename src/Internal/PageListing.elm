@@ -53,12 +53,13 @@ import Internal.Client exposing (selects)
 import Internal.Cmd as AppCmd
 import Internal.Download as Download exposing (Download, Format(..))
 import Internal.Field as Field
+import Internal.Http exposing (Error(..))
 import Internal.Schema exposing (Column, Constraint(..), Table)
 import Internal.Search as Search exposing (Search)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import List.Extra as List
-import PostgRestAdmin.Client as Client exposing (Client)
+import PostgRestAdmin.Client as Client exposing (Client, Collection)
 import PostgRestAdmin.Notification as Notification
 import PostgRestAdmin.Record as Record exposing (Record)
 import Postgrest.Client as PG
@@ -68,7 +69,6 @@ import Time
 import Time.Extra as Time
 import Url
 import Url.Builder as Url exposing (QueryParameter)
-import Utils.Task exposing (Error(..))
 
 
 type Page
@@ -84,7 +84,7 @@ type SortOrder
 
 type Msg
     = LoggedIn Client
-    | Fetched (Result Error (List Record))
+    | Fetched (Result Error (Collection Record))
     | RecordLinkClicked String String
     | ApplyFilters
     | Sort SortOrder
@@ -219,20 +219,20 @@ update msg listing =
             fetchListing
                 { listing | client = client }
 
-        Fetched (Ok records) ->
+        Fetched (Ok { list }) ->
             ( { listing
                 | page = listing.page + 1
                 , pages =
                     case listing.pages of
                         Blank :: ps ->
-                            if List.length records < perPage then
-                                Blank :: Page records :: ps
+                            if List.length list < perPage then
+                                Blank :: Page list :: ps
 
                             else
-                                Page records :: ps
+                                Page list :: ps
 
                         _ ->
-                            Page records :: listing.pages
+                            Page list :: listing.pages
               }
             , AppCmd.none
             )

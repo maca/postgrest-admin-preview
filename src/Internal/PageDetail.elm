@@ -32,15 +32,15 @@ import Html.Events exposing (onClick)
 import Internal.Cmd as AppCmd
 import Internal.Config exposing (DetailActions)
 import Internal.Field as Field exposing (Field)
+import Internal.Http exposing (Error(..))
 import Internal.Record as Record exposing (Record)
-import Internal.Schema exposing (Constraint(..), Reference, Schema, Table)
+import Internal.Schema exposing (Constraint(..), Reference, Table)
 import Internal.Value exposing (Value(..))
 import PostgRestAdmin.Client as Client exposing (Client)
 import PostgRestAdmin.Notification as Notification
 import String.Extra as String
 import Url
 import Url.Builder as Url
-import Utils.Task exposing (Error(..))
 
 
 type Msg
@@ -85,7 +85,9 @@ init { client, table, id, detailActions } key =
                 , confirmDelete = False
                 }
     in
-    ( pageDetail, fetch pageDetail )
+    ( pageDetail
+    , fetch pageDetail
+    )
 
 
 fetch : PageDetail -> AppCmd.Cmd Msg
@@ -171,15 +173,21 @@ view (PageDetail params) =
                 [ h1
                     []
                     [ Record.label record
-                        |> Maybe.withDefault ""
-                        |> (++) (String.humanize (Record.tableName record) ++ " - ")
+                        |> Maybe.withDefault params.id
+                        |> (++)
+                            (String.humanize
+                                (Record.tableName record)
+                                ++ " - "
+                            )
                         |> text
                     ]
                 , article
                     [ class "card" ]
                     [ table
                         []
-                        (sortedFields record |> List.map (tableRow (Record.tableName record)))
+                        (sortedFields record
+                            |> List.map (tableRow (Record.tableName record))
+                        )
                     , actions params.detailActions record
                     ]
                 , if params.confirmDelete then
@@ -212,7 +220,7 @@ view (PageDetail params) =
                     text ""
                 , aside
                     [ class "associations" ]
-                    (Record.referencedBy params.client.schema record
+                    (references params.client record
                         |> List.map referenceToHtml
                     )
                 ]
@@ -282,6 +290,11 @@ tableRow resourcesName ( name, field ) =
 
 
 -- Utils
+
+
+references : Client -> Record -> List Reference
+references client record =
+    Record.referencedBy client.schema record
 
 
 sortedFields : Record -> List ( String, Field )
