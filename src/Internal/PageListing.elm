@@ -371,10 +371,6 @@ update msg listing =
                                     >> Encode.dict identity Encode.string
                                 )
                                 records
-
-                        expect =
-                            Result.map (always (List.length records))
-                                >> CsvUploadPosted
                     in
                     ( listing
                     , Client.request
@@ -384,7 +380,8 @@ update msg listing =
                             [ Http.header "Prefer" "resolution=merge-duplicates" ]
                         , path = Url.absolute [ listing.table.name ] []
                         , body = Http.jsonBody json
-                        , expect = expect
+                        , decoder = Decode.succeed (List.length records)
+                        , expect = CsvUploadPosted
                         }
                     )
 

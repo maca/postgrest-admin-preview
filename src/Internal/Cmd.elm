@@ -11,7 +11,7 @@ type Cmd msg
     = ChildCmd (Platform.Cmd msg)
     | Batch (List (Cmd msg))
     | ChangeNotification (Platform.Cmd Notification.Msg)
-    | Fetch (Result Error (Response Value) -> msg) (Task Error (Response Value))
+    | Fetch (Result Error Response -> msg) (Task Error Response)
 
 
 wrap : Platform.Cmd msg -> Cmd msg

@@ -82,11 +82,7 @@ type Msg m msg
     | PageDetailChanged PageDetail.Msg
     | PageFormChanged PageForm.Msg
     | PageApplicationChanged msg
-    | RequestPerformed
-        (Result Error (Response Value)
-         -> Msg m msg
-        )
-        (Result Error (Response Value))
+    | RequestPerformed (Result Error Response -> Msg m msg) (Result Error Response)
     | NotificationChanged Notification.Msg
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url

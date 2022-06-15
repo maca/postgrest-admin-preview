@@ -9,12 +9,16 @@ module PostgRestAdmin.Client exposing
     , saveRecord
     , deleteRecord
     , request
-    , expectJson
+    , requestMany
+    , Collection
     , Error
     , errorToString
+    , oneResolver
+    , manyResolver
+    , noneResolver
+    , attempt
     , isAuthenticated
     , toJwtString
-    , Collection, requestMany
     )
 
 {-|
@@ -44,10 +48,18 @@ but a [PostgRestAdmin.Cmd](PostgRestAdmin.Cmd).
 @docs saveRecord
 @docs deleteRecord
 @docs request
-@docs expectJson
+@docs requestMany
+@docs Collection
 
 @docs Error
 @docs errorToString
+
+@docs oneResolver
+
+@docs manyResolver
+@docs noneResolver
+
+@docs attempt
 
 
 # Authentication
@@ -67,13 +79,12 @@ import Internal.Http as Internal
     exposing
         ( Error(..)
         , Response(..)
-        , handleMany
-        , handleNone
-        , handleOne
+        , handleResponse
         )
 import Internal.Schema as Schema exposing (Column, Constraint(..), Table)
 import Json.Decode as Decode exposing (Decoder, Value)
 import Json.Encode as Encode
+import Parser exposing ((|.), (|=), Parser)
 import PostgRestAdmin.Cmd as AppCmd
 import PostgRestAdmin.Record as Record exposing (Record)
 import Postgrest.Client as PG exposing (Selectable)
@@ -105,11 +116,19 @@ type alias Error =
     Internal.Error
 
 
+{-| -}
 type alias Collection a =
     { from : Int
     , to : Int
     , total : Int
     , list : List a
+    }
+
+
+type alias Count =
+    { from : Int
+    , to : Int
+    , total : Int
     }
 
 
@@ -201,7 +220,7 @@ fetchRecord { client, table, expect, id } =
                         , PG.limit 1
                         ]
             in
-            fetch mapper <|
+            attempt mapper <|
                 task
                     { client = client
                     , method = "GET"
@@ -209,12 +228,12 @@ fetchRecord { client, table, expect, id } =
                         [ header "Accept" "application/vnd.pgrst.object+json" ]
                     , path = "/" ++ tableName table ++ "?" ++ queryString
                     , body = Http.emptyBody
-                    , resolver = Http.stringResolver handleOne
+                    , resolver = oneResolver
                     , timeout = Nothing
                     }
 
         Nothing ->
-            fetch mapper missingPrimaryKey
+            attempt mapper missingPrimaryKey
 
 
 {-| Fetches a list of records for a given table.
@@ -250,14 +269,14 @@ fetchRecordList { client, table, params, expect } =
             PG.toQueryString
                 (PG.select (selects table) :: params)
     in
-    fetch (decodeMany (Record.decoder table) >> expect) <|
+    attempt (decodeMany (Record.decoder table) >> expect) <|
         task
             { client = client
             , method = "GET"
             , headers = [ header "Prefer" "count=planned" ]
             , path = "/" ++ tableName table ++ "?" ++ queryString
             , body = Http.emptyBody
-            , resolver = Http.stringResolver handleMany
+            , resolver = manyResolver
             , timeout = Nothing
             }
 
@@ -310,16 +329,16 @@ saveRecord { client, record, id, expect } =
             , headers = []
             , path = path
             , body = Http.jsonBody (Record.encode record)
-            , resolver = Http.stringResolver handleNone
+            , resolver = noneResolver
             , timeout = Nothing
             }
     in
     case id of
         Just _ ->
-            fetch mapper (task params)
+            attempt mapper (task params)
 
         Nothing ->
-            fetch mapper (task { params | method = "POST" })
+            attempt mapper (task { params | method = "POST" })
 
 
 {-| Deletes a record.
@@ -349,19 +368,68 @@ deleteRecord { record, expect } client =
     in
     case Record.location record of
         Just path ->
-            fetch mapper <|
+            attempt mapper <|
                 task
                     { client = client
                     , method = "DELETE"
                     , headers = []
                     , path = path
                     , body = Http.emptyBody
-                    , resolver = Http.stringResolver handleNone
+                    , resolver = noneResolver
                     , timeout = Nothing
                     }
 
         Nothing ->
-            fetch mapper missingPrimaryKey
+            attempt mapper missingPrimaryKey
+
+
+{-| Perform a request
+-}
+request :
+    { client : Client
+    , method : String
+    , headers : List Http.Header
+    , path : String
+    , body : Http.Body
+    , decoder : Decoder a
+    , expect : Result Error a -> msg
+    }
+    -> AppCmd.Cmd msg
+request { client, method, headers, path, body, decoder, expect } =
+    attempt (decodeOne decoder >> expect) <|
+        Client.task
+            { client = client
+            , method = method
+            , headers = headers
+            , path = path
+            , body = body
+            , resolver = oneResolver
+            , timeout = Nothing
+            }
+
+
+{-| -}
+requestMany :
+    { client : Client
+    , method : String
+    , headers : List Http.Header
+    , path : String
+    , body : Http.Body
+    , decoder : Decoder a
+    , expect : Result Error (Collection a) -> msg
+    }
+    -> AppCmd.Cmd msg
+requestMany { client, method, headers, path, decoder, body, expect } =
+    attempt (decodeMany decoder >> expect) <|
+        Client.task
+            { client = client
+            , method = method
+            , headers = headers
+            , path = path
+            , body = body
+            , resolver = manyResolver
+            , timeout = Nothing
+            }
 
 
 {-| Task to perform a request to a PostgREST instance resource.
@@ -388,70 +456,68 @@ task { client, method, headers, resolver, path, body, timeout } =
         }
 
 
-{-| Perform a request
--}
-request :
-    { client : Client
-    , method : String
-    , headers : List Http.Header
-    , path : String
-    , body : Http.Body
-    , expect : Result Error Value -> msg
-    }
-    -> AppCmd.Cmd msg
-request { client, method, headers, path, body, expect } =
-    fetch (decodeOne Decode.value >> expect) <|
-        Client.task
-            { client = client
-            , method = method
-            , headers = headers
-            , path = path
-            , body = body
-            , resolver = Http.stringResolver handleOne
-            , timeout = Nothing
-            }
-
-
-requestMany :
-    { client : Client
-    , method : String
-    , headers : List Http.Header
-    , path : String
-    , body : Http.Body
-    , expect : Result Error (Collection Value) -> msg
-    }
-    -> AppCmd.Cmd msg
-requestMany { client, method, headers, path, body, expect } =
-    fetch (decodeMany Decode.value >> expect) <|
-        Client.task
-            { client = client
-            , method = method
-            , headers = headers
-            , path = path
-            , body = body
-            , resolver = Http.stringResolver handleMany
-            , timeout = Nothing
-            }
-
-
-{-| Expect the response to be JSON and decode.
--}
-expectJson : (Result Error a -> msg) -> Decoder a -> Result Error Value -> msg
-expectJson expect decoder result =
-    result
-        |> Result.andThen
-            (Decode.decodeValue decoder >> Result.mapError DecodeError)
-        |> expect
-
-
-{-| Perform a task converting the result to a message.
--}
-fetch :
-    (Result Error (Response Value) -> msg)
-    -> Task Error (Response Value)
+{-| -}
+attempt :
+    (Result Error Response -> msg)
+    -> Task Error Response
     -> Internal.Cmd msg
-fetch =
+attempt =
     Internal.Fetch
+
+
+
+-- RESOLVE
+
+
+{-| -}
+oneResolver : Http.Resolver Error Response
+oneResolver =
+    Http.stringResolver <|
+        handleResponse
+            (\_ body ->
+                if String.isEmpty body then
+                    Ok (One Encode.null)
+
+                else
+                    case Decode.decodeString Decode.value body of
+                        Err err ->
+                            Err (DecodeError err)
+
+                        Ok value ->
+                            Ok (One value)
+            )
+
+
+{-| -}
+manyResolver : Http.Resolver Error Response
+manyResolver =
+    Http.stringResolver <|
+        handleResponse
+            (\headers body ->
+                let
+                    count =
+                        Dict.get "Content-Range" headers
+                            |> Maybe.andThen
+                                (Parser.run countParser >> Result.toMaybe)
+                            |> Maybe.withDefault (Count 0 0 1)
+                in
+                if String.isEmpty body then
+                    Ok (Many count [])
+
+                else
+                    case Decode.decodeString (Decode.list Decode.value) body of
+                        Err err ->
+                            Err (DecodeError err)
+
+                        Ok values ->
+                            Ok (Many count values)
+            )
+
+
+{-| -}
+noneResolver : Http.Resolver Error Response
+noneResolver =
+    Http.stringResolver (handleResponse (\_ _ -> Ok None))
 
 
 
@@ -495,7 +561,7 @@ tablePrimaryKeyName table =
 -- DECODE
 
 
-decodeOne : Decoder a -> Result Error (Response Value) -> Result Error a
+decodeOne : Decoder a -> Result Error Response -> Result Error a
 decodeOne decoder result =
     result
         |> Result.andThen
@@ -515,7 +581,7 @@ decodeOne decoder result =
 
 decodeMany :
     Decoder a
-    -> Result Error (Response Value)
+    -> Result Error Response
     -> Result Error (Collection a)
 decodeMany decoder result =
     result
@@ -534,3 +600,16 @@ decodeMany decoder result =
                     None ->
                         Err ExpectedRecordList
             )
+
+
+countParser : Parser Count
+countParser =
+    Parser.succeed (\from to count -> Count from to (Maybe.withDefault to count))
+        |= Parser.int
+        |. Parser.symbol "/"
+        |= Parser.int
+        |. Parser.symbol "-"
+        |= Parser.oneOf
+            [ Parser.map Just Parser.int
+            , Parser.map (always Nothing) (Parser.symbol "-")
+            ]

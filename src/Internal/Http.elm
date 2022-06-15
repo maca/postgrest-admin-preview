@@ -3,18 +3,13 @@ module Internal.Http exposing
     , Response(..)
     , errorToString
     , handleJsonResponse
-    , handleMany
-    , handleNone
-    , handleOne
     , handleResponse
     , toError
     )
 
 import Dict exposing (Dict)
 import Http
-import Json.Decode as Decode exposing (Decoder)
-import Json.Encode as Encode exposing (Value)
-import Parser exposing ((|.), (|=), Parser)
+import Json.Decode as Decode exposing (Decoder, Value)
 
 
 type Error
@@ -36,56 +31,10 @@ type alias Count =
     }
 
 
-type Response a
-    = One a
-    | Many Count (List a)
+type Response
+    = One Value
+    | Many Count (List Value)
     | None
-
-
-handleOne : Http.Response String -> Result Error (Response Value)
-handleOne =
-    handleResponse
-        (\_ body ->
-            if String.isEmpty body then
-                Ok (One Encode.null)
-
-            else
-                case Decode.decodeString Decode.value body of
-                    Err err ->
-                        Err (DecodeError err)
-
-                    Ok value ->
-                        Ok (One value)
-        )
-
-
-handleMany : Http.Response String -> Result Error (Response Value)
-handleMany =
-    handleResponse
-        (\headers body ->
-            let
-                count =
-                    Dict.get "Content-Range" headers
-                        |> Maybe.andThen
-                            (Parser.run countParser >> Result.toMaybe)
-                        |> Maybe.withDefault (Count 0 0 1)
-            in
-            if String.isEmpty body then
-                Ok (Many count [])
-
-            else
-                case Decode.decodeString (Decode.list Decode.value) body of
-                    Err err ->
-                        Err (DecodeError err)
-
-                    Ok values ->
-                        Ok (Many count values)
-        )
-
-
-handleNone : Http.Response String -> Result Error (Response Value)
-handleNone =
-    handleResponse (\_ _ -> Ok None)
 
 
 handleJsonResponse : Decoder a -> Http.Response String -> Result Error a
@@ -154,16 +103,3 @@ errorToString error =
 genericError : String
 genericError =
     "Something went wrong, we'll fix soon"
-
-
-countParser : Parser Count
-countParser =
-    Parser.succeed (\from to count -> Count from to (Maybe.withDefault to count))
-        |= Parser.int
-        |. Parser.symbol "/"
-        |= Parser.int
-        |. Parser.symbol "-"
-        |= Parser.oneOf
-            [ Parser.map Just Parser.int
-            , Parser.map (always Nothing) (Parser.symbol "-")
-            ]
