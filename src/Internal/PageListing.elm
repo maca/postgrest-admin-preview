@@ -238,7 +238,14 @@ update msg listing =
             )
 
         Fetched (Err _) ->
-            ( listing, AppCmd.none )
+            case listing.order of
+                Unordered ->
+                    ( listing, AppCmd.none )
+
+                _ ->
+                    ( { listing | order = Unordered }
+                    , reload listing.table
+                    )
 
         RecordLinkClicked tableName id ->
             ( listing
@@ -248,24 +255,19 @@ update msg listing =
             )
 
         ApplyFilters ->
-            ( listing
-            , Dom.setViewportOf listing.table.name 0 0
-                |> Task.attempt (always Reload)
-                |> AppCmd.wrap
-            )
+            ( listing, reload listing.table )
 
         Sort order ->
-            ( { listing | order = order }
-            , Dom.setViewportOf listing.table.name 0 0
-                |> Task.attempt (always Reload)
-                |> AppCmd.wrap
-            )
+            ( { listing | order = order }, reload listing.table )
 
         Reload ->
             ( listing
-            , listingPath listing
-                |> Nav.pushUrl listing.key
-                |> AppCmd.wrap
+            , AppCmd.batch
+                [ listingPath listing
+                    |> Nav.replaceUrl listing.key
+                    |> AppCmd.wrap
+                , fetch listing
+                ]
             )
 
         Scrolled ->
@@ -401,6 +403,13 @@ update msg listing =
 
         CsvUploadPosted (Err _) ->
             ( listing, AppCmd.none )
+
+
+reload : Table -> AppCmd.Cmd Msg
+reload table =
+    Dom.setViewportOf table.name 0 0
+        |> Task.attempt (always Reload)
+        |> AppCmd.wrap
 
 
 listingPath : PageListing -> String
@@ -767,11 +776,11 @@ parseQueryHelp fragment =
 parseOrder : String -> SortOrder
 parseOrder fragment =
     case String.split "." fragment of
-        [ table, "asc" ] ->
-            Asc table
+        [ col, "asc" ] ->
+            Asc col
 
-        [ table, "desc" ] ->
-            Desc table
+        [ col, "desc" ] ->
+            Desc col
 
         _ ->
             Unordered
