@@ -28,6 +28,7 @@ services:
         - PGRST_JWT_SECRET=6oKDJMClxO1/6GiWRIvfYocH/w4yPerCHyV0BmAQius=
         - PGRST_DB_SCHEMA=api
         - PGRST_DB_ANON_ROLE=app_anon
+        - PGRST_DB_MAX_ROWS=1000
       depends_on:
         db: { condition: service_healthy }
       networks:

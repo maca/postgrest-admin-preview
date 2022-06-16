@@ -8,7 +8,7 @@ module Internal.PageDetail exposing
     )
 
 import Browser.Navigation as Nav
-import Dict
+import Dict exposing (Dict)
 import Html
     exposing
         ( Html
@@ -29,6 +29,7 @@ import Html
         )
 import Html.Attributes exposing (class, href)
 import Html.Events exposing (onClick)
+import Http exposing (header)
 import Internal.Cmd as AppCmd
 import Internal.Config exposing (DetailActions)
 import Internal.Field as Field exposing (Field)
@@ -36,16 +37,18 @@ import Internal.Http exposing (Error(..))
 import Internal.Record as Record exposing (Record)
 import Internal.Schema exposing (Constraint(..), Reference, Table)
 import Internal.Value exposing (Value(..))
-import PostgRestAdmin.Client as Client exposing (Client)
+import Json.Decode as Decode
+import PostgRestAdmin.Client as Client exposing (Client, Collection)
 import PostgRestAdmin.Notification as Notification
 import String.Extra as String
 import Url
-import Url.Builder as Url
+import Url.Builder as Url exposing (QueryParameter, string)
 
 
 type Msg
     = LoggedIn Client
     | Fetched (Result Error Record)
+    | GotCount String (Result Error (Collection ()))
     | Deleted (Result Error ())
     | DeleteModalOpened
     | DeleteModalClosed
@@ -61,6 +64,7 @@ type PageDetail
         , record : Maybe Record
         , detailActions : DetailActions
         , confirmDelete : Bool
+        , counts : Dict String Int
         }
 
 
@@ -83,6 +87,7 @@ init { client, table, id, detailActions } key =
                 , record = Nothing
                 , detailActions = detailActions
                 , confirmDelete = False
+                , counts = Dict.empty
                 }
     in
     ( pageDetail
@@ -117,8 +122,32 @@ update msg (PageDetail params) =
 
         Fetched (Ok record) ->
             ( PageDetail { params | record = Just record }
+            , references params.client record
+                |> List.map
+                    (\ref ->
+                        Client.requestMany
+                            { client = params.client
+                            , method = "HEAD"
+                            , headers = [ header "Prefer" "count=exact" ]
+                            , path = referencePath ref []
+                            , body = Http.emptyBody
+                            , decoder = Decode.succeed ()
+                            , expect = GotCount (Client.tableName ref.table)
+                            }
+                    )
+                |> AppCmd.batch
+            )
+
+        GotCount tableName (Ok { total }) ->
+            ( PageDetail
+                { params
+                    | counts = Dict.insert tableName total params.counts
+                }
             , AppCmd.none
             )
+
+        GotCount _ _ ->
+            ( PageDetail params, AppCmd.none )
 
         Fetched (Err _) ->
             ( PageDetail params, AppCmd.none )
@@ -197,7 +226,7 @@ view (PageDetail params) =
                             [ class "modal-dialog" ]
                             [ h2 []
                                 [ text """Are you sure you want to delete the
-                                                  record?"""
+                                          record?"""
                                 ]
                             , p [] [ text "This action cannot be undone." ]
                             , div
@@ -221,25 +250,23 @@ view (PageDetail params) =
                 , aside
                     [ class "associations" ]
                     (references params.client record
-                        |> List.map referenceToHtml
+                        |> List.map (referenceToHtml params.counts)
                     )
                 ]
 
 
-referenceToHtml : Reference -> Html Msg
-referenceToHtml { foreignKeyName, foreignKeyValue, table } =
+referenceToHtml : Dict String Int -> Reference -> Html Msg
+referenceToHtml counts ({ table } as reference) =
     a
         [ class "card association"
-        , href
-            ("/"
-                ++ table.name
-                ++ "?"
-                ++ foreignKeyName
-                ++ "=eq."
-                ++ foreignKeyValue
-            )
+        , href (referencePath reference [])
         ]
-        [ text (String.humanize table.name) ]
+        [ text (String.humanize table.name)
+        , Dict.get table.name counts
+            |> Maybe.map (\i -> " (" ++ String.fromInt i ++ ")")
+            |> Maybe.withDefault ""
+            |> text
+        ]
 
 
 actions : DetailActions -> Record -> Html Msg
@@ -289,12 +316,19 @@ tableRow resourcesName ( name, field ) =
 
 
 
--- Utils
+-- UTILS
 
 
 references : Client -> Record -> List Reference
 references client record =
     Record.referencedBy client.schema record
+
+
+referencePath : Reference -> List QueryParameter -> String
+referencePath { foreignKeyName, foreignKeyValue, table } query =
+    Url.absolute
+        [ table.name ]
+        (string foreignKeyName ("eq." ++ foreignKeyValue) :: query)
 
 
 sortedFields : Record -> List ( String, Field )

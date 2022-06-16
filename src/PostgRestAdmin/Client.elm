@@ -82,7 +82,7 @@ import Internal.Http as Internal
         , handleResponse
         )
 import Internal.Schema as Schema exposing (Column, Constraint(..), Table)
-import Json.Decode as Decode exposing (Decoder, Value)
+import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 import Parser exposing ((|.), (|=), Parser)
 import PostgRestAdmin.Cmd as AppCmd
@@ -496,7 +496,7 @@ manyResolver =
             (\headers body ->
                 let
                     count =
-                        Dict.get "Content-Range" headers
+                        Dict.get "content-range" headers
                             |> Maybe.andThen
                                 (Parser.run countParser >> Result.toMaybe)
                             |> Maybe.withDefault (Count 0 0 1)
@@ -604,12 +604,17 @@ decodeMany decoder result =
 
 countParser : Parser Count
 countParser =
-    Parser.succeed (\from to count -> Count from to (Maybe.withDefault to count))
-        |= Parser.int
+    Parser.succeed (\( from, to ) count -> Count from to (Maybe.withDefault to count))
+        |= Parser.oneOf
+            [ Parser.succeed Tuple.pair
+                |= Parser.int
+                |. Parser.symbol "-"
+                |= Parser.int
+            , Parser.succeed ( 0, 0 )
+                |. Parser.symbol "*"
+            ]
         |. Parser.symbol "/"
-        |= Parser.int
-        |. Parser.symbol "-"
         |= Parser.oneOf
             [ Parser.map Just Parser.int
-            , Parser.map (always Nothing) (Parser.symbol "-")
+            , Parser.map (always Nothing) (Parser.symbol "*")
             ]
