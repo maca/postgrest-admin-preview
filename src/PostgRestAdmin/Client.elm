@@ -259,22 +259,21 @@ fetchRecord { client, table, expect, id } =
 fetchRecordList :
     { client : Client
     , table : Table
-    , params : PG.Params
+    , queryString : String
     , expect : Result Error (Collection Record) -> msg
     }
     -> AppCmd.Cmd msg
-fetchRecordList { client, table, params, expect } =
+fetchRecordList { client, table, queryString, expect } =
     let
-        queryString =
-            PG.toQueryString
-                (PG.select (selects table) :: params)
+        selectString =
+            PG.toQueryString [ PG.select (selects table) ]
     in
     attempt (decodeMany (Record.decoder table) >> expect) <|
         task
             { client = client
             , method = "GET"
             , headers = [ header "Prefer" "count=planned" ]
-            , path = "/" ++ tableName table ++ "?" ++ queryString
+            , path = "/" ++ tableName table ++ "?" ++ selectString ++ "&" ++ queryString
             , body = Http.emptyBody
             , resolver = manyResolver
             , timeout = Nothing

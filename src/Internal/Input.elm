@@ -519,11 +519,15 @@ fetchRecords client name { tableName, labelColumnName } userInput =
 
                 queries =
                     List.filterMap identity [ idQuery, labelQuery ]
+
+                queryString =
+                    PG.toQueryString
+                        [ PG.select selects, PG.or queries, PG.limit 40 ]
             in
             Client.fetchRecordList
                 { client = client
                 , table = table
-                , params = [ PG.select selects, PG.or queries, PG.limit 40 ]
+                , queryString = queryString
                 , expect = ListingFetched name
                 }
 

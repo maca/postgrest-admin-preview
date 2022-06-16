@@ -250,16 +250,17 @@ view (PageDetail params) =
                 , aside
                     [ class "associations" ]
                     (references params.client record
-                        |> List.map (referenceToHtml params.counts)
+                        |> List.map (referenceToHtml record params.counts)
                     )
                 ]
 
 
-referenceToHtml : Dict String Int -> Reference -> Html Msg
-referenceToHtml counts ({ table } as reference) =
+referenceToHtml : Record -> Dict String Int -> Reference -> Html Msg
+referenceToHtml record counts { table, foreignKeyValue } =
     a
         [ class "card association"
-        , href (referencePath reference [])
+        , href
+            (Url.absolute [ record.table.name, foreignKeyValue, table.name ] [])
         ]
         [ text (String.humanize table.name)
         , Dict.get table.name counts

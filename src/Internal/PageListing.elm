@@ -49,12 +49,12 @@ import Html.Attributes
 import Html.Events as Events exposing (on, onClick, onMouseDown, onMouseUp)
 import Http
 import Inflect as String
-import Internal.Client exposing (selects)
+import Internal.Client as Client
 import Internal.Cmd as AppCmd
 import Internal.Download as Download exposing (Download, Format(..))
 import Internal.Field as Field
 import Internal.Http exposing (Error(..))
-import Internal.Schema exposing (Column, Constraint(..), Table)
+import Internal.Schema exposing (Constraint(..), Table)
 import Internal.Search as Search exposing (Search)
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -113,8 +113,13 @@ type TextSelect
 type alias PageListing =
     { client : Client
     , key : Nav.Key
-    , scrollPosition : Float
     , table : Table
+    , parent :
+        Maybe
+            { tableName : String
+            , id : String
+            }
+    , scrollPosition : Float
     , pages : List Page
     , page : Int
     , order : SortOrder
@@ -132,11 +137,14 @@ type alias EventConfig =
 
 
 init :
-    { client : Client, table : Table }
+    { client : Client
+    , table : Table
+    , parent : Maybe { tableName : String, id : String }
+    }
     -> Url.Url
     -> Nav.Key
     -> ( PageListing, AppCmd.Cmd Msg )
-init { client, table } url key =
+init { client, table, parent } url key =
     let
         order =
             Maybe.map parseQuery url.query
@@ -148,9 +156,10 @@ init { client, table } url key =
         listing =
             { client = client
             , key = key
+            , table = table
+            , parent = parent
             , page = 0
             , scrollPosition = 0
-            , table = table
             , pages = []
             , order = order
             , search = Search.init table (url.query |> Maybe.withDefault "")
@@ -192,22 +201,16 @@ descendingBy column listing =
 
 
 fetch : PageListing -> AppCmd.Cmd Msg
-fetch { search, page, table, order, client } =
-    let
-        pgOrder =
-            Dict.toList table.columns
-                |> List.filterMap (sortBy table.name order)
-
-        params =
-            [ PG.select (selects table)
-            , PG.limit perPage
-            , PG.offset (perPage * page)
-            ]
-    in
-    Client.fetchRecordList
-        { client = client
-        , table = table
-        , params = params ++ pgOrder ++ Search.toPGQuery search
+fetch pageListing =
+    Client.requestMany
+        { client = pageListing.client
+        , method = "GET"
+        , headers = [ Http.header "Prefer" "count=planned" ]
+        , path =
+            listingPath { limit = True, loadAll = False, nest = False }
+                pageListing
+        , body = Http.emptyBody
+        , decoder = Record.decoder pageListing.table
         , expect = Fetched
         }
 
@@ -262,12 +265,9 @@ update msg listing =
 
         Reload ->
             ( listing
-            , AppCmd.batch
-                [ listingPath listing
-                    |> Nav.replaceUrl listing.key
-                    |> AppCmd.wrap
-                , fetch listing
-                ]
+            , listingPath { limit = False, loadAll = True, nest = True } listing
+                |> Nav.replaceUrl listing.key
+                |> AppCmd.wrap
             )
 
         Scrolled ->
@@ -335,7 +335,14 @@ update msg listing =
 
         DownloadRequested format ->
             ( listing
-            , Download.init format (listingPath listing)
+            , Download.init format
+                (listingPath
+                    { limit = False
+                    , loadAll = True
+                    , nest = False
+                    }
+                    listing
+                )
                 |> Download.fetch listing.client
                 |> Task.attempt Downloaded
                 |> AppCmd.wrap
@@ -412,18 +419,80 @@ reload table =
         |> AppCmd.wrap
 
 
-listingPath : PageListing -> String
-listingPath { order, table, search } =
+listingPath :
+    { limit : Bool
+    , loadAll : Bool
+    , nest : Bool
+    }
+    -> PageListing
+    -> String
+listingPath { limit, loadAll, nest } { search, page, table, order, parent } =
     let
+        selectQuery =
+            if loadAll then
+                []
+
+            else
+                [ PG.select (Client.selects table) ]
+
+        parentQuery =
+            Dict.toList table.columns
+                |> List.filterMap
+                    (\( colName, { constraint } ) ->
+                        case constraint of
+                            ForeignKey foreignKey ->
+                                case parent of
+                                    Just { tableName, id } ->
+                                        if
+                                            (foreignKey.tableName == tableName)
+                                                && not nest
+                                        then
+                                            Just
+                                                (PG.param colName
+                                                    (PG.eq (PG.string id))
+                                                )
+
+                                        else
+                                            Nothing
+
+                                    Nothing ->
+                                        Nothing
+
+                            _ ->
+                                Nothing
+                    )
+
+        limitQuery =
+            if limit then
+                [ PG.limit perPage, PG.offset (perPage * page) ]
+
+            else
+                []
+
         queryParams =
             orderToQueryParams order
 
         baseUrl =
-            Url.absolute [ table.name ]
-                (orderToQueryParams order)
+            if nest then
+                Url.absolute
+                    (List.filterMap identity
+                        [ Maybe.map .tableName parent
+                        , Maybe.map .id parent
+                        , Just table.name
+                        ]
+                    )
+                    (orderToQueryParams order)
+
+            else
+                Url.absolute [ table.name ]
+                    (orderToQueryParams order)
 
         filterQuery =
-            Search.toPGQuery search |> PG.toQueryString
+            PG.toQueryString <|
+                parentQuery
+                    ++ limitQuery
+                    ++ selectQuery
+                    ++ Search.toPGQuery search
 
         joinChar =
             if List.isEmpty queryParams then
@@ -712,45 +781,6 @@ pageId pageNum =
 perPage : Int
 perPage =
     50
-
-
-sortBy : String -> SortOrder -> ( String, Column ) -> Maybe PG.Param
-sortBy tableName sort ( name, { constraint } ) =
-    let
-        colName =
-            case constraint of
-                ForeignKey params ->
-                    params.labelColumnName
-                        |> Maybe.map
-                            (\columnName ->
-                                String.join "_"
-                                    [ tableName
-                                    , params.tableName
-                                    , columnName
-                                    ]
-                            )
-                        |> Maybe.withDefault name
-
-                _ ->
-                    name
-    in
-    case sort of
-        Asc f ->
-            if f == name then
-                Just <| PG.order [ PG.asc colName |> PG.nullslast ]
-
-            else
-                Nothing
-
-        Desc f ->
-            if f == name then
-                Just <| PG.order [ PG.desc colName |> PG.nullslast ]
-
-            else
-                Nothing
-
-        Unordered ->
-            Nothing
 
 
 

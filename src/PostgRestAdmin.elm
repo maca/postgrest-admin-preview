@@ -539,13 +539,30 @@ routeParser url params =
     in
     Parser.oneOf
         (mountPoint
-            ++ [ Parser.map ( RouteRoot, Cmd.none ) Parser.top
+            ++ [ -- /
+                 Parser.map ( RouteRoot, Cmd.none ) Parser.top
+
+               -- /posts/new
                , Parser.map (initNewForm params) (Parser.string </> s "new")
+
+               -- /posts/edit
                , Parser.map (initForm params)
                     (Parser.string </> Parser.string </> s "edit")
+
+               -- /posts
+               , Parser.map (initListing params url Nothing) Parser.string
+
+               -- /posts/1/comments
+               , Parser.map
+                    (\parentTable parentId ->
+                        Just { tableName = parentTable, id = parentId }
+                            |> initListing params url
+                    )
+                    (Parser.string </> Parser.string </> Parser.string)
+
+               -- /posts/1
                , Parser.map (initDetail params)
                     (Parser.string </> Parser.string)
-               , Parser.map (initListing params url) Parser.string
                ]
         )
 
@@ -553,15 +570,17 @@ routeParser url params =
 initListing :
     InitParams m msg
     -> Url
+    -> Maybe { tableName : String, id : String }
     -> String
     -> ( Route m msg, Cmd (Msg m msg) )
-initListing params url tableName =
+initListing params url parent tableName =
     case Client.getTable tableName params.client of
         Just table ->
             let
                 listingParams =
                     { client = params.client
                     , table = table
+                    , parent = parent
                     }
             in
             PageListing.init listingParams url params.key
