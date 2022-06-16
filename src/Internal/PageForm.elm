@@ -18,7 +18,7 @@ import Internal.Cmd as AppCmd
 import Internal.Field as Field
 import Internal.Http exposing (Error(..))
 import Internal.Input as Input exposing (Input)
-import Internal.Schema exposing (Table)
+import Internal.Schema exposing (Constraint(..), Table)
 import Internal.Value exposing (Value(..))
 import PostgRestAdmin.Client as Client exposing (Client)
 import PostgRestAdmin.Notification as Notification
@@ -45,9 +45,10 @@ type PageForm
         { client : Client
         , key : Nav.Key
         , inputs : Inputs
-        , table : Table
         , fieldNames : List String
+        , table : Table
         , id : Maybe String
+        , parent : Maybe { tableName : String, id : String }
         }
 
 
@@ -56,10 +57,11 @@ init :
     , fieldNames : List String
     , id : Maybe String
     , table : Table
+    , parent : Maybe { tableName : String, id : String }
     }
     -> Nav.Key
     -> ( PageForm, AppCmd.Cmd Msg )
-init { client, fieldNames, id, table } key =
+init { client, fieldNames, id, table, parent } key =
     let
         pageForm =
             PageForm
@@ -69,9 +71,10 @@ init { client, fieldNames, id, table } key =
                     Maybe.map (always Dict.empty) id
                         |> Maybe.withDefault
                             (recordToInputs (Record.fromTable table))
-                , table = table
                 , fieldNames = fieldNames
+                , table = table
                 , id = id
+                , parent = parent
                 }
     in
     ( pageForm, fetchRecord pageForm )
@@ -165,9 +168,32 @@ update msg (PageForm params) =
 
 
 toRecord : PageForm -> Record
-toRecord (PageForm { table, inputs }) =
+toRecord (PageForm { table, inputs, parent }) =
     { table = table
-    , fields = Dict.map (\_ input -> Input.toField input) inputs
+    , fields =
+        Dict.map
+            (\_ input ->
+                let
+                    field =
+                        Input.toField input
+                in
+                case field.constraint of
+                    ForeignKey params ->
+                        case parent of
+                            Just { tableName, id } ->
+                                if params.tableName == tableName then
+                                    Field.updateWithString id field
+
+                                else
+                                    field
+
+                            _ ->
+                                field
+
+                    _ ->
+                        field
+            )
+            inputs
     }
 
 
@@ -186,8 +212,7 @@ filterInputs (PageForm params) =
     PageForm
         { params
             | inputs =
-                params.inputs
-                    |> Dict.filter (inputIsEditable params.fieldNames)
+                Dict.filter (inputIsEditable params.fieldNames) params.inputs
         }
 
 
@@ -231,14 +256,33 @@ toId (PageForm params) =
 
 
 view : PageForm -> Html Msg
-view ((PageForm { table, id }) as form) =
+view ((PageForm { table, id, parent }) as form) =
     let
         fields =
             filterInputs form
                 |> formInputs
                 |> List.map
                     (\( name, input ) ->
-                        Input.view name input |> Html.map InputChanged
+                        let
+                            inputView =
+                                Input.view name input
+                                    |> Html.map InputChanged
+                        in
+                        case Input.toField input |> .constraint of
+                            ForeignKey params ->
+                                case parent of
+                                    Just { tableName } ->
+                                        if params.tableName == tableName then
+                                            text ""
+
+                                        else
+                                            inputView
+
+                                    Nothing ->
+                                        inputView
+
+                            _ ->
+                                inputView
                     )
     in
     section

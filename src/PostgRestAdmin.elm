@@ -543,7 +543,8 @@ routeParser url params =
                  Parser.map ( RouteRoot, Cmd.none ) Parser.top
 
                -- /posts/new
-               , Parser.map (initNewForm params) (Parser.string </> s "new")
+               , Parser.map (initNewForm params Nothing)
+                    (Parser.string </> s "new")
 
                -- /posts/edit
                , Parser.map (initForm params)
@@ -551,6 +552,10 @@ routeParser url params =
 
                -- /posts
                , Parser.map (initListing params url Nothing) Parser.string
+
+               -- /posts/1
+               , Parser.map (initDetail params)
+                    (Parser.string </> Parser.string)
 
                -- /posts/1/comments
                , Parser.map
@@ -560,9 +565,13 @@ routeParser url params =
                     )
                     (Parser.string </> Parser.string </> Parser.string)
 
-               -- /posts/1
-               , Parser.map (initDetail params)
-                    (Parser.string </> Parser.string)
+               -- /posts/1/comments/new
+               , Parser.map
+                    (\parentTable parentId ->
+                        Just { tableName = parentTable, id = parentId }
+                            |> initNewForm params
+                    )
+                    (Parser.string </> Parser.string </> Parser.string </> s "new")
                ]
         )
 
@@ -591,9 +600,13 @@ initListing params url parent tableName =
             ( RouteNotFound, Cmd.none )
 
 
-initNewForm : InitParams m msg -> String -> ( Route m msg, Cmd (Msg m msg) )
-initNewForm params tableName =
-    initFormHelp params tableName Nothing
+initNewForm :
+    InitParams m msg
+    -> Maybe { tableName : String, id : String }
+    -> String
+    -> ( Route m msg, Cmd (Msg m msg) )
+initNewForm params parent tableName =
+    initFormHelp params parent tableName Nothing
 
 
 initForm :
@@ -602,15 +615,16 @@ initForm :
     -> String
     -> ( Route m msg, Cmd (Msg m msg) )
 initForm params tableName id =
-    initFormHelp params tableName (Just id)
+    initFormHelp params Nothing tableName (Just id)
 
 
 initFormHelp :
     InitParams m msg
+    -> Maybe { tableName : String, id : String }
     -> String
     -> Maybe String
     -> ( Route m msg, Cmd (Msg m msg) )
-initFormHelp { client, key, config } tableName id =
+initFormHelp { client, key, config } parent tableName id =
     case Client.getTable tableName client of
         Just table ->
             let
@@ -619,8 +633,9 @@ initFormHelp { client, key, config } tableName id =
                     , fieldNames =
                         Dict.get tableName config.formFields
                             |> Maybe.withDefault []
-                    , id = id
+                    , parent = parent
                     , table = table
+                    , id = id
                     }
             in
             PageForm.init params key

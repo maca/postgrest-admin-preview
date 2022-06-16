@@ -48,7 +48,6 @@ import Html.Attributes
         )
 import Html.Events as Events exposing (on, onClick, onMouseDown, onMouseUp)
 import Http
-import Inflect as String
 import Internal.Client as Client
 import Internal.Cmd as AppCmd
 import Internal.Download as Download exposing (Download, Format(..))
@@ -550,7 +549,7 @@ view listing =
     in
     section
         [ class "resources-listing" ]
-        [ listHeader listing.table.name
+        [ listHeader listing.parent listing.table.name
         , div
             [ id listing.table.name
             , class "resources-listing-results"
@@ -623,14 +622,26 @@ toggleSearchButton listing =
         ]
 
 
-listHeader : String -> Html Msg
-listHeader tableName =
+listHeader :
+    Maybe { tableName : String, id : String }
+    -> String
+    -> Html Msg
+listHeader parent tableName =
     header []
         [ h1 [] [ text <| String.humanize tableName ]
         , div []
             [ a
                 [ class "button"
-                , href <| Url.absolute [ tableName, "new" ] []
+                , href <|
+                    Url.absolute
+                        (List.filterMap identity
+                            [ Maybe.map .tableName parent
+                            , Maybe.map .id parent
+                            , Just tableName
+                            , Just "new"
+                            ]
+                        )
+                        []
                 ]
                 [ text "New Record" ]
             ]
