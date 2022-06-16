@@ -1,3 +1,5 @@
+**NOT READY YET**
+
 # PostgRestAdmin
 
 This package is meant as a turn key back office interface to a

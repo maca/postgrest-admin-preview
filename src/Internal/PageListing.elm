@@ -376,6 +376,18 @@ update msg listing =
                             Encode.list
                                 (List.zip headers
                                     >> Dict.fromList
+                                    >> (\dict ->
+                                            case
+                                                parentReference
+                                                    listing.table
+                                                    listing.parent
+                                            of
+                                                Just ( tableName, id ) ->
+                                                    Dict.insert tableName id dict
+
+                                                Nothing ->
+                                                    dict
+                                       )
                                     >> Encode.dict identity Encode.string
                                 )
                                 records
@@ -435,31 +447,16 @@ listingPath { limit, loadAll, nest } { search, page, table, order, parent } =
                 [ PG.select (Client.selects table) ]
 
         parentQuery =
-            Dict.toList table.columns
-                |> List.filterMap
-                    (\( colName, { constraint } ) ->
-                        case constraint of
-                            ForeignKey foreignKey ->
-                                case parent of
-                                    Just { tableName, id } ->
-                                        if
-                                            (foreignKey.tableName == tableName)
-                                                && not nest
-                                        then
-                                            Just
-                                                (PG.param colName
-                                                    (PG.eq (PG.string id))
-                                                )
+            if nest then
+                []
 
-                                        else
-                                            Nothing
-
-                                    Nothing ->
-                                        Nothing
-
-                            _ ->
-                                Nothing
-                    )
+            else
+                parentReference table parent
+                    |> Maybe.map
+                        (\( colName, id ) ->
+                            [ PG.param colName (PG.eq (PG.string id)) ]
+                        )
+                    |> Maybe.withDefault []
 
         limitQuery =
             if limit then
@@ -838,3 +835,30 @@ orderToQueryParams order =
 
         Unordered ->
             []
+
+
+parentReference :
+    Table
+    -> Maybe { tableName : String, id : String }
+    -> Maybe ( String, String )
+parentReference table parent =
+    Dict.toList table.columns
+        |> List.filterMap
+            (\( colName, { constraint } ) ->
+                case constraint of
+                    ForeignKey foreignKey ->
+                        case parent of
+                            Just { tableName, id } ->
+                                if foreignKey.tableName == tableName then
+                                    Just ( colName, id )
+
+                                else
+                                    Nothing
+
+                            Nothing ->
+                                Nothing
+
+                    _ ->
+                        Nothing
+            )
+        |> List.head
