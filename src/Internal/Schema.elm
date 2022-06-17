@@ -5,7 +5,9 @@ module Internal.Schema exposing
     , Reference
     , Schema
     , Table
+    , columnNames
     , decoder
+    , tablePrimaryKeyName
     )
 
 import Basics.Extra exposing (flip)
@@ -26,11 +28,8 @@ import Json.Decode as Decode
         )
 import Json.Encode as Encode
 import Regex exposing (Regex)
+import Set exposing (Set)
 import Time.Extra as Time
-
-
-type alias ColumnNames =
-    Dict String (List String)
 
 
 type alias Column =
@@ -80,13 +79,35 @@ type alias ColumnDefinition =
     }
 
 
+columnNames : Table -> Set String
+columnNames { columns } =
+    Set.fromList
+        (Dict.keys columns)
+
+
 decoder : Decoder Schema
 decoder =
     columnNamesDecoder
         |> Decode.andThen schemaDecoder
 
 
-columnNamesDecoder : Decoder ColumnNames
+tablePrimaryKeyName : Table -> Maybe String
+tablePrimaryKeyName { columns } =
+    columns
+        |> Dict.filter
+            (\_ { constraint } ->
+                case constraint of
+                    PrimaryKey ->
+                        True
+
+                    _ ->
+                        False
+            )
+        |> Dict.keys
+        |> List.head
+
+
+columnNamesDecoder : Decoder (Dict String (List String))
 columnNamesDecoder =
     field "definitions"
         (Decode.dict
@@ -96,28 +117,32 @@ columnNamesDecoder =
         )
 
 
-schemaDecoder : ColumnNames -> Decoder Schema
-schemaDecoder columnNames =
+schemaDecoder : Dict String (List String) -> Decoder Schema
+schemaDecoder colNames =
     field "definitions" (Decode.keyValuePairs Decode.value)
-        |> Decode.andThen (decodeResults (tableDecoder columnNames))
+        |> Decode.andThen (decodeResults (tableDecoder colNames))
 
 
-tableDecoder : ColumnNames -> String -> Decoder Table
-tableDecoder columnNames tableName =
+tableDecoder : Dict String (List String) -> String -> Decoder Table
+tableDecoder colNames tableName =
     field "required" (Decode.list Decode.string)
         |> Decode.andThen
             (\requiredColumns ->
                 field "properties" (Decode.keyValuePairs Decode.value)
                     |> Decode.andThen
                         (decodeResults
-                            (columnDecoder columnNames requiredColumns)
+                            (columnDecoder colNames requiredColumns)
                         )
             )
         |> Decode.map (\columns -> { columns = columns, name = tableName })
 
 
-columnDecoder : ColumnNames -> List String -> String -> Decoder Column
-columnDecoder columnNames requiredColumns columnName =
+columnDecoder :
+    Dict String (List String)
+    -> List String
+    -> String
+    -> Decoder Column
+columnDecoder colNames requiredColumns columnName =
     Decode.map4 ColumnDefinition
         (field "type" string)
         (field "format" string)
@@ -128,7 +153,7 @@ columnDecoder columnNames requiredColumns columnName =
                 let
                     makeColumn valueDecoder val =
                         { constraint =
-                            Maybe.map (columnConstraint columnNames) description
+                            Maybe.map (columnConstraint colNames) description
                                 |> Maybe.withDefault NoConstraint
                         , required = List.member columnName requiredColumns
                         , decoder = valueDecoder
@@ -213,20 +238,21 @@ decodeResults valueDecoder values =
 
         [] ->
             results
-                |> List.filterMap (Result.map Just >> Result.withDefault Nothing)
+                |> List.filterMap
+                    (Result.map Just >> Result.withDefault Nothing)
                 |> Dict.fromList
                 |> Decode.succeed
 
 
-columnConstraint : ColumnNames -> String -> Constraint
-columnConstraint columnNames description =
+columnConstraint : Dict String (List String) -> String -> Constraint
+columnConstraint colNames description =
     case extractForeignKey description of
         [ tableName, primaryKeyName ] ->
             ForeignKey
                 { tableName = tableName
                 , primaryKeyName = primaryKeyName
                 , labelColumnName =
-                    Dict.get tableName columnNames
+                    Dict.get tableName colNames
                         |> Maybe.andThen findLabelColum
                 , label = Nothing
                 }

@@ -168,7 +168,7 @@ update msg (PageForm params) =
 
 
 toRecord : PageForm -> Record
-toRecord (PageForm { table, inputs, parent }) =
+toRecord (PageForm { table, inputs, parent, id }) =
     { table = table
     , fields =
         Dict.map
@@ -180,9 +180,9 @@ toRecord (PageForm { table, inputs, parent }) =
                 case field.constraint of
                     ForeignKey params ->
                         case parent of
-                            Just { tableName, id } ->
-                                if params.tableName == tableName then
-                                    Field.updateWithString id field
+                            Just p ->
+                                if params.tableName == p.tableName then
+                                    Field.updateWithString p.id field
 
                                 else
                                     field
@@ -194,6 +194,7 @@ toRecord (PageForm { table, inputs, parent }) =
                         field
             )
             inputs
+    , persisted = Maybe.map (always True) id |> Maybe.withDefault False
     }
 
 

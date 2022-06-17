@@ -17,8 +17,12 @@ module PostgRestAdmin.Client exposing
     , manyResolver
     , noneResolver
     , attempt
+    , decodeOne
+    , decodeMany
     , isAuthenticated
     , toJwtString
+    , authHeader
+    , task
     )
 
 {-|
@@ -60,12 +64,15 @@ but a [PostgRestAdmin.Cmd](PostgRestAdmin.Cmd).
 @docs noneResolver
 
 @docs attempt
+@docs decodeOne
+@docs decodeMany
 
 
 # Authentication
 
 @docs isAuthenticated
 @docs toJwtString
+@docs authHeader
 
 -}
 
@@ -149,8 +156,15 @@ isAuthenticated =
 {-| Obtain the JWT as a string.
 -}
 toJwtString : Client -> Maybe String
-toJwtString client =
-    Client.toJwtString client
+toJwtString =
+    Client.toJwtString
+
+
+{-| Generate an authorization header.
+-}
+authHeader : Client -> Maybe Http.Header
+authHeader =
+    Client.authHeader
 
 
 {-| Obtain a table from the table name.
@@ -560,15 +574,19 @@ tablePrimaryKeyName table =
 -- DECODE
 
 
+{-| -}
 decodeOne : Decoder a -> Result Error Response -> Result Error a
 decodeOne decoder result =
+    let
+        mapper =
+            Decode.decodeValue decoder >> Result.mapError DecodeError
+    in
     result
         |> Result.andThen
             (\response ->
                 case response of
                     One value ->
-                        Decode.decodeValue decoder value
-                            |> Result.mapError DecodeError
+                        mapper value
 
                     Many _ _ ->
                         Err ExpectedRecord
@@ -578,6 +596,7 @@ decodeOne decoder result =
             )
 
 
+{-| -}
 decodeMany :
     Decoder a
     -> Result Error Response
@@ -586,11 +605,15 @@ decodeMany decoder result =
     result
         |> Result.andThen
             (\response ->
+                let
+                    mapper =
+                        Decode.decodeValue (Decode.list decoder)
+                            >> Result.mapError DecodeError
+                in
                 case response of
                     Many { from, to, total } list ->
                         Encode.list identity list
-                            |> Decode.decodeValue (Decode.list decoder)
-                            |> Result.mapError DecodeError
+                            |> mapper
                             |> Result.map (Collection from to total)
 
                     One _ ->

@@ -2,6 +2,7 @@ module Internal.Client exposing
     ( Client
     , Msg
     , authFailed
+    , authHeader
     , fetchSchema
     , getTable
     , init
@@ -178,12 +179,11 @@ task { client, method, headers, path, body, resolver, timeout } =
         host =
             client.host
     in
-    case toJwtString client of
-        Just jwt ->
+    case authHeader client of
+        Just auth ->
             Http.task
                 { method = method
-                , headers =
-                    header "Authorization" ("Bearer " ++ jwt) :: headers
+                , headers = auth :: headers
                 , url = Url.toString { host | path = path }
                 , body = body
                 , resolver = resolver
@@ -193,6 +193,12 @@ task { client, method, headers, path, body, resolver, timeout } =
 
         Nothing ->
             fail AuthError
+
+
+authHeader : Client -> Maybe Http.Header
+authHeader client =
+    toJwtString client
+        |> Maybe.map (\jwt -> header "Authorization" ("Bearer " ++ jwt))
 
 
 fail : Error -> Task Error a

@@ -14,6 +14,7 @@ module Internal.Record exposing
     , primaryKeyName
     , referencedBy
     , tableName
+    , updateWithString
     )
 
 import Dict exposing (Dict)
@@ -37,6 +38,7 @@ import Maybe.Extra as Maybe exposing (isNothing)
 type alias Record =
     { table : Table
     , fields : Dict String Field
+    , persisted : Bool
     }
 
 
@@ -54,7 +56,22 @@ fromTable table =
                 }
             )
             table.columns
+    , persisted = False
     }
+
+
+updateWithString : String -> String -> Record -> Record
+updateWithString fieldName str record =
+    case Dict.get fieldName record.fields of
+        Just field ->
+            let
+                field_ =
+                    Field.updateWithString str field
+            in
+            { record | fields = Dict.insert fieldName field_ record.fields }
+
+        Nothing ->
+            record
 
 
 getTable : Record -> Table
@@ -100,7 +117,9 @@ hasErrors record =
 
 errors : Record -> Dict String (Maybe String)
 errors record =
-    Dict.map (\_ f -> Field.validate f |> .error) record.fields
+    Dict.map
+        (\_ field -> .error (Field.validate record.persisted field))
+        record.fields
 
 
 encode : Record -> Encode.Value
@@ -117,7 +136,13 @@ primaryKeyName record =
 decoder : Table -> Decoder Record
 decoder table =
     Dict.foldl decoderHelp (Decode.succeed Dict.empty) table.columns
-        |> Decode.map (\fields -> { table = table, fields = fields })
+        |> Decode.map
+            (\fields ->
+                { table = table
+                , fields = fields
+                , persisted = True
+                }
+            )
 
 
 decoderHelp :

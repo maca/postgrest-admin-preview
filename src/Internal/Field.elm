@@ -6,13 +6,13 @@ module Internal.Field exposing
     , update
     , updateWithString
     , validate
+    , valueToHtml
     )
 
 import Html exposing (Html, a, pre, text)
 import Html.Attributes exposing (href, target)
 import Internal.Schema exposing (Constraint(..))
 import Internal.Value as Value exposing (Value(..))
-import Json.Decode as Decode
 import List.Extra as List
 import String.Extra as String
 import Time
@@ -36,7 +36,7 @@ isPrimaryKey { constraint } =
 
 update : Value -> Field -> Field
 update value field =
-    validate { field | value = value, changed = True }
+    validate False { field | value = value, changed = True }
 
 
 updateWithString : String -> Field -> Field
@@ -44,9 +44,12 @@ updateWithString string field =
     update (Value.updateWithString string field.value) field
 
 
-validate : Field -> Field
-validate field =
-    if field.required && Value.isNothing field.value then
+validate : Bool -> Field -> Field
+validate persisted field =
+    if isPrimaryKey field && not persisted then
+        { field | error = Nothing }
+
+    else if field.required && Value.isNothing field.value then
         { field | error = Just "This field is required" }
 
     else
