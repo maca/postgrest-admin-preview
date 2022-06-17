@@ -52,7 +52,7 @@ import Internal.Client as Client
 import Internal.Cmd as AppCmd
 import Internal.Download as Download exposing (Download, Format(..))
 import Internal.Field as Field
-import Internal.Http exposing (Error(..))
+import Internal.Http exposing (Error(..), errorToString)
 import Internal.Schema exposing (Constraint(..), Table)
 import Internal.Search as Search exposing (Search)
 import Json.Decode as Decode
@@ -239,10 +239,12 @@ update msg listing =
             , AppCmd.none
             )
 
-        Fetched (Err _) ->
+        Fetched (Err err) ->
             case listing.order of
                 Unordered ->
-                    ( listing, AppCmd.none )
+                    ( listing
+                    , Notification.error (errorToString err)
+                    )
 
                 _ ->
                     ( { listing | order = Unordered }
@@ -444,7 +446,7 @@ listingPath { limit, loadAll, nest } { search, page, table, order, parent } =
                 []
 
             else
-                [ PG.select (Client.selects table) ]
+                [ PG.select (Client.listingSelects table) ]
 
         parentQuery =
             if nest then
@@ -536,7 +538,7 @@ view : PageListing -> Html Msg
 view listing =
     let
         fields =
-            Dict.toList listing.table.columns
+            Dict.toList (Client.listableColumns listing.table)
                 |> List.sortWith Field.compareTuple
                 |> List.map Tuple.first
 

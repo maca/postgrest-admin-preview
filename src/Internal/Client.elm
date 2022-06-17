@@ -7,6 +7,8 @@ module Internal.Client exposing
     , init
     , isAuthSuccessMsg
     , isAuthenticated
+    , listableColumns
+    , listingSelects
     , schemaIsLoaded
     , selects
     , task
@@ -17,7 +19,7 @@ module Internal.Client exposing
     , view
     )
 
-import Dict
+import Dict exposing (Dict)
 import Dict.Extra as Dict
 import Html exposing (Html, text)
 import Http exposing (header)
@@ -30,6 +32,7 @@ import Internal.Schema as Schema
         , Schema
         , Table
         )
+import Internal.Value exposing (Value(..))
 import Postgrest.Client as PG exposing (Selectable)
 import Task exposing (Task)
 import Url exposing (Url)
@@ -204,6 +207,37 @@ fail err =
 
 
 -- HTTP UTILS
+
+
+listableColumns : Table -> Dict String Column
+listableColumns table =
+    table.columns
+        |> Dict.filter
+            (\_ column ->
+                case column.value of
+                    PText _ ->
+                        False
+
+                    PJson _ ->
+                        False
+
+                    Unknown _ ->
+                        False
+
+                    _ ->
+                        True
+            )
+
+
+listingSelects : Table -> List Selectable
+listingSelects table =
+    Dict.values table.columns
+        |> List.filterMap associationJoin
+        |> (++)
+            (listableColumns table
+                |> Dict.keys
+                |> List.map PG.attribute
+            )
 
 
 selects : Table -> List Selectable

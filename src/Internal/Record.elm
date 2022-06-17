@@ -127,15 +127,20 @@ decoderHelp :
     -> Decoder (Dict String Field)
 decoderHelp name column =
     Decode.andThen
-        (\dict -> fieldDecoder dict name column)
+        (\dict ->
+            Decode.map (Maybe.withDefault dict)
+                (Decode.maybe
+                    (fieldDecoder name column dict)
+                )
+        )
 
 
 fieldDecoder :
-    Dict String Field
-    -> String
+    String
     -> Column
+    -> Dict String Field
     -> Decoder (Dict String Field)
-fieldDecoder fields name column =
+fieldDecoder name column fields =
     let
         insert constraint value =
             Dict.insert name

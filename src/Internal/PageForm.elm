@@ -265,7 +265,7 @@ view ((PageForm { table, id, parent }) as form) =
                     (\( name, input ) ->
                         let
                             inputView =
-                                Input.view name input
+                                Input.toHtml name input
                                     |> Html.map InputChanged
                         in
                         case Input.toField input |> .constraint of

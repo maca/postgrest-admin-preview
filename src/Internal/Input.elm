@@ -4,9 +4,9 @@ module Internal.Input exposing
     , fromField
     , isRequired
     , toField
+    , toHtml
     , toValue
     , update
-    , view
     )
 
 import Basics.Extra exposing (flip)
@@ -40,10 +40,6 @@ import String.Extra as String
 import Url.Builder as Url
 
 
-type alias Fields =
-    Dict String Input
-
-
 type alias Autocomplete =
     { results : List Record
     , userInput : String
@@ -68,7 +64,11 @@ type Input
     | Blank Field
 
 
-update : Client -> Msg -> Fields -> ( Fields, AppCmd.Cmd Msg )
+update :
+    Client
+    -> Msg
+    -> Dict String Input
+    -> ( Dict String Input, AppCmd.Cmd Msg )
 update client msg record =
     case msg of
         Changed ( name, Association field autocomplete ) "" ->
@@ -278,8 +278,8 @@ toError input =
     .error <| toField input
 
 
-view : String -> Input -> Html Msg
-view name input =
+toHtml : String -> Input -> Html Msg
+toHtml name input =
     case input of
         Text { value } ->
             Value.toString value

@@ -8,7 +8,7 @@ module Internal.Field exposing
     , validate
     )
 
-import Html exposing (Html, a, text)
+import Html exposing (Html, a, pre, text)
 import Html.Attributes exposing (href, target)
 import Internal.Schema exposing (Constraint(..))
 import Internal.Value as Value exposing (Value(..))
@@ -127,10 +127,12 @@ valueToHtml value =
         PText maybe ->
             maybeToHtml identity maybe
 
-        PJson jsonValue ->
-            Decode.decodeValue Decode.string jsonValue
-                |> Result.toMaybe
-                |> maybeToHtml identity
+        PJson _ ->
+            pre
+                []
+                [ Value.toString value
+                    |> maybeToHtml identity
+                ]
 
         Unknown _ ->
             text "?"

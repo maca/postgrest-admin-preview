@@ -134,7 +134,8 @@ updateWithString string value =
 
         PJson _ ->
             String.nonBlank string
-                |> Maybe.map Encode.string
+                |> Maybe.andThen
+                    (Decode.decodeString Decode.value >> Result.toMaybe)
                 |> Maybe.withDefault Encode.null
                 |> PJson
 
@@ -186,8 +187,7 @@ toString value =
             Maybe.map (Iso8601.fromTime >> String.slice 0 10) maybe
 
         PJson jsonValue ->
-            Decode.decodeValue Decode.string jsonValue
-                |> Result.toMaybe
+            Just (Encode.encode 4 jsonValue)
 
         Unknown _ ->
             Nothing
