@@ -35,8 +35,8 @@ import Time.Extra as Time
 type alias Column =
     { constraint : Constraint
     , required : Bool
-    , decoder : Decoder Value
     , value : Value
+    , decoder : Decoder Value
     }
 
 

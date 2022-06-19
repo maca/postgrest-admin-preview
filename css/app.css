@@ -118,7 +118,7 @@
 }
 
 .upload-preview td pre,
-.upload-preview td span {
+.upload-preview td span:not(.error) {
     /* text-overflow: hidden; */
     line-clamp: 1;
     display: -webkit-box;

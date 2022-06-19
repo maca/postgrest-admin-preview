@@ -13,6 +13,7 @@ module Internal.Record exposing
     , primaryKey
     , primaryKeyName
     , referencedBy
+    , setValidation
     , tableName
     , updateWithString
     )
@@ -48,11 +49,12 @@ fromTable table =
     , fields =
         Dict.map
             (\_ { required, value, constraint } ->
-                { required = required
-                , constraint = constraint
-                , error = Nothing
-                , changed = False
+                { constraint = constraint
+                , required = required
                 , value = value
+                , validation = always Nothing
+                , changed = False
+                , error = Nothing
                 }
             )
             table.columns
@@ -106,6 +108,22 @@ primaryKey record =
     Dict.values record.fields
         |> List.filter Field.isPrimaryKey
         |> List.head
+
+
+setValidation : (Value -> Maybe String) -> String -> Record -> Record
+setValidation validation fieldName record =
+    { record
+        | fields =
+            Dict.map
+                (\name field ->
+                    if name == fieldName then
+                        Field.setValidation validation field
+
+                    else
+                        field
+                )
+                record.fields
+    }
 
 
 hasErrors : Record -> Bool
@@ -171,9 +189,10 @@ fieldDecoder name column fields =
             Dict.insert name
                 { constraint = constraint
                 , required = column.required
-                , error = Nothing
-                , changed = False
                 , value = value
+                , validation = always Nothing
+                , changed = False
+                , error = Nothing
                 }
                 fields
     in

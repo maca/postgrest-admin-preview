@@ -2,6 +2,7 @@ module Internal.Field exposing
     ( Field
     , compareTuple
     , isPrimaryKey
+    , setValidation
     , toHtml
     , update
     , updateWithString
@@ -22,10 +23,11 @@ import Url.Builder as Url
 
 type alias Field =
     { constraint : Constraint
-    , error : Maybe String
     , required : Bool
-    , changed : Bool
     , value : Value
+    , validation : Value -> Maybe String
+    , changed : Bool
+    , error : Maybe String
     }
 
 
@@ -47,13 +49,27 @@ updateWithString string field =
 validate : Bool -> Field -> Field
 validate persisted field =
     if isPrimaryKey field && not persisted then
-        { field | error = Nothing }
+        { field
+            | error =
+                field.validation field.value
+        }
 
     else if field.required && Value.isNothing field.value then
         { field | error = Just "This field is required" }
 
     else
-        { field | error = Nothing }
+        { field | error = field.validation field.value }
+
+
+setValidation : (Value -> Maybe String) -> Field -> Field
+setValidation validation field =
+    { field
+        | validation =
+            \value ->
+                validation value
+                    |> Maybe.map Just
+                    |> Maybe.withDefault (field.validation value)
+    }
 
 
 compareTuple :

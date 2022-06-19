@@ -67,7 +67,7 @@ import Internal.Cmd as AppCmd
 import Internal.Download as Download exposing (Download, Format(..))
 import Internal.Field as Field
 import Internal.Http exposing (Error(..), errorToString, handleJsonResponse)
-import Internal.Record exposing (primaryKey, updateWithString)
+import Internal.Record exposing (primaryKey, setValidation, updateWithString)
 import Internal.Schema as Schema exposing (Constraint(..), Table)
 import Internal.Search as Search exposing (Search)
 import Internal.Value as Value
@@ -656,12 +656,12 @@ buildImportedRecords { table, client, parent } persistedRecords csv =
                     dict =
                         foreignKey
                             |> Maybe.map
-                                (\( colName, val ) ->
+                                (\( colName, fkVal ) ->
                                     Dict.get colName blank
                                         |> Maybe.andThen String.nonBlank
                                         |> Maybe.map (always blank)
                                         |> Maybe.withDefault
-                                            (Dict.insert colName val blank)
+                                            (Dict.insert colName fkVal blank)
                                 )
                             |> Maybe.withDefault blank
 
@@ -670,11 +670,34 @@ buildImportedRecords { table, client, parent } persistedRecords csv =
                             |> Maybe.andThen (\pkName -> Dict.get pkName dict)
                             |> Maybe.andThen (\id -> Dict.get id persisted)
                             |> Maybe.withDefault (Record.fromTable table)
+                            |> setAssociationValidation foreignKey
                 in
                 ( idx + 1
                 , Dict.foldl updateWithString record dict
                 )
             )
+
+
+setAssociationValidation : Maybe ( String, String ) -> Record -> Record
+setAssociationValidation foreignKey record =
+    foreignKey
+        |> Maybe.map
+            (\( colName, fkVal ) ->
+                setValidation
+                    (\value ->
+                        if Value.toString value == Just fkVal then
+                            Nothing
+
+                        else
+                            Just
+                                ("Should correspond to the "
+                                    ++ String.humanize colName
+                                )
+                    )
+                    colName
+                    record
+            )
+        |> Maybe.withDefault record
 
 
 processCsv : PageListing -> Csv -> AppCmd.Cmd Msg
