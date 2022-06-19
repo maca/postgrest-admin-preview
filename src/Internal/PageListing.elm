@@ -18,6 +18,7 @@ import Browser.Events exposing (onKeyDown)
 import Browser.Navigation as Nav
 import Csv exposing (Csv)
 import Dict
+import Dict.Extra as Dict
 import File exposing (File)
 import File.Select as Select
 import Html
@@ -447,7 +448,7 @@ update msg listing =
                                     , missingColumns = Set.toList missing
                                     , headers = csv.headers
                                     , records =
-                                        buildImportedRecords listing.table [] csv
+                                        buildImportedRecords listing [] csv
                                     }
                           }
                         , AppCmd.none
@@ -461,8 +462,7 @@ update msg listing =
         CsvProcessed csv (Ok records) ->
             ( { listing
                 | uploadState =
-                    UploadReady
-                        (buildImportedRecords listing.table records csv)
+                    UploadReady (buildImportedRecords listing records csv)
               }
             , AppCmd.none
             )
@@ -624,11 +624,14 @@ listingPath { limit, loadAll, nest } { search, page, table, order, parent } =
 -- UPLOAD
 
 
-buildImportedRecords : Table -> List Record -> Csv -> List ( Int, Record )
-buildImportedRecords table persistedRecords csv =
+buildImportedRecords : PageListing -> List Record -> Csv -> List ( Int, Record )
+buildImportedRecords { table, client, parent } persistedRecords csv =
     let
         primaryKeyName =
             Schema.tablePrimaryKeyName table
+
+        foreignKey =
+            parentReference table parent
 
         persisted =
             persistedRecords
@@ -647,8 +650,20 @@ buildImportedRecords table persistedRecords csv =
         |> List.indexedMap
             (\idx row ->
                 let
-                    dict =
+                    blank =
                         Dict.fromList (List.zip csv.headers row)
+
+                    dict =
+                        foreignKey
+                            |> Maybe.map
+                                (\( colName, val ) ->
+                                    Dict.get colName blank
+                                        |> Maybe.andThen String.nonBlank
+                                        |> Maybe.map (always blank)
+                                        |> Maybe.withDefault
+                                            (Dict.insert colName val blank)
+                                )
+                            |> Maybe.withDefault blank
 
                     record =
                         primaryKeyName
@@ -663,7 +678,7 @@ buildImportedRecords table persistedRecords csv =
 
 
 processCsv : PageListing -> Csv -> AppCmd.Cmd Msg
-processCsv { table, client, parent } csv =
+processCsv { table, client } csv =
     let
         primaryKeyName =
             Schema.tablePrimaryKeyName table
