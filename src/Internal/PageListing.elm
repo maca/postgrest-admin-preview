@@ -8,11 +8,13 @@ module Internal.PageListing exposing
     , isSearchVisible
     , onLogin
     , showSearch
+    , subscriptions
     , update
     , view
     )
 
-import Browser.Dom as Dom exposing (Viewport)
+import Browser.Dom as Dom exposing (Viewport, blur)
+import Browser.Events exposing (onKeyDown)
 import Browser.Navigation as Nav
 import Csv exposing (Csv)
 import Dict
@@ -50,7 +52,14 @@ import Html.Attributes
         , href
         , id
         )
-import Html.Events as Events exposing (on, onClick, onMouseDown, onMouseUp)
+import Html.Events as Events
+    exposing
+        ( keyCode
+        , on
+        , onClick
+        , onMouseDown
+        , onMouseUp
+        )
 import Http
 import Internal.Client exposing (listableColumns, listingSelects)
 import Internal.Cmd as AppCmd
@@ -88,6 +97,11 @@ type SortOrder
     = Asc String
     | Desc String
     | Unordered
+
+
+type Key
+    = Character Char
+    | Control String
 
 
 type alias CsvUpload =
@@ -128,6 +142,7 @@ type Msg
     | CsvUploadPosted (Result Error ())
     | CsvUploadAccepted
     | CsvUploadCanceled
+    | NoOp
 
 
 type TextSelect
@@ -389,8 +404,12 @@ update msg listing =
 
         CsvUploadRequested ->
             ( listing
-            , Select.file [ "text/csv" ] CsvUploadSelected
-                |> AppCmd.wrap
+            , AppCmd.batch
+                [ Task.attempt (always NoOp) (Dom.blur "upload-csv-button")
+                    |> AppCmd.wrap
+                , Select.file [ "text/csv" ] CsvUploadSelected
+                    |> AppCmd.wrap
+                ]
             )
 
         CsvUploadSelected file ->
@@ -417,7 +436,7 @@ update msg listing =
                     in
                     if Set.isEmpty extra && Set.isEmpty missing then
                         ( { listing | uploadState = Fetching }
-                        , processCsv csv listing
+                        , processCsv listing csv
                         )
 
                     else
@@ -494,6 +513,9 @@ update msg listing =
 
         CsvUploadCanceled ->
             ( { listing | uploadState = Idle }, AppCmd.none )
+
+        NoOp ->
+            ( listing, AppCmd.none )
 
 
 reload : Table -> AppCmd.Cmd Msg
@@ -640,14 +662,14 @@ buildImportedRecords table persistedRecords csv =
             )
 
 
-processCsv : Csv -> PageListing -> AppCmd.Cmd Msg
-processCsv csv listing =
+processCsv : PageListing -> Csv -> AppCmd.Cmd Msg
+processCsv { table, client, parent } csv =
     let
         primaryKeyName =
-            Schema.tablePrimaryKeyName listing.table
+            Schema.tablePrimaryKeyName table
 
         blank =
-            Record.fromTable listing.table
+            Record.fromTable table
 
         ids =
             primaryKeyName
@@ -682,11 +704,11 @@ processCsv csv listing =
                 (\chunk ->
                     let
                         url =
-                            Client.toHostUrl listing.client
+                            Client.toHostUrl client
 
                         path =
                             Url.absolute
-                                [ listing.table.name ]
+                                [ table.name ]
                                 (existenceQuery primaryKeyName
                                     chunk
                                 )
@@ -701,9 +723,7 @@ processCsv csv listing =
                             Http.stringResolver
                                 (handleJsonResponse
                                     (Decode.list
-                                        (Record.decoder
-                                            listing.table
-                                        )
+                                        (Record.decoder table)
                                     )
                                 )
                         , timeout = Nothing
@@ -763,7 +783,8 @@ view listing =
                         ]
                         [ text "Download CSV" ]
                     , button
-                        [ class "button-clear"
+                        [ id "upload-csv-button"
+                        , class "button-clear"
                         , onClick CsvUploadRequested
                         ]
                         [ text "Upload CSV" ]
@@ -1236,6 +1257,43 @@ pageId pageNum =
 perPage : Int
 perPage =
     50
+
+
+subscriptions : PageListing -> Sub Msg
+subscriptions pageListing =
+    onKeyDown
+        (Decode.andThen
+            (\key ->
+                case key of
+                    27 ->
+                        Decode.succeed CsvUploadCanceled
+
+                    13 ->
+                        case pageListing.uploadState of
+                            BadCsvSchema _ ->
+                                Decode.succeed CsvUploadCanceled
+
+                            UploadReady _ ->
+                                Decode.succeed CsvUploadAccepted
+
+                            _ ->
+                                Decode.fail "wrong key"
+
+                    _ ->
+                        Decode.fail "wrong key"
+            )
+            (Decode.field "which" Decode.int)
+        )
+
+
+toKey : String -> Key
+toKey string =
+    case String.uncons string of
+        Just ( char, "" ) ->
+            Character char
+
+        _ ->
+            Control string
 
 
 

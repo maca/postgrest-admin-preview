@@ -487,8 +487,17 @@ loading =
 
 
 subscriptions : Model m msg -> Sub (Msg m msg)
-subscriptions { mountedApp } =
-    Sub.map PageApplicationChanged (Application.subscriptions mountedApp)
+subscriptions { mountedApp, route } =
+    Sub.batch
+        [ Sub.map PageApplicationChanged (Application.subscriptions mountedApp)
+        , case route of
+            RouteListing pageListing ->
+                Sub.map PageListingChanged
+                    (PageListing.subscriptions pageListing)
+
+            _ ->
+                Sub.none
+        ]
 
 
 

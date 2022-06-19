@@ -119,12 +119,12 @@
 
 .upload-preview td pre,
 .upload-preview td span {
-    text-overflow: scroll;
+    /* text-overflow: hidden; */
     line-clamp: 1;
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 1; /* number of lines to show */
-    overflow-x: hidden;
+    overflow: hidden;
 }
 
 .resources-listing .sort {
