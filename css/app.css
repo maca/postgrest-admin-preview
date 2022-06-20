@@ -523,14 +523,39 @@ a.button:hover {
 
 /* ---------- */
 /* CSV upload */
+.upload-preview .modal-dialog {
+    max-height: 80vh;
+    margin: 5rem;
+}
+
+
 .csv-records-preview {
     overflow-y: auto;
     margin-bottom: 5rem;
 }
 
-.upload-preview .modal-dialog {
-    max-height: 80vh;
-    margin: 5rem;
+.resources-listing .csv-records-preview table {
+    max-width: 90vw;
+    table-layout: auto;
+    margin-bottom: 2rem;
+}
+
+
+.upload-preview td {
+    padding: 0 2rem;
+}
+
+.upload-preview th {
+    padding: 1rem 2rem;
+}
+
+
+.upload-preview td pre {
+    margin: 0;
+}
+
+.upload-preview table td:first-child {
+    background: #dedede;
 }
 
 .upload-preview tr.with-errors {

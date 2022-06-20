@@ -27,6 +27,7 @@ import Html
         , a
         , aside
         , b
+        , br
         , button
         , div
         , h1
@@ -118,6 +119,7 @@ type UploadState
     | Fetching
     | BadCsvSchema CsvUpload
     | UploadReady (List ( Int, Record ))
+    | UploadWithErrors (List ( Int, Record ))
 
 
 type Msg
@@ -459,13 +461,21 @@ update msg listing =
                     , Notification.error "This CSV file cound not be parsed."
                     )
 
-        CsvProcessed csv (Ok records) ->
-            ( { listing
-                | uploadState =
-                    UploadReady (buildImportedRecords listing records csv)
-              }
-            , AppCmd.none
-            )
+        CsvProcessed csv (Ok existing) ->
+            let
+                records =
+                    buildImportedRecords listing existing csv
+            in
+            case List.filter (\( _, rec ) -> Record.hasErrors rec) records of
+                [] ->
+                    ( { listing | uploadState = UploadReady records }
+                    , AppCmd.none
+                    )
+
+                withErrors ->
+                    ( { listing | uploadState = UploadWithErrors withErrors }
+                    , AppCmd.none
+                    )
 
         CsvProcessed _ (Err err) ->
             ( listing
@@ -798,7 +808,7 @@ view listing =
                 _ ->
                     Events.on "scroll" (Decode.succeed Scrolled)
             ]
-            [ uploadModal listing
+            [ uploadModal fields listing
             , Html.table []
                 (tableHeading listing fields
                     :: pagesFold listing fields [] 0 listing.pages
@@ -1029,27 +1039,22 @@ toggleSearchButton listing =
         ]
 
 
-uploadModal : PageListing -> Html Msg
-uploadModal { uploadState } =
+uploadModal : List String -> PageListing -> Html Msg
+uploadModal fieldNames { uploadState, parent } =
     case uploadState of
-        UploadReady ((first :: _) as records) ->
-            let
-                fieldNames =
-                    Tuple.second first
-                        |> .fields
-                        |> Dict.toList
-                        |> List.sortWith Field.compareTuple
-                        |> List.map Tuple.first
-            in
+        UploadReady records ->
             div
                 [ class "modal-background"
                 , class "upload-preview"
                 ]
-                [ if List.any (\( _, rec ) -> Record.hasErrors rec) records then
-                    uploadWithErrorsPreview fieldNames records
+                [ uploadPreview parent fieldNames records ]
 
-                  else
-                    uploadPreview fieldNames records
+        UploadWithErrors records ->
+            div
+                [ class "modal-background"
+                , class "upload-preview"
+                ]
+                [ uploadWithErrorsPreview parent fieldNames records
                 ]
 
         BadCsvSchema csvUpload ->
@@ -1059,12 +1064,19 @@ uploadModal { uploadState } =
                 ]
                 [ badSchemaPreview csvUpload ]
 
-        _ ->
+        Idle ->
+            text ""
+
+        Fetching ->
             text ""
 
 
-uploadPreview : List String -> List ( Int, Record ) -> Html Msg
-uploadPreview fieldNames records =
+uploadPreview :
+    Maybe { tableName : String, id : String }
+    -> List String
+    -> List ( Int, Record )
+    -> Html Msg
+uploadPreview parent fieldNames records =
     let
         ( toUpdate, toCreate ) =
             List.partition (\( _, { persisted } ) -> persisted) records
@@ -1074,6 +1086,17 @@ uploadPreview fieldNames records =
         [ h2
             []
             [ text "CSV Upload" ]
+        , parent
+            |> Maybe.map
+                (\{ tableName, id } ->
+                    p
+                        []
+                        [ text "Upload records for "
+                        , text (String.humanize tableName)
+                        , text (" with id of " ++ id ++ ".")
+                        ]
+                )
+            |> Maybe.withDefault (text "")
         , div
             [ class "csv-records-preview" ]
             [ previewUploadTable "Records to create" fieldNames toCreate
@@ -1144,7 +1167,7 @@ previewUploadTable action fieldNames records =
                     , text ")"
                     ]
                 ]
-            , Html.table [] [ previewTable fieldNames records ]
+            , previewTable fieldNames records
             ]
 
 
@@ -1156,9 +1179,7 @@ badSchemaPreview { extraColumns, missingColumns, headers, records } =
     in
     div
         [ class "modal-dialog" ]
-        [ h2
-            []
-            [ text "Wrong columns" ]
+        [ h2 [] [ text "Wrong columns" ]
         , p []
             [ ("The CSV file "
                 ++ (List.filterMap identity
@@ -1190,10 +1211,7 @@ badSchemaPreview { extraColumns, missingColumns, headers, records } =
             ]
         , div
             [ class "csv-records-preview" ]
-            [ Html.table
-                []
-                [ previewTable headers records ]
-            ]
+            [ previewTable headers records ]
         , div
             [ class "actions" ]
             [ button
@@ -1205,24 +1223,36 @@ badSchemaPreview { extraColumns, missingColumns, headers, records } =
         ]
 
 
-uploadWithErrorsPreview : List String -> List ( Int, Record ) -> Html Msg
-uploadWithErrorsPreview fieldNames records =
+uploadWithErrorsPreview :
+    Maybe { tableName : String, id : String }
+    -> List String
+    -> List ( Int, Record )
+    -> Html Msg
+uploadWithErrorsPreview parent fieldNames records =
     div
         [ class "modal-dialog" ]
         [ h2
             []
-            [ text "Upload failed" ]
+            [ text "Validation failed" ]
         , p []
-            [ text "Some values are either missing or invalid."
+            [ parent
+                |> Maybe.map
+                    (\{ tableName, id } ->
+                        text <|
+                            "There where some errors validating the records for "
+                                ++ String.humanize tableName
+                                ++ (" with id of " ++ id ++ ". ")
+                    )
+                |> Maybe.withDefault
+                    (text "There where some errors validating the records. ")
+            , br [] []
             , text "Please update the CSV and try again."
+            , br [] []
             ]
         , div
             [ class "csv-records-preview" ]
-            [ Html.table
-                []
-                [ previewTable fieldNames
-                    (List.filter (\( _, rec ) -> Record.hasErrors rec) records)
-                ]
+            [ previewTable fieldNames
+                (List.filter (\( _, rec ) -> Record.hasErrors rec) records)
             ]
         , div
             [ class "actions" ]
@@ -1243,7 +1273,7 @@ previewTable fieldNames records =
             []
             (List.map
                 (\name -> th [] [ text name ])
-                ("" :: fieldNames)
+                ("Row No." :: fieldNames)
             )
         , tbody
             []
@@ -1311,11 +1341,17 @@ subscriptions pageListing =
                             BadCsvSchema _ ->
                                 Decode.succeed CsvUploadCanceled
 
+                            UploadWithErrors _ ->
+                                Decode.succeed CsvUploadCanceled
+
                             UploadReady _ ->
                                 Decode.succeed CsvUploadAccepted
 
-                            _ ->
-                                Decode.fail "wrong key"
+                            Idle ->
+                                Decode.fail "upload not ready"
+
+                            Fetching ->
+                                Decode.fail "upload not ready"
 
                     _ ->
                         Decode.fail "wrong key"
