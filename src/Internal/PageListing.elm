@@ -56,8 +56,7 @@ import Html.Attributes
         )
 import Html.Events as Events
     exposing
-        ( keyCode
-        , on
+        ( on
         , onClick
         , onMouseDown
         , onMouseUp
@@ -99,11 +98,6 @@ type SortOrder
     = Asc String
     | Desc String
     | Unordered
-
-
-type Key
-    = Character Char
-    | Control String
 
 
 type alias CsvUpload =
@@ -635,7 +629,7 @@ listingPath { limit, loadAll, nest } { search, page, table, order, parent } =
 
 
 buildImportedRecords : PageListing -> List Record -> Csv -> List ( Int, Record )
-buildImportedRecords { table, client, parent } persistedRecords csv =
+buildImportedRecords { table, parent } persistedRecords csv =
     let
         primaryKeyName =
             Schema.tablePrimaryKeyName table
@@ -1358,16 +1352,6 @@ subscriptions pageListing =
             )
             (Decode.field "which" Decode.int)
         )
-
-
-toKey : String -> Key
-toKey string =
-    case String.uncons string of
-        Just ( char, "" ) ->
-            Character char
-
-        _ ->
-            Control string
 
 
 

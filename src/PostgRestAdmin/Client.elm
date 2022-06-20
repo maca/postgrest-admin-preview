@@ -22,7 +22,6 @@ module PostgRestAdmin.Client exposing
     , isAuthenticated
     , toJwtString
     , authHeader
-    , task
     )
 
 {-|
