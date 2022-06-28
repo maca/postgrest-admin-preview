@@ -31,7 +31,7 @@ import Url.Builder as Url
 type Msg
     = LoggedIn Client
     | Fetched (Result Error Record)
-    | Saved (Result Error ())
+    | Saved (Result Error Record)
     | InputChanged Input.Msg
     | Submitted
 
@@ -128,11 +128,13 @@ update msg (PageForm params) =
         Fetched (Err _) ->
             ( PageForm params, AppCmd.none )
 
-        Saved (Ok _) ->
+        Saved (Ok record) ->
             ( PageForm params
             , AppCmd.batch
                 [ Url.absolute
-                    [ params.table.name, Maybe.withDefault "" params.id ]
+                    [ params.table.name
+                    , Record.id record |> Maybe.withDefault ""
+                    ]
                     []
                     |> Nav.pushUrl params.key
                     |> AppCmd.wrap
@@ -156,7 +158,7 @@ update msg (PageForm params) =
             ( PageForm params
             , Client.saveRecord
                 { client = params.client
-                , record = toFormFields (PageForm params)
+                , record = toRecord (PageForm params)
                 , id = params.id
                 , expect = Saved
                 }
@@ -198,11 +200,6 @@ toRecord (PageForm { table, inputs, parent, id }) =
     }
 
 
-toFormFields : PageForm -> Record
-toFormFields form =
-    toRecord (filterInputs form)
-
-
 formInputs : PageForm -> List ( String, Input )
 formInputs (PageForm { inputs }) =
     Dict.toList inputs |> List.sortWith sortInputs
@@ -239,12 +236,12 @@ changed (PageForm { inputs }) =
 
 errors : PageForm -> Dict String (Maybe String)
 errors record =
-    toFormFields record |> Record.errors
+    toRecord record |> Record.errors
 
 
 hasErrors : PageForm -> Bool
 hasErrors record =
-    toFormFields record |> Record.hasErrors
+    toRecord record |> Record.hasErrors
 
 
 toId : PageForm -> Maybe String

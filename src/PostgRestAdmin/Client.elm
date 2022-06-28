@@ -315,13 +315,16 @@ saveRecord :
     { client : Client
     , record : Record
     , id : Maybe String
-    , expect : Result Error () -> msg
+    , expect : Result Error Record -> msg
     }
     -> AppCmd.Cmd msg
 saveRecord { client, record, id, expect } =
     let
+        table =
+            Record.getTable record
+
         mapper =
-            Result.map (always ()) >> expect
+            decodeOne (Record.decoder table) >> expect
 
         queryString =
             PG.toQueryString
@@ -329,28 +332,41 @@ saveRecord { client, record, id, expect } =
                 , PG.limit 1
                 ]
 
-        path =
-            Record.location record
-                |> Maybe.map (\p -> p ++ "&" ++ queryString)
-                |> Maybe.withDefault
-                    ("/" ++ Record.tableName record ++ "?" ++ queryString)
-
         params =
             { client = client
             , method = "PATCH"
-            , headers = []
-            , path = path
+            , headers =
+                [ header "Prefer" "return=representation"
+                , header "Accept" "application/vnd.pgrst.object+json"
+                ]
+            , path = "/" ++ Record.tableName record
             , body = Http.jsonBody (Record.encode record)
-            , resolver = noneResolver
+            , resolver = oneResolver
             , timeout = Nothing
             }
     in
     case id of
-        Just _ ->
-            attempt mapper (task params)
+        Just recordId ->
+            attempt mapper
+                (task
+                    { params
+                        | path =
+                            params.path
+                                ++ "?id=eq."
+                                ++ recordId
+                                ++ "&"
+                                ++ queryString
+                    }
+                )
 
         Nothing ->
-            attempt mapper (task { params | method = "POST" })
+            attempt mapper
+                (task
+                    { params
+                        | method = "POST"
+                        , path = params.path ++ "?" ++ queryString
+                    }
+                )
 
 
 {-| Deletes a record.
