@@ -137,15 +137,17 @@ update msg client =
                     ( client, Cmd.none )
 
 
-fetchSchema : Client -> Cmd Msg
-fetchSchema client =
+fetchSchema : List String -> Client -> Cmd Msg
+fetchSchema tableNames client =
     task
         { client = client
         , method = "GET"
         , headers = []
         , path = "/"
         , body = Http.emptyBody
-        , resolver = Http.stringResolver (handleJsonResponse Schema.decoder)
+        , resolver =
+            Http.stringResolver
+                (handleJsonResponse (Schema.decoder tableNames))
         , timeout = Nothing
         }
         |> Task.attempt SchemaFetched

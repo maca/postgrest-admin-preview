@@ -223,7 +223,7 @@ update msg model =
                             else if Client.isAuthSuccessMsg childMsg then
                                 ( model.route
                                 , Cmd.map ClientChanged
-                                    (Client.fetchSchema client)
+                                    (Client.fetchSchema model.config.tables client)
                                 )
 
                             else
@@ -518,7 +518,7 @@ parseRoute url model =
 
     else
         ( RouteLoadingSchema routeTuple
-        , Cmd.map ClientChanged (Client.fetchSchema model.client)
+        , Cmd.map ClientChanged (Client.fetchSchema model.config.tables model.client)
         )
 
 

@@ -85,10 +85,19 @@ columnNames { columns } =
         (Dict.keys columns)
 
 
-decoder : Decoder Schema
-decoder =
+decoder : List String -> Decoder Schema
+decoder tableNames =
     columnNamesDecoder
-        |> Decode.andThen schemaDecoder
+        |> Decode.andThen
+            (case tableNames of
+                [] ->
+                    schemaDecoder
+
+                _ ->
+                    Dict.filter
+                        (\k _ -> List.member k tableNames)
+                        >> schemaDecoder
+            )
 
 
 tablePrimaryKeyName : Table -> Maybe String
