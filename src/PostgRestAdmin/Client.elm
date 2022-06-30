@@ -16,6 +16,7 @@ module PostgRestAdmin.Client exposing
     , oneResolver
     , manyResolver
     , noneResolver
+    , task
     , attempt
     , decodeOne
     , decodeMany
@@ -62,6 +63,7 @@ but a [PostgRestAdmin.Cmd](PostgRestAdmin.Cmd).
 @docs manyResolver
 @docs noneResolver
 
+@docs task
 @docs attempt
 @docs decodeOne
 @docs decodeMany

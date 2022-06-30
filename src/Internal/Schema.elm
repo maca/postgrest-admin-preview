@@ -81,8 +81,7 @@ type alias ColumnDefinition =
 
 columnNames : Table -> Set String
 columnNames { columns } =
-    Set.fromList
-        (Dict.keys columns)
+    Set.fromList (Dict.keys columns)
 
 
 decoder : List String -> Decoder Schema
