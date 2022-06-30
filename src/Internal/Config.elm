@@ -12,6 +12,8 @@ module Internal.Config exposing
     , withJwt
     , withMountPoint
     , withOnLogin
+    , withTables
+    , withTablesDecoder
     )
 
 import Dict exposing (Dict)
@@ -40,6 +42,7 @@ type alias Config m msg =
             )
     , detailActions : Dict String DetailActions
     , onLogin : String -> Cmd msg
+    , tables : List String
     }
 
 
@@ -144,6 +147,16 @@ withMountPoint program parser =
         )
 
 
+withTables : List String -> Decoder (Config m msg) -> Decoder (Config m msg)
+withTables tableNames =
+    Decode.andThen (withTablesDecoder tableNames)
+
+
+withTablesDecoder : List String -> Config m msg -> Decoder (Config m msg)
+withTablesDecoder tableNames conf =
+    Decode.succeed { conf | tables = tableNames }
+
+
 default : Config m msg
 default =
     { authScheme = AuthScheme.unset
@@ -159,4 +172,5 @@ default =
     , application = Nothing
     , detailActions = Dict.empty
     , onLogin = always Cmd.none
+    , tables = []
     }

@@ -4,6 +4,7 @@ module PostgRestAdmin.Config exposing
     , withHost
     , withFormFields
     , withDetailActions
+    , withTables
     , withFormAuth
     , withJwt
     , withOnLogin
@@ -25,6 +26,7 @@ module PostgRestAdmin.Config exposing
 @docs withHost
 @docs withFormFields
 @docs withDetailActions
+@docs withTables
 
 
 # Auth
@@ -213,6 +215,29 @@ withDetailActions :
     -> Config m msg
 withDetailActions =
     Config.withDetailActions
+
+
+{-| Pass a list of table names to restrict the editable resources, also sets the
+order of the left resources menu.
+
+      main : PostgRestAdmin.Program Never Never
+      main =
+          Config.init
+              |> Config.withTables ["posts", "comments"]
+              |> PostgRestAdmin.application
+
+Alternatively the host can be specified using flags, configuring using
+`withTables`.
+Program flags take precedence.
+
+      Elm.Main.init({
+          tables: ["posts", "comments"]
+      })
+
+-}
+withTables : List String -> Config m msg -> Config m msg
+withTables =
+    Config.withTables
 
 
 {-| Mount an application on a give path using

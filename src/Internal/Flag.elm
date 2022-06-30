@@ -1,4 +1,4 @@
-module Internal.Flag exposing (custom, string, stringDict)
+module Internal.Flag exposing (custom, string, stringDict, stringList)
 
 import Dict exposing (Dict)
 import Json.Decode as Decode exposing (Decoder)
@@ -15,6 +15,14 @@ stringDict :
     -> (Decoder c -> Decoder c)
 stringDict =
     custom (Decode.dict (Decode.list Decode.string))
+
+
+stringList :
+    String
+    -> (List String -> c -> Decoder c)
+    -> (Decoder c -> Decoder c)
+stringList =
+    custom (Decode.list Decode.string)
 
 
 custom : Decoder a -> String -> (a -> c -> Decoder c) -> (Decoder c -> Decoder c)

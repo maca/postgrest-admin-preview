@@ -29,6 +29,7 @@
         host: "http://localhost:8080",
         authUrl: "http://localhost:8080/rpc/login",
         jwt: sessionStorage.getItem("jwt"),
+        tables: [ "document_sets", "documents", "workflows", "classifications" ],
         formFields : {
           documents : [
             "id",

@@ -125,7 +125,7 @@ schemaDecoder colNames =
 
 tableDecoder : Dict String (List String) -> String -> Decoder Table
 tableDecoder colNames tableName =
-    field "required" (Decode.list Decode.string)
+    requiredColumnsDecoder
         |> Decode.andThen
             (\requiredColumns ->
                 field "properties" (Decode.keyValuePairs Decode.value)
@@ -135,6 +135,12 @@ tableDecoder colNames tableName =
                         )
             )
         |> Decode.map (\columns -> { columns = columns, name = tableName })
+
+
+requiredColumnsDecoder : Decoder (List String)
+requiredColumnsDecoder =
+    Decode.map (Maybe.withDefault [])
+        (Decode.maybe (field "required" (Decode.list Decode.string)))
 
 
 columnDecoder :

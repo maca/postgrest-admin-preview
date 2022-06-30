@@ -121,6 +121,7 @@ applicationParams decoder =
             (decoder
                 |> Flag.string "host" Config.withHostDecoder
                 |> Flag.stringDict "formFields" Config.withFormFieldsDecoder
+                |> Flag.stringList "tables" Config.withTablesDecoder
             )
     , update = update
     , view = view
@@ -428,10 +429,7 @@ sideMenu model =
         [ class "resources-menu" ]
         [ ul
             []
-            (Dict.keys (Client.toSchema model.client)
-                |> List.sort
-                |> List.map menuItem
-            )
+            (List.map menuItem (resources model))
         ]
 
 
@@ -684,6 +682,15 @@ initDetail { client, key, config } tableName id =
 
 
 -- UTILS
+
+
+resources : Model m msg -> List String
+resources { client, config } =
+    if List.isEmpty config.tables then
+        Dict.keys (Client.toSchema client) |> List.sort
+
+    else
+        config.tables
 
 
 mapAppCmd : (a -> Msg m b) -> AppCmd.Cmd a -> Cmd (Msg m b)
