@@ -142,7 +142,9 @@ errors record =
 
 encode : Record -> Encode.Value
 encode record =
-    Encode.dict identity (.value >> Value.encode) record.fields
+    record.fields
+        |> Dict.filter (\_ { changed } -> changed)
+        |> Encode.dict identity (.value >> Value.encode)
 
 
 primaryKeyName : Record -> Maybe String
