@@ -417,8 +417,13 @@ update msg listing =
 
         CsvUploadLoaded string ->
             case Csv.parse string of
-                Ok csv ->
+                Ok rawCsv ->
                     let
+                        csv =
+                            { rawCsv
+                                | headers = List.map String.trim rawCsv.headers
+                            }
+
                         headers =
                             Set.fromList csv.headers
 
