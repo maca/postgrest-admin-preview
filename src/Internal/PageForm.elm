@@ -285,7 +285,17 @@ view ((PageForm { table, id, parent }) as form) =
     in
     section
         [ class "resource-form" ]
-        [ breadcrumbs table.name [ table.name, Maybe.withDefault "new" id ]
+        [ breadcrumbs
+            table.name
+            (table.name
+                :: (case id of
+                        Just idStr ->
+                            [ idStr, "edit" ]
+
+                        Nothing ->
+                            [ "new" ]
+                   )
+            )
         , h2
             []
             [ Record.label (toRecord form)
