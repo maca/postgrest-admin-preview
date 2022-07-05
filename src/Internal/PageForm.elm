@@ -11,8 +11,8 @@ module Internal.PageForm exposing
 
 import Browser.Navigation as Nav
 import Dict exposing (Dict)
-import Html exposing (Html, a, button, fieldset, h1, section, text)
-import Html.Attributes exposing (autocomplete, class, disabled, href, novalidate)
+import Html exposing (Html, button, fieldset, h2, section, text)
+import Html.Attributes exposing (autocomplete, class, disabled, novalidate)
 import Html.Events exposing (onSubmit)
 import Internal.Cmd as AppCmd
 import Internal.Field as Field
@@ -20,10 +20,10 @@ import Internal.Http exposing (Error(..))
 import Internal.Input as Input exposing (Input)
 import Internal.Schema exposing (Constraint(..), Table)
 import Internal.Value exposing (Value(..))
+import Internal.ViewHelp exposing (breadcrumbs)
 import PostgRestAdmin.Client as Client exposing (Client)
 import PostgRestAdmin.Notification as Notification
 import PostgRestAdmin.Record as Record exposing (Record)
-import String.Extra as String
 import Url
 import Url.Builder as Url
 
@@ -285,22 +285,12 @@ view ((PageForm { table, id, parent }) as form) =
     in
     section
         [ class "resource-form" ]
-        [ h1
+        [ breadcrumbs table.name [ table.name, Maybe.withDefault "new" id ]
+        , h2
             []
-            [ text (String.humanize table.name ++ " - ")
-            , case
-                Maybe.map2 Tuple.pair
-                    (Record.label (toRecord form))
-                    id
-              of
-                Just ( resourceLabel, resourceId ) ->
-                    a
-                        [ href (Url.absolute [ table.name, resourceId ] [])
-                        ]
-                        [ text resourceLabel ]
-
-                Nothing ->
-                    text "New"
+            [ Record.label (toRecord form)
+                |> Maybe.map text
+                |> Maybe.withDefault (text "")
             ]
         , Html.form
             [ autocomplete False

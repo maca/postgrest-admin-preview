@@ -258,14 +258,7 @@ referencedBy schema record =
 
 label : Record -> Maybe String
 label record =
-    case
-        List.filterMap (labelHelp record) recordIdentifiers |> List.head
-    of
-        Just recordLabel ->
-            Just recordLabel
-
-        Nothing ->
-            id record
+    List.filterMap (labelHelp record) recordIdentifiers |> List.head
 
 
 labelHelp : Record -> String -> Maybe String

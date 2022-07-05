@@ -17,7 +17,6 @@ import Html
         , aside
         , button
         , div
-        , h1
         , h2
         , p
         , section
@@ -37,6 +36,7 @@ import Internal.Http exposing (Error(..))
 import Internal.Record as Record exposing (Record)
 import Internal.Schema exposing (Constraint(..), Reference, Table)
 import Internal.Value exposing (Value(..))
+import Internal.ViewHelp exposing (breadcrumbs)
 import Json.Decode as Decode
 import PostgRestAdmin.Client as Client exposing (Client, Collection)
 import PostgRestAdmin.Notification as Notification
@@ -192,6 +192,10 @@ update msg (PageDetail params) =
 
 view : PageDetail -> Html Msg
 view (PageDetail params) =
+    let
+        tableName =
+            params.table.name
+    in
     case params.record of
         Nothing ->
             text ""
@@ -199,16 +203,12 @@ view (PageDetail params) =
         Just record ->
             section
                 [ class "record-detail" ]
-                [ h1
+                [ breadcrumbs tableName [ tableName, params.id ]
+                , h2
                     []
                     [ Record.label record
-                        |> Maybe.withDefault params.id
-                        |> (++)
-                            (String.humanize
-                                (Record.tableName record)
-                                ++ " - "
-                            )
-                        |> text
+                        |> Maybe.map text
+                        |> Maybe.withDefault (text "")
                     ]
                 , article
                     [ class "card" ]

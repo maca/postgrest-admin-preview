@@ -1,6 +1,7 @@
 module PostgRestAdmin exposing
     ( Program
     , application
+    , breadcrumbs
     )
 
 {-|
@@ -11,6 +12,7 @@ module PostgRestAdmin exposing
 # Init
 
 @docs application
+@docs breadcrumbs
 
 -}
 
@@ -30,6 +32,7 @@ import Internal.Notification as Notification exposing (Notification)
 import Internal.PageDetail as PageDetail exposing (PageDetail)
 import Internal.PageForm as PageForm exposing (PageForm)
 import Internal.PageListing as PageListing exposing (PageListing)
+import Internal.ViewHelp as ViewHelp
 import Json.Decode as Decode exposing (Decoder, Value)
 import Json.Encode exposing (Value)
 import PostgRestAdmin.Client exposing (Client)
@@ -112,6 +115,12 @@ options.
 application : Decoder (Config m msg) -> Program m msg
 application decoder =
     Browser.application (applicationParams decoder)
+
+
+{-| -}
+breadcrumbs : String -> List String -> Html msg
+breadcrumbs =
+    ViewHelp.breadcrumbs
 
 
 applicationParams : Decoder (Config m msg) -> Params m msg
@@ -408,19 +417,17 @@ view model =
                     [ div
                         [ class "main-container" ]
                         [ sideMenu model
-                        , div [ class "main-area" ] (body model)
+                        , div
+                            [ class "main-area" ]
+                            [ Notification.view model.notification
+                                |> Html.map NotificationChanged
+                            , mainContent model
+                            ]
                         ]
                     , Html.map ClientChanged (Client.view model.client)
                     ]
                 ]
     }
-
-
-body : Model m msg -> List (Html (Msg m msg))
-body model =
-    [ Notification.view model.notification |> Html.map NotificationChanged
-    , mainContent model
-    ]
 
 
 sideMenu : Model m msg -> Html (Msg m msg)
@@ -437,7 +444,10 @@ menuItem : String -> Html (Msg m msg)
 menuItem name =
     li
         []
-        [ a [ href <| "/" ++ name ] [ text <| String.humanize name ] ]
+        [ a
+            [ href <| "/" ++ name ]
+            [ text (String.toTitleCase (String.humanize name)) ]
+        ]
 
 
 mainContent : Model m msg -> Html (Msg m msg)

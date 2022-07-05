@@ -569,6 +569,20 @@ a.button:hover {
 .upload-preview .disclaimer {
     text-align: right;
 }
-
 /* CSV upload */
+/* ---------- */
+
+
+
+/* ---------- */
+/* Breadcrumbs */
+.breadcrumbs {
+    font-size: 2rem;
+}
+
+.breadcrumbs .current-segment, .breadcrumbs .current-segment ~ a {
+    font-size: 3rem;
+    font-weight: bold;
+}
+/* Breadcrumbs */
 /* ---------- */

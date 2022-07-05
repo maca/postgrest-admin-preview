@@ -30,7 +30,6 @@ import Html
         , br
         , button
         , div
-        , h1
         , h2
         , h4
         , header
@@ -71,6 +70,7 @@ import Internal.Record exposing (primaryKey, setValidation, updateWithString)
 import Internal.Schema as Schema exposing (Constraint(..), Table)
 import Internal.Search as Search exposing (Search)
 import Internal.Value as Value
+import Internal.ViewHelp exposing (breadcrumbs)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import List.Extra as List
@@ -791,7 +791,7 @@ view listing =
     in
     section
         [ class "resources-listing" ]
-        [ listHeader listing.parent listing.table.name
+        [ listHeader listing
         , div
             [ id listing.table.name
             , class "resources-listing-results"
@@ -851,15 +851,18 @@ view listing =
         ]
 
 
-listHeader :
-    Maybe { tableName : String, id : String }
-    -> String
-    -> Html Msg
-listHeader parent tableName =
+listHeader : PageListing -> Html Msg
+listHeader { parent, table } =
     header
         []
-        [ h1 [] [ text (String.humanize tableName) ]
-        , div []
+        [ case parent of
+            Just { tableName, id } ->
+                breadcrumbs table.name [ tableName, id, table.name ]
+
+            Nothing ->
+                breadcrumbs table.name [ table.name ]
+        , div
+            []
             [ a
                 [ class "button"
                 , href <|
@@ -867,7 +870,7 @@ listHeader parent tableName =
                         (List.filterMap identity
                             [ Maybe.map .tableName parent
                             , Maybe.map .id parent
-                            , Just tableName
+                            , Just table.name
                             , Just "new"
                             ]
                         )
