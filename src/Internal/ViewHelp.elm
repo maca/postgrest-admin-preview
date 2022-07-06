@@ -6,28 +6,36 @@ import String.Extra as String
 import Url.Builder as Url
 
 
-breadcrumbs : String -> List String -> Html msg
-breadcrumbs tableName components =
+breadcrumbs : String -> List ( String, Maybe String ) -> Html msg
+breadcrumbs tableName segments =
     h1 [ style "font-size" "inherit" ]
         [ span
             [ class "breadcrumbs" ]
-            (breadcrumbsHelp tableName [] (List.reverse components))
+            (breadcrumbsHelp tableName [] (List.reverse segments))
         ]
 
 
-breadcrumbsHelp : String -> List (Html msg) -> List String -> List (Html msg)
-breadcrumbsHelp tableName acc components =
-    case components of
-        comp :: rest ->
+breadcrumbsHelp :
+    String
+    -> List (Html msg)
+    -> List ( String, Maybe String )
+    -> List (Html msg)
+breadcrumbsHelp tableName acc segments =
+    case segments of
+        ( segment, segmentText ) :: rest ->
             breadcrumbsHelp tableName
                 (span [ class "divisor" ] [ text " / " ]
                     :: a
-                        [ classList [ ( "current-segment", tableName == comp ) ]
-                        , href (Url.absolute (List.reverse components) [])
+                        [ classList [ ( "current-segment", tableName == segment ) ]
+                        , href (Url.absolute (List.map Tuple.first (List.reverse segments)) [])
                         ]
-                        [ String.humanize comp
-                            |> String.toTitleCase
-                            |> text
+                        [ text (String.toTitleCase (String.humanize segment))
+                        , case segmentText of
+                            Just str ->
+                                text (" – " ++ str)
+
+                            Nothing ->
+                                text ""
                         ]
                     :: acc
                 )

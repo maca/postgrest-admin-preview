@@ -118,7 +118,7 @@ application decoder =
 
 
 {-| -}
-breadcrumbs : String -> List String -> Html msg
+breadcrumbs : String -> List ( String, Maybe String ) -> Html msg
 breadcrumbs =
     ViewHelp.breadcrumbs
 

@@ -86,7 +86,7 @@ import Task
 import Time
 import Time.Extra as Time
 import Url
-import Url.Builder as Url exposing (QueryParameter)
+import Url.Builder as Url exposing (QueryParameter, string)
 
 
 type Page
@@ -119,6 +119,7 @@ type UploadState
 type Msg
     = LoggedIn Client
     | Fetched (Result Error (Collection Record))
+    | ParentFetched (Result Error Record)
     | RecordLinkClicked String String
     | ApplyFilters
     | Sort SortOrder
@@ -152,11 +153,7 @@ type alias PageListing =
     { client : Client
     , key : Nav.Key
     , table : Table
-    , parent :
-        Maybe
-            { tableName : String
-            , id : String
-            }
+    , parent : Maybe Record
     , scrollPosition : Float
     , pages : List Page
     , page : Int
@@ -192,11 +189,19 @@ init { client, table, parent } url key =
                 |> Maybe.map (Tuple.second >> parseOrder)
                 |> Maybe.withDefault Unordered
 
+        parentParams =
+            Maybe.andThen
+                (\params ->
+                    Client.getTable params.tableName client
+                        |> Maybe.map (\parentTable -> ( parentTable, params ))
+                )
+                parent
+
         listing =
             { client = client
             , key = key
             , table = table
-            , parent = parent
+            , parent = Nothing
             , page = 0
             , scrollPosition = 0
             , pages = []
@@ -207,7 +212,22 @@ init { client, table, parent } url key =
             , uploadState = Idle
             }
     in
-    ( listing, fetch listing )
+    ( listing
+    , AppCmd.batch
+        [ fetch listing
+        , case parentParams of
+            Just ( parentTable, { id } ) ->
+                Client.fetchRecord
+                    { client = client
+                    , table = parentTable
+                    , id = id
+                    , expect = ParentFetched
+                    }
+
+            Nothing ->
+                AppCmd.none
+        ]
+    )
 
 
 onLogin : Client -> Msg
@@ -291,6 +311,12 @@ update msg listing =
                     ( { listing | order = Unordered }
                     , reload listing.table
                     )
+
+        ParentFetched (Ok parent) ->
+            ( { listing | parent = Just parent }, AppCmd.none )
+
+        ParentFetched (Err _) ->
+            ( listing, AppCmd.none )
 
         RecordLinkClicked tableName id ->
             ( listing
@@ -599,8 +625,8 @@ listingPath { limit, loadAll, nest } { search, page, table, order, parent } =
             if nest then
                 Url.absolute
                     (List.filterMap identity
-                        [ Maybe.map .tableName parent
-                        , Maybe.map .id parent
+                        [ Maybe.map (Record.getTable >> .name) parent
+                        , Maybe.andThen Record.id parent
                         , Just table.name
                         ]
                     )
@@ -861,11 +887,17 @@ listHeader { parent, table } =
     header
         []
         [ case parent of
-            Just { tableName, id } ->
-                breadcrumbs table.name [ tableName, id, table.name ]
+            Just record ->
+                breadcrumbs table.name
+                    [ ( Record.getTable record |> .name, Nothing )
+                    , ( Record.id record |> Maybe.withDefault ""
+                      , Record.label record
+                      )
+                    , ( table.name, Nothing )
+                    ]
 
             Nothing ->
-                breadcrumbs table.name [ table.name ]
+                breadcrumbs table.name [ ( table.name, Nothing ) ]
         , div
             []
             [ a
@@ -873,8 +905,8 @@ listHeader { parent, table } =
                 , href <|
                     Url.absolute
                         (List.filterMap identity
-                            [ Maybe.map .tableName parent
-                            , Maybe.map .id parent
+                            [ Maybe.map (Record.getTable >> .name) parent
+                            , Maybe.andThen Record.id parent
                             , Just table.name
                             , Just "new"
                             ]
@@ -1073,11 +1105,7 @@ uploadModal fieldNames { uploadState, parent } =
             text ""
 
 
-uploadPreview :
-    Maybe { tableName : String, id : String }
-    -> List String
-    -> List ( Int, Record )
-    -> Html Msg
+uploadPreview : Maybe Record -> List String -> List ( Int, Record ) -> Html Msg
 uploadPreview parent fieldNames records =
     let
         ( toUpdate, toCreate ) =
@@ -1088,17 +1116,19 @@ uploadPreview parent fieldNames records =
         [ h2
             []
             [ text "CSV Upload" ]
-        , parent
-            |> Maybe.map
-                (\{ tableName, id } ->
-                    p
-                        []
-                        [ text "Upload records for "
-                        , text (String.humanize tableName)
-                        , text (" with id of " ++ id ++ ".")
-                        ]
-                )
-            |> Maybe.withDefault (text "")
+        , case parent of
+            Just record ->
+                p
+                    []
+                    [ text "Upload records for "
+                    , text <| String.humanize (.name (Record.getTable record))
+                    , Record.id record
+                        |> Maybe.map (\id -> text (" with id of " ++ id ++ "."))
+                        |> Maybe.withDefault (text "")
+                    ]
+
+            Nothing ->
+                text ""
         , div
             [ class "csv-records-preview" ]
             [ previewUploadTable "Records to create" fieldNames toCreate
@@ -1226,7 +1256,7 @@ badSchemaPreview { extraColumns, missingColumns, headers, records } =
 
 
 uploadWithErrorsPreview :
-    Maybe { tableName : String, id : String }
+    Maybe Record
     -> List String
     -> List ( Int, Record )
     -> Html Msg
@@ -1237,16 +1267,19 @@ uploadWithErrorsPreview parent fieldNames records =
             []
             [ text "Validation failed" ]
         , p []
-            [ parent
-                |> Maybe.map
-                    (\{ tableName, id } ->
-                        text <|
-                            "There where some errors validating the records for "
-                                ++ String.humanize tableName
-                                ++ (" with id of " ++ id ++ ". ")
-                    )
-                |> Maybe.withDefault
-                    (text "There where some errors validating the records. ")
+            [ case parent of
+                Just record ->
+                    text <|
+                        "There where some errors validating the records for "
+                            ++ String.humanize (.name (Record.getTable record))
+                            ++ (Record.id record
+                                    |> Maybe.map
+                                        (\id -> " with id of " ++ id ++ ". ")
+                                    |> Maybe.withDefault ""
+                               )
+
+                Nothing ->
+                    text "There where some errors validating the records. "
             , br [] []
             , text "Please update the CSV and try again."
             , br [] []
@@ -1429,10 +1462,7 @@ orderToQueryParams order =
             []
 
 
-parentReference :
-    Table
-    -> Maybe { tableName : String, id : String }
-    -> Maybe ( String, String )
+parentReference : Table -> Maybe Record -> Maybe ( String, String )
 parentReference table parent =
     Dict.toList table.columns
         |> List.filterMap
@@ -1440,9 +1470,12 @@ parentReference table parent =
                 case constraint of
                     ForeignKey foreignKey ->
                         case parent of
-                            Just { tableName, id } ->
-                                if foreignKey.tableName == tableName then
-                                    Just ( colName, id )
+                            Just record ->
+                                if
+                                    foreignKey.tableName
+                                        == .name (Record.getTable record)
+                                then
+                                    Just ( colName, Record.id record |> Maybe.withDefault "" )
 
                                 else
                                     Nothing

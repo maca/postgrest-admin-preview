@@ -31,6 +31,7 @@ import Url.Builder as Url
 type Msg
     = LoggedIn Client
     | Fetched (Result Error Record)
+    | ParentFetched (Result Error Record)
     | Saved (Result Error Record)
     | InputChanged Input.Msg
     | Submitted
@@ -48,7 +49,7 @@ type PageForm
         , fieldNames : List String
         , table : Table
         , id : Maybe String
-        , parent : Maybe { tableName : String, id : String }
+        , parent : Maybe Record
         }
 
 
@@ -63,6 +64,14 @@ init :
     -> ( PageForm, AppCmd.Cmd Msg )
 init { client, fieldNames, id, table, parent } key =
     let
+        parentParams =
+            Maybe.andThen
+                (\params ->
+                    Client.getTable params.tableName client
+                        |> Maybe.map (\parentTable -> ( parentTable, params ))
+                )
+                parent
+
         pageForm =
             PageForm
                 { client = client
@@ -74,10 +83,25 @@ init { client, fieldNames, id, table, parent } key =
                 , fieldNames = fieldNames
                 , table = table
                 , id = id
-                , parent = parent
+                , parent = Nothing
                 }
     in
-    ( pageForm, fetchRecord pageForm )
+    ( pageForm
+    , AppCmd.batch
+        [ fetchRecord pageForm
+        , case parentParams of
+            Just ( parentTable, params ) ->
+                Client.fetchRecord
+                    { client = client
+                    , table = parentTable
+                    , id = params.id
+                    , expect = ParentFetched
+                    }
+
+            Nothing ->
+                AppCmd.none
+        ]
+    )
 
 
 fetchRecord : PageForm -> AppCmd.Cmd Msg
@@ -126,6 +150,12 @@ update msg (PageForm params) =
             )
 
         Fetched (Err _) ->
+            ( PageForm params, AppCmd.none )
+
+        ParentFetched (Ok parent) ->
+            ( PageForm { params | parent = Just parent }, AppCmd.none )
+
+        ParentFetched (Err _) ->
             ( PageForm params, AppCmd.none )
 
         Saved (Ok record) ->
@@ -182,9 +212,15 @@ toRecord (PageForm { table, inputs, parent, id }) =
                 case field.constraint of
                     ForeignKey params ->
                         case parent of
-                            Just p ->
-                                if params.tableName == p.tableName then
-                                    Field.updateWithString p.id field
+                            Just record ->
+                                if
+                                    params.tableName
+                                        == .name (Record.getTable record)
+                                then
+                                    Record.id record
+                                        |> Maybe.map
+                                            (\s -> Field.updateWithString s field)
+                                        |> Maybe.withDefault field
 
                                 else
                                     field
@@ -269,8 +305,11 @@ view ((PageForm { table, id, parent }) as form) =
                         case Input.toField input |> .constraint of
                             ForeignKey params ->
                                 case parent of
-                                    Just { tableName } ->
-                                        if params.tableName == tableName then
+                                    Just record ->
+                                        if
+                                            params.tableName
+                                                == .name (Record.getTable record)
+                                        then
                                             text ""
 
                                         else
@@ -287,14 +326,28 @@ view ((PageForm { table, id, parent }) as form) =
         [ class "resource-form" ]
         [ breadcrumbs
             table.name
-            (table.name
-                :: (case id of
-                        Just idStr ->
-                            [ idStr, "edit" ]
+            (case id of
+                Just idStr ->
+                    [ ( table.name, Nothing )
+                    , ( idStr, Record.label (toRecord form) )
+                    , ( "edit", Nothing )
+                    ]
+
+                Nothing ->
+                    case parent of
+                        Just record ->
+                            [ ( Record.getTable record |> .name, Nothing )
+                            , ( Record.id record |> Maybe.withDefault ""
+                              , Record.label record
+                              )
+                            , ( table.name, Nothing )
+                            , ( "new", Nothing )
+                            ]
 
                         Nothing ->
-                            [ "new" ]
-                   )
+                            [ ( table.name, Nothing )
+                            , ( "new", Nothing )
+                            ]
             )
         , h2
             []

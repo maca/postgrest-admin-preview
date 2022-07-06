@@ -203,7 +203,10 @@ view (PageDetail params) =
         Just record ->
             section
                 [ class "record-detail" ]
-                [ breadcrumbs tableName [ tableName, params.id ]
+                [ breadcrumbs tableName
+                    [ ( tableName, Nothing )
+                    , ( params.id, Record.label record )
+                    ]
                 , h2
                     []
                     [ Record.label record
