@@ -36,7 +36,7 @@
         "elm-community/maybe-extra": "5.3.0 <= v < 6.0.0",
         "elm-community/string-extra": "4.0.1 <= v < 5.0.0",
         "elm-explorations/markdown": "1.0.0 <= v < 2.0.0",
-        "joshforisha/elm-inflect": "1.0.0 <= v < 2.0.0",
+        "maca/elm-inflect": "1.0.0 <= v < 2.0.0",
         "periodic/elm-csv": "2.0.1 <= v < 3.0.0",
         "rtfeldman/elm-iso8601-date-strings": "1.1.4 <= v < 2.0.0"
     },

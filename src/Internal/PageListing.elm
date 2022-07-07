@@ -61,6 +61,7 @@ import Html.Events as Events
         , onMouseUp
         )
 import Http
+import Inflect
 import Internal.Client exposing (listableColumns, listingSelects)
 import Internal.Cmd as AppCmd
 import Internal.Download as Download exposing (Download, Format(..))
@@ -913,7 +914,9 @@ listHeader { parent, table } =
                         )
                         []
                 ]
-                [ text "New Record" ]
+                [ text
+                    ("New " ++ (String.humanize table.name |> Inflect.toSingular))
+                ]
             ]
         ]
 
