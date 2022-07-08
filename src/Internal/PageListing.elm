@@ -856,12 +856,6 @@ view listing =
                         , onClick (DownloadRequested CSV)
                         ]
                         [ text "Download CSV" ]
-                    , button
-                        [ id "upload-csv-button"
-                        , class "button-clear"
-                        , onClick CsvUploadRequested
-                        ]
-                        [ text "Upload CSV" ]
                     ]
                 , div
                     []
@@ -901,7 +895,13 @@ listHeader { parent, table } =
                 breadcrumbs table.name [ ( table.name, Nothing ) ]
         , div
             []
-            [ a
+            [ button
+                [ id "upload-csv-button"
+                , class "button"
+                , onClick CsvUploadRequested
+                ]
+                [ text "Upload CSV" ]
+            , a
                 [ class "button"
                 , href <|
                     Url.absolute
