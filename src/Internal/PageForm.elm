@@ -11,8 +11,8 @@ module Internal.PageForm exposing
 
 import Browser.Navigation as Nav
 import Dict exposing (Dict)
-import Html exposing (Html, button, fieldset, h2, section, text)
-import Html.Attributes exposing (autocomplete, class, disabled, novalidate)
+import Html exposing (Html, a, button, fieldset, h2, section, text)
+import Html.Attributes exposing (autocomplete, class, disabled, href, novalidate)
 import Html.Events exposing (onSubmit)
 import Internal.Cmd as AppCmd
 import Internal.Field as Field
@@ -362,7 +362,22 @@ view ((PageForm { table, id, parent }) as form) =
             ]
             [ fieldset [] fields
             , fieldset []
-                [ button
+                [ a
+                    [ class "button button-clear"
+                    , href
+                        (Url.absolute
+                            (List.filterMap identity
+                                [ Maybe.map (Record.getTable >> .name) parent
+                                , Maybe.andThen Record.id parent
+                                , Just table.name
+                                , id
+                                ]
+                            )
+                            []
+                        )
+                    ]
+                    [ text "Cancel" ]
+                , button
                     [ disabled (not (changed form) || hasErrors form) ]
                     [ text "Save" ]
                 ]
