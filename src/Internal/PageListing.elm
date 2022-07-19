@@ -155,6 +155,7 @@ type alias PageListing =
     , key : Nav.Key
     , table : Table
     , parent : Maybe Record
+    , foreignKey : Maybe ( String, String )
     , scrollPosition : Float
     , pages : List Page
     , page : Int
@@ -203,6 +204,7 @@ init { client, table, parent } url key =
             , key = key
             , table = table
             , parent = Nothing
+            , foreignKey = parentReference table parent
             , page = 0
             , scrollPosition = 0
             , pages = []
@@ -268,7 +270,7 @@ fetch pageListing =
         , method = "GET"
         , headers = [ Http.header "Prefer" "count=planned" ]
         , path =
-            listingPath { limit = True, loadAll = False, nest = False }
+            listingPath { limit = True, selectAll = False, nest = False }
                 pageListing
         , body = Http.emptyBody
         , decoder = Record.decoder pageListing.table
@@ -334,7 +336,8 @@ update msg listing =
 
         Reload ->
             ( listing
-            , listingPath { limit = False, loadAll = True, nest = True } listing
+            , listing
+                |> listingPath { limit = False, selectAll = True, nest = True }
                 |> Nav.replaceUrl listing.key
                 |> AppCmd.wrap
             )
@@ -407,7 +410,7 @@ update msg listing =
             , Download.init format
                 (listingPath
                     { limit = False
-                    , loadAll = True
+                    , selectAll = True
                     , nest = False
                     }
                     listing
@@ -588,29 +591,25 @@ searchChanged msg cmd =
 
 
 listingPath :
-    { limit : Bool, loadAll : Bool, nest : Bool }
+    { limit : Bool, selectAll : Bool, nest : Bool }
     -> PageListing
     -> String
-listingPath { limit, loadAll, nest } { search, page, table, order, parent } =
+listingPath { limit, selectAll, nest } { search, page, table, order, parent, foreignKey } =
     let
         selectQuery =
-            if loadAll then
+            if selectAll then
                 []
 
             else
                 [ PG.select (listingSelects table) ]
 
         parentQuery =
-            if nest then
-                []
-
-            else
-                parentReference table parent
-                    |> Maybe.map
-                        (\( colName, id ) ->
-                            [ PG.param colName (PG.eq (PG.string id)) ]
-                        )
-                    |> Maybe.withDefault []
+            foreignKey
+                |> Maybe.map
+                    (\( colName, id ) ->
+                        [ PG.param colName (PG.eq (PG.string id)) ]
+                    )
+                |> Maybe.withDefault []
 
         limitQuery =
             if limit then
@@ -661,13 +660,10 @@ listingPath { limit, loadAll, nest } { search, page, table, order, parent } =
 
 
 buildImportedRecords : PageListing -> List Record -> Csv -> List ( Int, Record )
-buildImportedRecords { table, parent } persistedRecords csv =
+buildImportedRecords { table, foreignKey } persistedRecords csv =
     let
         primaryKeyName =
             Schema.tablePrimaryKeyName table
-
-        foreignKey =
-            parentReference table parent
 
         persisted =
             persistedRecords
@@ -1467,7 +1463,10 @@ orderToQueryParams order =
             []
 
 
-parentReference : Table -> Maybe Record -> Maybe ( String, String )
+parentReference :
+    Table
+    -> Maybe { tableName : String, id : String }
+    -> Maybe ( String, String )
 parentReference table parent =
     Dict.toList table.columns
         |> List.filterMap
@@ -1475,12 +1474,9 @@ parentReference table parent =
                 case constraint of
                     ForeignKey foreignKey ->
                         case parent of
-                            Just record ->
-                                if
-                                    foreignKey.tableName
-                                        == .name (Record.getTable record)
-                                then
-                                    Just ( colName, Record.id record |> Maybe.withDefault "" )
+                            Just { tableName, id } ->
+                                if foreignKey.tableName == tableName then
+                                    Just ( colName, id )
 
                                 else
                                     Nothing
