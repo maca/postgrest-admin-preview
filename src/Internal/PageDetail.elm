@@ -281,16 +281,22 @@ actions customActions record =
                 [ class "actions" ]
                 (List.map
                     (\( copy, buildUrl ) ->
-                        linkButton { url = buildUrl record id, text = copy }
+                        a
+                            [ href (buildUrl record id)
+                            , class "button"
+                            ]
+                            [ text copy ]
                     )
                     customActions
-                    ++ [ linkButton
-                            { url =
-                                Url.absolute
+                    ++ [ a
+                            [ href
+                                (Url.absolute
                                     [ Record.tableName record, id, "edit" ]
                                     []
-                            , text = "Edit"
-                            }
+                                )
+                            , class "button"
+                            ]
+                            [ text "Edit" ]
                        , button
                             [ onClick DeleteModalOpened
                             , class "button button-danger"
@@ -301,13 +307,6 @@ actions customActions record =
 
         Nothing ->
             text ""
-
-
-linkButton : { url : String, text : String } -> Html Msg
-linkButton params =
-    a
-        [ href params.url, class "button" ]
-        [ text params.text ]
 
 
 tableRow : String -> ( String, Field ) -> Html Msg

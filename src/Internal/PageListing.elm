@@ -898,11 +898,13 @@ listHeader { parent, table } =
             [ button
                 [ id "upload-csv-button"
                 , class "button"
+                , class ("button-upload-csv-" ++ table.name)
                 , onClick CsvUploadRequested
                 ]
                 [ text "Upload CSV" ]
             , a
                 [ class "button"
+                , class ("button-new-" ++ table.name)
                 , href <|
                     Url.absolute
                         (List.filterMap identity
