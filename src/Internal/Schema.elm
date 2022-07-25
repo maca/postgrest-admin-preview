@@ -158,9 +158,11 @@ columnDecoder :
     -> Decoder Column
 columnDecoder colNames requiredColumns columnName =
     Decode.map4 ColumnDefinition
-        (field "type" string)
+        (Decode.map (Maybe.withDefault "string")
+            (maybe (field "type" string))
+        )
         (field "format" string)
-        (maybe <| field "description" string)
+        (maybe (field "description" string))
         (Decode.oneOf [ field "enum" (list string), Decode.succeed [] ])
         |> Decode.andThen
             (\{ type_, format, description, enum } ->
