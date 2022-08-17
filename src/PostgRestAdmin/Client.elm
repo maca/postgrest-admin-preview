@@ -329,10 +329,7 @@ saveRecord { client, record, id, expect } =
             decodeOne (Record.decoder table) >> expect
 
         queryString =
-            PG.toQueryString
-                [ PG.select (selects record.table)
-                , PG.limit 1
-                ]
+            PG.toQueryString [ PG.select (selects record.table) ]
 
         params =
             { client = client
