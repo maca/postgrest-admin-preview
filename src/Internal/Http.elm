@@ -15,8 +15,6 @@ import Json.Decode as Decode exposing (Decoder, Value)
 type Error
     = HttpError Http.Error
     | DecodeError Decode.Error
-    | BadSchema String
-    | AutocompleteError String
     | RequestError String
     | ExpectedRecord
     | ExpectedRecordList
@@ -90,16 +88,37 @@ toError result =
 errorToString : Error -> String
 errorToString error =
     case error of
-        HttpError _ ->
-            "Something went wrong with the connection, please try again later"
+        HttpError httpError ->
+            case httpError of
+                Http.BadUrl msg ->
+                    "Invalid URL:" ++ msg
+
+                Http.Timeout ->
+                    "The requested timed out. Please try again."
+
+                Http.NetworkError ->
+                    "Network Error: do you have an internet connection?"
+
+                Http.BadStatus status ->
+                    "Bad status: " ++ (status |> String.fromInt)
+
+                Http.BadBody msg ->
+                    "Response error: " ++ msg
 
         DecodeError err ->
             Decode.errorToString err
 
-        _ ->
-            genericError
+        RequestError msg ->
+            msg
 
+        ExpectedRecord ->
+            "Expected a record"
 
-genericError : String
-genericError =
-    "Something went wrong, we'll fix soon"
+        ExpectedRecordList ->
+            "Expected a list of records"
+
+        NoError ->
+            "No Error"
+
+        AuthError ->
+            "There was an error authorising your credentials."
