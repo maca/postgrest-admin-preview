@@ -10,6 +10,7 @@ module Internal.Client exposing
     , isAuthenticated
     , listableColumns
     , listingSelects
+    , logout
     , schemaIsLoaded
     , selects
     , task
@@ -17,6 +18,7 @@ module Internal.Client exposing
     , toJwtString
     , toSchema
     , update
+    , updateJwt
     , view
     )
 
@@ -105,6 +107,19 @@ getTable tableName { schema } =
     Dict.get tableName schema
 
 
+updateJwt : String -> Client -> Client
+updateJwt tokenStr client =
+    { client | authScheme = AuthScheme.updateJwt tokenStr client.authScheme }
+
+
+logout : Client -> Client
+logout client =
+    { client
+        | authScheme = AuthScheme.clearJwt client.authScheme
+        , schema = Dict.empty
+    }
+
+
 
 -- UPDATE
 
@@ -159,11 +174,7 @@ fetchSchema tableNames client =
 
 view : Client -> Html Msg
 view { authScheme } =
-    if AuthScheme.isAuthenticated authScheme then
-        text ""
-
-    else
-        Html.map AuthChanged (AuthScheme.view authScheme)
+    Html.map AuthChanged (AuthScheme.view authScheme)
 
 
 task :

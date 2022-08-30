@@ -19,8 +19,9 @@ module PostgRestAdmin exposing
 import Browser
 import Browser.Navigation as Nav
 import Dict
-import Html exposing (Html, a, aside, div, h1, li, pre, text, ul)
+import Html exposing (Html, a, aside, button, div, h1, i, li, pre, text, ul)
 import Html.Attributes exposing (class, href)
+import Html.Events exposing (onClick)
 import Inflect as String
 import Internal.Application as Application exposing (Application(..), Params)
 import Internal.Client as Client
@@ -39,6 +40,7 @@ import PostgRestAdmin.Client exposing (Client)
 import String.Extra as String
 import Task
 import Url exposing (Url)
+import Url.Builder as Url
 import Url.Parser as Parser exposing ((</>), Parser, s)
 
 
@@ -68,6 +70,7 @@ type alias Model m msg =
     , onLogin : Maybe String -> Cmd (Msg m msg)
     , mountedApp : Application.Application m msg
     , config : Config m msg
+    , attemptedPath : String
     }
 
 
@@ -85,10 +88,16 @@ type Msg m msg
     | PageDetailChanged PageDetail.Msg
     | PageFormChanged PageForm.Msg
     | PageApplicationChanged msg
-    | RequestPerformed (Result Error Response -> Msg m msg) (Result Error Response)
+    | RequestPerformed
+        (Result Error Response
+         -> Msg m msg
+        )
+        (Result Error Response)
     | NotificationChanged Notification.Msg
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
+    | LoggedIn { path : String, accessToken : String }
+    | LoggedOut
     | NoOp
 
 
@@ -160,6 +169,7 @@ init decoder flags url key =
                     >> Cmd.map (always NoOp)
             , mountedApp = Application.none
             , config = config
+            , attemptedPath = urlToPath url
             }
     in
     case Decode.decodeValue decoder flags of
@@ -229,14 +239,13 @@ update msg model =
                                     , config = model.config
                                     }
 
-                            else if Client.isAuthSuccessMsg childMsg then
+                            else
                                 ( model.route
                                 , Cmd.map ClientChanged
-                                    (Client.fetchSchema model.config.tables client)
+                                    (Client.fetchSchema model.config.tables
+                                        client
+                                    )
                                 )
-
-                            else
-                                ( model.route, Cmd.none )
 
                         _ ->
                             ( model.route, Cmd.none )
@@ -250,9 +259,15 @@ update msg model =
                     ]
                 )
 
-            else
+            else if Client.isAuthenticated client then
                 ( { model | client = client, route = route }
                 , Cmd.batch [ Cmd.map ClientChanged clientCmd, cmd ]
+                )
+
+            else
+                ( model
+                , model.config.onAuthFailed model.attemptedPath
+                    |> Cmd.map (always NoOp)
                 )
 
         PageListingChanged childMsg ->
@@ -334,7 +349,7 @@ update msg model =
         LinkClicked urlRequest ->
             case urlRequest of
                 Browser.Internal url ->
-                    ( model, Nav.pushUrl model.key <| Url.toString url )
+                    ( model, Nav.pushUrl model.key (Url.toString url) )
 
                 Browser.External href ->
                     ( model, Nav.load href )
@@ -344,7 +359,19 @@ update msg model =
                 ( route, cmd ) =
                     parseRoute url model
             in
-            ( { model | route = route }, cmd )
+            ( { model | route = route, attemptedPath = urlToPath url }
+            , cmd
+            )
+
+        LoggedIn { path, accessToken } ->
+            ( { model | client = Client.updateJwt accessToken model.client }
+            , Nav.pushUrl model.key path
+            )
+
+        LoggedOut ->
+            ( { model | client = Client.logout model.client }
+            , Cmd.map (always NoOp) (model.config.onLogout ())
+            )
 
         NoOp ->
             ( model, Cmd.none )
@@ -432,11 +459,24 @@ view model =
 
 sideMenu : Model m msg -> Html (Msg m msg)
 sideMenu model =
-    aside
-        [ class "resources-menu" ]
-        [ ul
-            []
-            (List.map menuItem (resources model))
+    div
+        [ class "side-menu" ]
+        [ aside
+            [ class "resources-menu" ]
+            [ ul
+                []
+                (List.map menuItem (resources model))
+            ]
+        , div
+            [ class "account-management" ]
+            [ button
+                [ onClick LoggedOut
+                , class "button button-clear"
+                ]
+                [ i [ class "gg-log-out" ] []
+                , text "Logout"
+                ]
+            ]
         ]
 
 
@@ -495,7 +535,7 @@ loading =
 
 
 subscriptions : Model m msg -> Sub (Msg m msg)
-subscriptions { mountedApp, route } =
+subscriptions { mountedApp, route, config } =
     Sub.batch
         [ Sub.map PageApplicationChanged (Application.subscriptions mountedApp)
         , case route of
@@ -505,6 +545,7 @@ subscriptions { mountedApp, route } =
 
             _ ->
                 Sub.none
+        , Sub.map LoggedIn (config.onExternalLogin identity)
         ]
 
 
@@ -528,7 +569,8 @@ parseRoute url model =
 
     else
         ( RouteLoadingSchema routeTuple
-        , Cmd.map ClientChanged (Client.fetchSchema model.config.tables model.client)
+        , Cmd.map ClientChanged
+            (Client.fetchSchema model.config.tables model.client)
         )
 
 
@@ -588,7 +630,11 @@ routeParser url params =
                         Just { tableName = parentTable, id = parentId }
                             |> initNewForm params
                     )
-                    (Parser.string </> Parser.string </> Parser.string </> s "new")
+                    (Parser.string
+                        </> Parser.string
+                        </> Parser.string
+                        </> s "new"
+                    )
                ]
         )
 
@@ -717,3 +763,10 @@ mapAppCmd tagger appCmd =
 
         AppCmd.Fetch mapper task ->
             Task.attempt (RequestPerformed (mapper >> tagger)) task
+
+
+urlToPath : Url -> String
+urlToPath url =
+    [ Just url.path, url.query ]
+        |> List.filterMap identity
+        |> String.join "?"

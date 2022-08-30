@@ -8,6 +8,9 @@ module PostgRestAdmin.Config exposing
     , withFormAuth
     , withJwt
     , withOnLogin
+    , withOnAuthFailed
+    , withOnExternalLogin
+    , withOnLogout
     , withMountPoint
     )
 
@@ -34,6 +37,9 @@ module PostgRestAdmin.Config exposing
 @docs withFormAuth
 @docs withJwt
 @docs withOnLogin
+@docs withOnAuthFailed
+@docs withOnExternalLogin
+@docs withOnLogout
 
 
 # Application mounting
@@ -147,7 +153,7 @@ Tipically used to persist the JWT to session storage.
                   |> Config.withOnLogin loginSuccess
                   |> PostgRestAdmin.application
 
-Elm init
+// Elm init
 
         app = Elm.Main.init({
           flags: { jwt: sessionStorage.getItem("jwt") }
@@ -161,6 +167,86 @@ Elm init
 withOnLogin : (String -> Cmd msg) -> Config m msg -> Config m msg
 withOnLogin =
     Config.withOnLogin
+
+
+{-| Callback triggered when authentication fails when attempting to perform a
+request. You can use to perform external authentication.
+
+          port authFailure : String -> Cmd msg
+
+          port tokenReceiver :
+              ({ path : String, accessToken : String } -> msg)
+              -> Sub msg
+
+
+          main : PostgRestAdmin.Program Never Never
+          main =
+              Config.init
+                  |> Config.withAuthFailed authFailed
+                  |> Config.withOnExternalLogin tokenReceiver
+                  |> PostgRestAdmin.application
+
+// Elm init
+
+        app = Elm.Main.init()
+
+        app.ports.authFailure.subscribe(requestedPath => {
+            authenticate(requestedPath).then((accessToken) => {
+                app.ports.tokenReceiver.send({
+                    path : requestedPath,
+                    accessToken : accessToken
+                })
+
+            })
+        });
+
+-}
+withOnAuthFailed : (String -> Cmd msg) -> Config m msg -> Config m msg
+withOnAuthFailed =
+    Config.withOnAuthFailed
+
+
+{-| Send the access token and reload attempted path on succcessful external
+login.
+
+See [withOnAuthFailed](#withOnAuthFailed).
+
+-}
+withOnExternalLogin :
+    (({ path : String, accessToken : String }
+      -> { path : String, accessToken : String }
+     )
+     -> Sub { path : String, accessToken : String }
+    )
+    -> Config m msg
+    -> Config m msg
+withOnExternalLogin =
+    Config.withOnExternalLogin
+
+
+{-| Callback triggered when authentication fails when attempting to perform a
+request. You can use to perform external authentication.
+
+          port logout : () -> Cmd msg
+
+          main : PostgRestAdmin.Program Never Never
+          main =
+              Config.init
+                  |> Config.withOnLogout logout
+                  |> PostgRestAdmin.application
+
+// Elm init
+
+        app = Elm.Main.init()
+
+        app.ports.logout.subscribe(_ => {
+            externalLogout()
+        });
+
+-}
+withOnLogout : (() -> Cmd msg) -> Config m msg -> Config m msg
+withOnLogout =
+    Config.withOnLogout
 
 
 {-| Specify which fields should be present in the the edit and create forms,

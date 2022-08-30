@@ -1,12 +1,9 @@
+@import url("https://css.gg/log-out.css");
+@import url("https://css.gg/spinner-alt.css");
+
+
 /* ------------ */
 /* Layout       */
-.resources-menu {
-    grid-area: menu;
-    background: gray;
-    min-height: 100vh;
-    padding: 4rem 0;
-}
-
 .main-area {
     grid-area: main-area;
     height: 100%;
@@ -24,6 +21,37 @@
 
 /* ------------ */
 /* Menu         */
+.side-menu {
+    grid-area: menu;
+    background: gray;
+    min-height: 100vh;
+    padding: 4rem 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.account-management {
+    margin: 0 2rem 10%;
+}
+
+.account-management button.button {
+    display: flex;
+    background: #444;
+    color: #ccc;
+}
+
+.account-management button.button:hover {
+    background: #222;
+    color: #eee;
+}
+
+
+.account-management button i {
+    margin-top: 10px;
+    margin-right: 2.5rem;
+}
+
 .resources-menu ul {
     list-style-type: none;
 }
@@ -396,16 +424,29 @@ a:hover {
 /* ------------ */
 
 
-
 /* ---------- */
 /* Auth modal */
-.auth-modal {
+.overlay {
     position: fixed;
     top: 0;
     left: 0;
     background: white;
     height: 100vh;
     width: 100vw;
+}
+
+.overlay-waiting {
+    display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.overlay-waiting i {
+    transform: scale(5);
+}
+
+
+.auth-modal {
     display: flex;
     align-items: center;
     justify-content: center;

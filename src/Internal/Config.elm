@@ -11,7 +11,10 @@ module Internal.Config exposing
     , withHostDecoder
     , withJwt
     , withMountPoint
+    , withOnAuthFailed
+    , withOnExternalLogin
     , withOnLogin
+    , withOnLogout
     , withTables
     , withTablesDecoder
     )
@@ -31,6 +34,12 @@ type alias DetailActions =
     List ( String, Record -> String -> String )
 
 
+type alias Login =
+    { path : String
+    , accessToken : String
+    }
+
+
 type alias Config m msg =
     { host : Url
     , authScheme : AuthScheme
@@ -41,8 +50,11 @@ type alias Config m msg =
             , Parser (msg -> msg) msg
             )
     , detailActions : Dict String DetailActions
-    , onLogin : String -> Cmd msg
     , tables : List String
+    , onLogin : String -> Cmd msg
+    , onAuthFailed : String -> Cmd msg
+    , onExternalLogin : (Login -> Login) -> Sub Login
+    , onLogout : () -> Cmd msg
     }
 
 
@@ -89,10 +101,34 @@ withOnLogin :
     -> Decoder (Config m msg)
 withOnLogin onLogin =
     Decode.andThen
-        (\conf ->
-            Decode.succeed
-                { conf | onLogin = onLogin }
-        )
+        (\conf -> Decode.succeed { conf | onLogin = onLogin })
+
+
+withOnLogout :
+    (() -> Cmd msg)
+    -> Decoder (Config m msg)
+    -> Decoder (Config m msg)
+withOnLogout onLogout =
+    Decode.andThen
+        (\conf -> Decode.succeed { conf | onLogout = onLogout })
+
+
+withOnAuthFailed :
+    (String -> Cmd msg)
+    -> Decoder (Config m msg)
+    -> Decoder (Config m msg)
+withOnAuthFailed onAuthFailed =
+    Decode.andThen
+        (\conf -> Decode.succeed { conf | onAuthFailed = onAuthFailed })
+
+
+withOnExternalLogin :
+    ((Login -> Login) -> Sub Login)
+    -> Decoder (Config m msg)
+    -> Decoder (Config m msg)
+withOnExternalLogin onExternalLogin =
+    Decode.andThen
+        (\conf -> Decode.succeed { conf | onExternalLogin = onExternalLogin })
 
 
 withFormFields :
@@ -105,8 +141,7 @@ withFormFields tableName fields =
         (\conf ->
             Decode.succeed
                 { conf
-                    | formFields =
-                        Dict.insert tableName fields conf.formFields
+                    | formFields = Dict.insert tableName fields conf.formFields
                 }
         )
 
@@ -171,6 +206,9 @@ default =
     , formFields = Dict.empty
     , application = Nothing
     , detailActions = Dict.empty
-    , onLogin = always Cmd.none
     , tables = []
+    , onLogin = always Cmd.none
+    , onAuthFailed = always Cmd.none
+    , onExternalLogin = always Sub.none
+    , onLogout = always Cmd.none
     }

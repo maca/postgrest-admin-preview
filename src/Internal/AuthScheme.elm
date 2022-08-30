@@ -2,6 +2,7 @@ module Internal.AuthScheme exposing
     ( AuthScheme
     , Msg
     , basic
+    , clearJwt
     , fail
     , isAuthenticated
     , isSuccessMsg
@@ -9,10 +10,12 @@ module Internal.AuthScheme exposing
     , toJwt
     , unset
     , update
+    , updateJwt
     , view
     )
 
-import Html exposing (Html, text)
+import Html exposing (Html, div, i, text)
+import Html.Attributes exposing (class)
 import Internal.FormAuth as FormAuth exposing (FormAuth)
 import Postgrest.Client as PG
 
@@ -35,6 +38,26 @@ basic auth =
 jwt : String -> AuthScheme
 jwt tokenStr =
     Jwt (PG.jwt tokenStr)
+
+
+updateJwt : String -> AuthScheme -> AuthScheme
+updateJwt tokenStr authScheme =
+    case authScheme of
+        FormAuth formAuth ->
+            FormAuth (FormAuth.updateJwt tokenStr formAuth)
+
+        _ ->
+            Jwt (PG.jwt tokenStr)
+
+
+clearJwt : AuthScheme -> AuthScheme
+clearJwt authScheme =
+    case authScheme of
+        FormAuth formAuth ->
+            FormAuth (FormAuth.clearJwt formAuth)
+
+        _ ->
+            Unset
 
 
 isSuccessMsg : Msg -> Bool
@@ -84,10 +107,13 @@ view authScheme =
         FormAuth auth ->
             FormAuth.view auth |> Html.map FormAuthChanged
 
-        Jwt _ ->
-            text ""
-
         Unset ->
+            div
+                [ class "overlay overlay-waiting" ]
+                [ i [ class "gg-spinner-alt" ] []
+                ]
+
+        Jwt _ ->
             text ""
 
 

@@ -2,12 +2,14 @@ module Internal.FormAuth exposing
     ( FormAuth
     , Msg
     , Session(..)
+    , clearJwt
     , config
     , fail
     , isFailed
     , isSuccessMsg
     , toJwt
     , update
+    , updateJwt
     , view
     , withAuthUrl
     , withAuthUrlDecoder
@@ -227,7 +229,7 @@ viewForm auth =
             toParams auth
     in
     div
-        [ class "auth-modal" ]
+        [ class "auth-modal overlay" ]
         [ div
             [ class "auth-form" ]
             [ errorMessage auth
@@ -299,6 +301,16 @@ toJwt auth =
 
         Failure _ _ ->
             Nothing
+
+
+updateJwt : String -> FormAuth -> FormAuth
+updateJwt tokenStr auth =
+    Success (toParams auth) (Token (PG.jwt tokenStr))
+
+
+clearJwt : FormAuth -> FormAuth
+clearJwt auth =
+    Ready (toParams auth)
 
 
 isFailed : FormAuth -> Bool
