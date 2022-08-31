@@ -19,5 +19,5 @@ main =
     Config.init
         |> Config.onAuthFailed authFailure
         |> Config.onLogout logout
-        |> Config.subscribeToExternalLogin tokenReceiver
+        |> Config.onExternalLogin tokenReceiver
         |> PostgRestAdmin.application

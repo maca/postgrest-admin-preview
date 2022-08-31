@@ -9,7 +9,7 @@ module PostgRestAdmin.Config exposing
     , jwt
     , onLogin
     , onAuthFailed
-    , subscribeToExternalLogin
+    , onExternalLogin
     , onLogout
     , routes
     )
@@ -38,7 +38,7 @@ module PostgRestAdmin.Config exposing
 @docs jwt
 @docs onLogin
 @docs onAuthFailed
-@docs subscribeToExternalLogin
+@docs onExternalLogin
 @docs onLogout
 
 
@@ -183,7 +183,7 @@ request. You can use to perform external authentication.
           main =
               Config.init
                   |> Config.withAuthFailed authFailed
-                  |> Config.subscribeToExternalLogin tokenReceiver
+                  |> Config.onExternalLogin tokenReceiver
                   |> PostgRestAdmin.application
 
 // Elm init
@@ -206,13 +206,13 @@ onAuthFailed =
     Config.onAuthFailed
 
 
-{-| Send the access token and reload attempted path on succcessful external
-login.
+{-| Subscribe to receive a JWT and a redirect path when login with an external
+provider.
 
 See [onAuthFailed](#onAuthFailed).
 
 -}
-subscribeToExternalLogin :
+onExternalLogin :
     (({ path : String, accessToken : String }
       -> { path : String, accessToken : String }
      )
@@ -220,8 +220,8 @@ subscribeToExternalLogin :
     )
     -> Config m msg
     -> Config m msg
-subscribeToExternalLogin =
-    Config.subscribeToExternalLogin
+onExternalLogin =
+    Config.onExternalLogin
 
 
 {-| Callback triggered when authentication fails when attempting to perform a

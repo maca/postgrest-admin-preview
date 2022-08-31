@@ -545,7 +545,7 @@ subscriptions { mountedApp, route, config } =
 
             _ ->
                 Sub.none
-        , Sub.map LoggedIn (config.subscribeToExternalLogin identity)
+        , Sub.map LoggedIn (config.onExternalLogin identity)
         ]
 
 

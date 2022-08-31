@@ -11,10 +11,10 @@ module Internal.Config exposing
     , init
     , jwt
     , onAuthFailed
+    , onExternalLogin
     , onLogin
     , onLogout
     , routes
-    , subscribeToExternalLogin
     , tables
     , tablesDecoder
     )
@@ -53,7 +53,7 @@ type alias Config m msg =
     , tables : List String
     , onLogin : String -> Cmd msg
     , onAuthFailed : String -> Cmd msg
-    , subscribeToExternalLogin : (Login -> Login) -> Sub Login
+    , onExternalLogin : (Login -> Login) -> Sub Login
     , onLogout : () -> Cmd msg
     }
 
@@ -122,13 +122,13 @@ onAuthFailed f =
         (\conf -> Decode.succeed { conf | onAuthFailed = f })
 
 
-subscribeToExternalLogin :
+onExternalLogin :
     ((Login -> Login) -> Sub Login)
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
-subscribeToExternalLogin sub =
+onExternalLogin sub =
     Decode.andThen
-        (\conf -> Decode.succeed { conf | subscribeToExternalLogin = sub })
+        (\conf -> Decode.succeed { conf | onExternalLogin = sub })
 
 
 formFields :
@@ -209,6 +209,6 @@ default =
     , tables = []
     , onLogin = always Cmd.none
     , onAuthFailed = always Cmd.none
-    , subscribeToExternalLogin = always Sub.none
+    , onExternalLogin = always Sub.none
     , onLogout = always Cmd.none
     }
