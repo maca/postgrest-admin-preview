@@ -2,8 +2,12 @@ module Internal.FormAuth exposing
     ( FormAuth
     , Msg
     , Session(..)
+    , authUrl
+    , authUrlDecoder
     , clearJwt
     , config
+    , decoder
+    , encoder
     , fail
     , isFailed
     , isSuccessMsg
@@ -11,10 +15,6 @@ module Internal.FormAuth exposing
     , update
     , updateJwt
     , view
-    , withAuthUrl
-    , withAuthUrlDecoder
-    , withDecoder
-    , withEncoder
     )
 
 import Dict exposing (Dict)
@@ -188,7 +188,7 @@ requestToken auth =
 
 
 handleJsonResponse : Decoder a -> Http.Response String -> Result Error a
-handleJsonResponse decoder response =
+handleJsonResponse aDecoder response =
     case response of
         Http.BadStatus_ { statusCode } _ ->
             if statusCode == 401 || statusCode == 403 then
@@ -198,7 +198,7 @@ handleJsonResponse decoder response =
                 Err (ServerError statusCode)
 
         Http.GoodStatus_ _ body ->
-            case Decode.decodeString decoder body of
+            case Decode.decodeString aDecoder body of
                 Err err ->
                     Err (DecodeError err)
 
@@ -410,13 +410,13 @@ errorWrapper html =
 -- DECODERS
 
 
-withAuthUrl : String -> Decoder FormAuth -> Decoder FormAuth
-withAuthUrl urlStr decoder =
-    decoder |> Decode.andThen (withAuthUrlDecoder urlStr)
+authUrl : String -> Decoder FormAuth -> Decoder FormAuth
+authUrl urlStr =
+    Decode.andThen (authUrlDecoder urlStr)
 
 
-withAuthUrlDecoder : String -> FormAuth -> Decoder FormAuth
-withAuthUrlDecoder urlStr auth =
+authUrlDecoder : String -> FormAuth -> Decoder FormAuth
+authUrlDecoder urlStr auth =
     let
         params =
             toParams auth
@@ -425,42 +425,37 @@ withAuthUrlDecoder urlStr auth =
         |> Maybe.map
             (\url -> updateParams { params | url = url } auth |> Decode.succeed)
         |> Maybe.withDefault
-            (Decode.fail "`FormAuth.withAuthUrl` was given an invalid URL")
+            (Decode.fail "`FormAuth.authUrl` was given an invalid URL")
 
 
-withEncoder :
-    (Dict String String -> Value)
-    -> Decoder FormAuth
-    -> Decoder FormAuth
-withEncoder encoder decoder =
-    decoder
-        |> Decode.andThen
-            (\auth ->
-                let
-                    params =
-                        toParams auth
-                in
-                updateParams { params | encoder = encoder } auth
-                    |> Decode.succeed
-            )
+encoder : (Dict String String -> Value) -> Decoder FormAuth -> Decoder FormAuth
+encoder authEncoder =
+    Decode.andThen
+        (\auth ->
+            let
+                params =
+                    toParams auth
+            in
+            updateParams { params | encoder = authEncoder } auth
+                |> Decode.succeed
+        )
 
 
-withDecoder : Decoder String -> Decoder FormAuth -> Decoder FormAuth
-withDecoder jwtDecoder decoder =
-    decoder
-        |> Decode.andThen
-            (\auth ->
-                let
-                    params =
-                        toParams auth
-                in
-                updateParams
-                    { params
-                        | decoder = Decode.map (PG.jwt >> Token) jwtDecoder
-                    }
-                    auth
-                    |> Decode.succeed
-            )
+decoder : Decoder String -> Decoder FormAuth -> Decoder FormAuth
+decoder jwtDecoder =
+    Decode.andThen
+        (\auth ->
+            let
+                params =
+                    toParams auth
+            in
+            updateParams
+                { params
+                    | decoder = Decode.map (PG.jwt >> Token) jwtDecoder
+                }
+                auth
+                |> Decode.succeed
+        )
 
 
 updateParams : Params -> FormAuth -> FormAuth

@@ -8,16 +8,16 @@ import PostgRestAdmin.Config.FormAuth as FormAuth
 port authFailure : String -> Cmd msg
 
 
-port tokenReceiver : ({ path : String, accessToken : String } -> msg) -> Sub msg
-
-
 port logout : () -> Cmd msg
+
+
+port tokenReceiver : ({ path : String, accessToken : String } -> msg) -> Sub msg
 
 
 main : PostgRestAdmin.Program Never Never
 main =
     Config.init
-        |> Config.withOnAuthFailed authFailure
-        |> Config.withOnExternalLogin tokenReceiver
-        |> Config.withOnLogout logout
+        |> Config.onAuthFailed authFailure
+        |> Config.onLogout logout
+        |> Config.subscribeToExternalLogin tokenReceiver
         |> PostgRestAdmin.application

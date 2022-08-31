@@ -2,21 +2,21 @@ module Internal.Config exposing
     ( Config
     , DetailActions
     , default
+    , detailActions
+    , formAuth
+    , formFields
+    , formFieldsDecoder
+    , host
+    , hostDecoder
     , init
-    , withDetailActions
-    , withFormAuth
-    , withFormFields
-    , withFormFieldsDecoder
-    , withHost
-    , withHostDecoder
-    , withJwt
-    , withMountPoint
-    , withOnAuthFailed
-    , withOnExternalLogin
-    , withOnLogin
-    , withOnLogout
-    , withTables
-    , withTablesDecoder
+    , jwt
+    , onAuthFailed
+    , onLogin
+    , onLogout
+    , routes
+    , subscribeToExternalLogin
+    , tables
+    , tablesDecoder
     )
 
 import Dict exposing (Dict)
@@ -53,7 +53,7 @@ type alias Config m msg =
     , tables : List String
     , onLogin : String -> Cmd msg
     , onAuthFailed : String -> Cmd msg
-    , onExternalLogin : (Login -> Login) -> Sub Login
+    , subscribeToExternalLogin : (Login -> Login) -> Sub Login
     , onLogout : () -> Cmd msg
     }
 
@@ -63,80 +63,80 @@ init =
     Decode.succeed default
 
 
-withHost : String -> Decoder (Config m msg) -> Decoder (Config m msg)
-withHost urlStr =
-    Decode.andThen (withHostDecoder urlStr)
+host : String -> Decoder (Config m msg) -> Decoder (Config m msg)
+host urlStr =
+    Decode.andThen (hostDecoder urlStr)
 
 
-withHostDecoder : String -> Config m msg -> Decoder (Config m msg)
-withHostDecoder urlStr conf =
+hostDecoder : String -> Config m msg -> Decoder (Config m msg)
+hostDecoder urlStr conf =
     Url.fromString urlStr
         |> Maybe.map (\u -> Decode.succeed { conf | host = u })
         |> Maybe.withDefault
-            (Decode.fail "`Config.withHost` was given an invalid URL")
+            (Decode.fail "`Config.host` was given an invalid URL")
 
 
-withFormAuth :
+formAuth :
     Decoder FormAuth
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
-withFormAuth authDecoder =
+formAuth authDecoder =
     Decode.map2 (\auth conf -> { conf | authScheme = AuthScheme.basic auth })
         (authDecoder
-            |> Flag.string "authUrl" FormAuth.withAuthUrlDecoder
+            |> Flag.string "authUrl" FormAuth.authUrlDecoder
         )
 
 
-withJwt : String -> Decoder (Config m msg) -> Decoder (Config m msg)
-withJwt tokenStr =
+jwt : String -> Decoder (Config m msg) -> Decoder (Config m msg)
+jwt tokenStr =
     Decode.andThen
         (\conf ->
             Decode.succeed { conf | authScheme = AuthScheme.jwt tokenStr }
         )
 
 
-withOnLogin :
+onLogin :
     (String -> Cmd msg)
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
-withOnLogin onLogin =
+onLogin f =
     Decode.andThen
-        (\conf -> Decode.succeed { conf | onLogin = onLogin })
+        (\conf -> Decode.succeed { conf | onLogin = f })
 
 
-withOnLogout :
+onLogout :
     (() -> Cmd msg)
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
-withOnLogout onLogout =
+onLogout f =
     Decode.andThen
-        (\conf -> Decode.succeed { conf | onLogout = onLogout })
+        (\conf -> Decode.succeed { conf | onLogout = f })
 
 
-withOnAuthFailed :
+onAuthFailed :
     (String -> Cmd msg)
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
-withOnAuthFailed onAuthFailed =
+onAuthFailed f =
     Decode.andThen
-        (\conf -> Decode.succeed { conf | onAuthFailed = onAuthFailed })
+        (\conf -> Decode.succeed { conf | onAuthFailed = f })
 
 
-withOnExternalLogin :
+subscribeToExternalLogin :
     ((Login -> Login) -> Sub Login)
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
-withOnExternalLogin onExternalLogin =
+subscribeToExternalLogin sub =
     Decode.andThen
-        (\conf -> Decode.succeed { conf | onExternalLogin = onExternalLogin })
+        (\conf -> Decode.succeed { conf | subscribeToExternalLogin = sub })
 
 
-withFormFields :
+formFields :
     String
     -> List String
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
-withFormFields tableName fields =
+formFields tableName fields =
     Decode.andThen
         (\conf ->
             Decode.succeed
@@ -146,20 +146,20 @@ withFormFields tableName fields =
         )
 
 
-withFormFieldsDecoder :
+formFieldsDecoder :
     Dict String (List String)
     -> Config m msg
     -> Decoder (Config m msg)
-withFormFieldsDecoder fields conf =
+formFieldsDecoder fields conf =
     Decode.succeed { conf | formFields = Dict.union fields conf.formFields }
 
 
-withDetailActions :
+detailActions :
     String
     -> DetailActions
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
-withDetailActions tableName actions =
+detailActions tableName actions =
     Decode.andThen
         (\conf ->
             Decode.succeed
@@ -170,25 +170,25 @@ withDetailActions tableName actions =
         )
 
 
-withMountPoint :
+routes :
     Application.Params m msg
     -> Parser (msg -> msg) msg
     -> Decoder (Config m msg)
     -> Decoder (Config m msg)
-withMountPoint program parser =
+routes program parser =
     Decode.andThen
         (\conf ->
             Decode.succeed { conf | application = Just ( program, parser ) }
         )
 
 
-withTables : List String -> Decoder (Config m msg) -> Decoder (Config m msg)
-withTables tableNames =
-    Decode.andThen (withTablesDecoder tableNames)
+tables : List String -> Decoder (Config m msg) -> Decoder (Config m msg)
+tables tableNames =
+    Decode.andThen (tablesDecoder tableNames)
 
 
-withTablesDecoder : List String -> Config m msg -> Decoder (Config m msg)
-withTablesDecoder tableNames conf =
+tablesDecoder : List String -> Config m msg -> Decoder (Config m msg)
+tablesDecoder tableNames conf =
     Decode.succeed { conf | tables = tableNames }
 
 
@@ -209,6 +209,6 @@ default =
     , tables = []
     , onLogin = always Cmd.none
     , onAuthFailed = always Cmd.none
-    , onExternalLogin = always Sub.none
+    , subscribeToExternalLogin = always Sub.none
     , onLogout = always Cmd.none
     }

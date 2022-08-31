@@ -129,7 +129,7 @@ type alias Collection a =
     { from : Int
     , to : Int
     , total : Int
-    , list : List a
+    , records : List a
     }
 
 

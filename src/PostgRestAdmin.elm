@@ -137,9 +137,9 @@ applicationParams decoder =
     { init =
         init
             (decoder
-                |> Flag.string "host" Config.withHostDecoder
-                |> Flag.stringDict "formFields" Config.withFormFieldsDecoder
-                |> Flag.stringList "tables" Config.withTablesDecoder
+                |> Flag.string "host" Config.hostDecoder
+                |> Flag.stringDict "formFields" Config.formFieldsDecoder
+                |> Flag.stringList "tables" Config.tablesDecoder
             )
     , update = update
     , view = view
@@ -545,7 +545,7 @@ subscriptions { mountedApp, route, config } =
 
             _ ->
                 Sub.none
-        , Sub.map LoggedIn (config.onExternalLogin identity)
+        , Sub.map LoggedIn (config.subscribeToExternalLogin identity)
         ]
 
 

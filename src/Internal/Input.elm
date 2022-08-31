@@ -126,20 +126,20 @@ update client msg record =
             , AppCmd.none
             )
 
-        ListingFetched name (Ok { list }) ->
+        ListingFetched name (Ok { records }) ->
             case Dict.get name record of
                 Just (Association field params) ->
                     let
                         input =
                             Association field <|
-                                if List.isEmpty list then
+                                if List.isEmpty records then
                                     { params
                                         | results = []
                                         , blocked = True
                                     }
 
                                 else
-                                    { params | results = list }
+                                    { params | results = records }
                     in
                     ( Dict.insert name input record, AppCmd.none )
 

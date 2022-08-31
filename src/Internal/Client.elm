@@ -24,7 +24,7 @@ module Internal.Client exposing
 
 import Dict exposing (Dict)
 import Dict.Extra as Dict
-import Html exposing (Html, text)
+import Html exposing (Html)
 import Http exposing (header)
 import Internal.AuthScheme as AuthScheme exposing (AuthScheme)
 import Internal.Http exposing (Error(..), handleJsonResponse)

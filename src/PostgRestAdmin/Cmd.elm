@@ -24,7 +24,7 @@ import Platform.Cmd as Platform
 [Cmd](https://package.elm-lang.org/packages/elm/core/latest/Platform-Cmd#Cmd)
 for internal communication.
 
-When mounting an application via [Config.withMountPoint](PostgRestAdmin.Config#withMountPoint),
+When mounting an application via [Config.routes](PostgRestAdmin.Config#routes),
 your app should use this type instead of
 [Platform.Cmd](https://package.elm-lang.org/packages/elm/core/latest/Platform-Cmd#Cmd),
 then it's just matter of using [wrap](#wrap) to wrap the Cmd.

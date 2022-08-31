@@ -63,6 +63,7 @@ The most basic way use is just to define your main function as a
 [PostgRestAdmin.Program](PostgRestAdmin#Program), the admin interface is built
 from PostgREST Open API description.
 
+
     module Main exposing (main)
 
     import PostgRestAdmin
@@ -91,16 +92,15 @@ Then flags can be passed on `Elm.init`
 [Configuration](PostgRestAdmin-Config) params are passed to the
 PostgRestAdmin program in the example bellow.
 
-- [withHost](PostgRestAdmin-Config#withHost) sets the PostgREST instance host,
-- [withFormAuth](PostgRestAdmin-Config#withFormAuth) enables form
+- [host](PostgRestAdmin-Config#host) sets the PostgREST instance host,
+- [formAuth](PostgRestAdmin-Config#formAuth) enables form
   authentication, and takes a
 - [FormAuth](PostgRestAdmin-Config-FormAuth) configuration
 - optionally [FormAuth](PostgRestAdmin-Config-FormAuth) can be
 configured with
-- [withAuthUrl](PostgRestAdmin-Config-FormAuth#withAuthUrl) which specifies a
+- [authUrl](PostgRestAdmin-Config-FormAuth#authUrl) which specifies a
   url to POST credentials, wich can be a postgREST function or an external
   service if CORS is configured correctly.
-
 
 
     port module Main exposing (main)
@@ -116,19 +116,21 @@ configured with
     main : PostgRestAdmin.Program Never Never
     main =
         Config.init
-            |> Config.withHost "https://postgrest.example.com"
-            |> Config.withFormAuth
+            |> Config.host "https://postgrest.example.com"
+            |> Config.formAuth
                 (FormAuth.config
-                    |> FormAuth.withAuthUrl
+                    |> FormAuth.authUrl
                         "https://postgrest.example.com/rpc/login"
                 )
-            |> Config.withOnLogin loginSuccess
+            |> Config.onLogin loginSuccess
             |> PostgRestAdmin.application
 
 
-In addition to configuring the login POST url `withFormAuth` and `withAuthUrl`,
+
+In addition to configuring the login POST url `formAuth` and `authUrl`,
 the token is persisted to keep the user loggedin across page reloads, by using
 flags and ports.
+
 
     app = Elm.Main.init({
       flags: {
@@ -140,6 +142,8 @@ flags and ports.
       sessionStorage.setItem("jwt", jwt)
     });
 
+
+
 Most of the previous configuration options can be overriden using flags, thus
 the same build can be used in different environments. See
 [Config](PostgRestAdmin-Config).
@@ -150,4 +154,4 @@ You can override some listing, the detail for a resource, a form or add
 additional behaviour by *mounting your own application* in as many routes as you
 want.
 
-See [Config.withMountPoint](PostgRestAdmin-Config#withMountPoint).
+See [Config.routes](PostgRestAdmin-Config#routes).

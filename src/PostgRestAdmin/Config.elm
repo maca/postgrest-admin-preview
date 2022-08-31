@@ -1,17 +1,17 @@
 module PostgRestAdmin.Config exposing
     ( Config
     , init
-    , withHost
-    , withFormFields
-    , withDetailActions
-    , withTables
-    , withFormAuth
-    , withJwt
-    , withOnLogin
-    , withOnAuthFailed
-    , withOnExternalLogin
-    , withOnLogout
-    , withMountPoint
+    , host
+    , formFields
+    , detailActions
+    , tables
+    , formAuth
+    , jwt
+    , onLogin
+    , onAuthFailed
+    , subscribeToExternalLogin
+    , onLogout
+    , routes
     )
 
 {-| Program configuration
@@ -26,25 +26,25 @@ module PostgRestAdmin.Config exposing
 
 # Basics
 
-@docs withHost
-@docs withFormFields
-@docs withDetailActions
-@docs withTables
+@docs host
+@docs formFields
+@docs detailActions
+@docs tables
 
 
 # Auth
 
-@docs withFormAuth
-@docs withJwt
-@docs withOnLogin
-@docs withOnAuthFailed
-@docs withOnExternalLogin
-@docs withOnLogout
+@docs formAuth
+@docs jwt
+@docs onLogin
+@docs onAuthFailed
+@docs subscribeToExternalLogin
+@docs onLogout
 
 
 # Application mounting
 
-@docs withMountPoint
+@docs routes
 
 -}
 
@@ -85,10 +85,10 @@ init =
       main : PostgRestAdmin.Program Never Never
       main =
           Config.init
-              |> Config.withHost "http://localhost:3000"
+              |> Config.host "http://localhost:3000"
               |> PostgRestAdmin.application
 
-Alternatively the host can be specified using flags, configuring using `withHost`.
+Alternatively the host can be specified using flags, configuring using `host`.
 Program flags take precedence.
 
       Elm.Main.init({
@@ -96,9 +96,9 @@ Program flags take precedence.
       })
 
 -}
-withHost : String -> Config m msg -> Config m msg
-withHost =
-    Config.withHost
+host : String -> Config m msg -> Config m msg
+host =
+    Config.host
 
 
 {-| Enable user credentials form and configure the parameters. Credentials
@@ -111,25 +111,25 @@ See [FormAuth](PostgRestAdmin.FormAuth) for configuration options.
       main : PostgRestAdmin.Program Never Never
       main =
           Config.init
-              |> Config.withFormAuth FormAuth.config
+              |> Config.formAuth FormAuth.config
               |> PostgRestAdmin.application
 
 -}
-withFormAuth : FormAuth -> Config m msg -> Config m msg
-withFormAuth =
-    Config.withFormAuth
+formAuth : FormAuth -> Config m msg -> Config m msg
+formAuth =
+    Config.formAuth
 
 
 {-| Set a JWT to authenticate postgREST requests. Even when using
-[withFormAuth](#withFormAuth) it's possible to set an initial JWT.
+[formAuth](#formAuth) it's possible to set an initial JWT.
 
       main : PostgRestAdmin.Program Never Never
       main =
           Config.init
-              |> Config.withJwt "8abf3a...9ac36d"
+              |> Config.jwt "8abf3a...9ac36d"
               |> PostgRestAdmin.application
 
-Alternatively the token can be passed using flags, configuring using `withJwt`.
+Alternatively the token can be passed using flags, configuring using `jwt`.
 Program flags take precedence.
 
       Elm.Main.init({
@@ -137,9 +137,9 @@ Program flags take precedence.
       })
 
 -}
-withJwt : String -> Config m msg -> Config m msg
-withJwt =
-    Config.withJwt
+jwt : String -> Config m msg -> Config m msg
+jwt =
+    Config.jwt
 
 
 {-| Callback triggered with a JWT string on successful login.
@@ -150,7 +150,7 @@ Tipically used to persist the JWT to session storage.
           main : PostgRestAdmin.Program Never Never
           main =
               Config.init
-                  |> Config.withOnLogin loginSuccess
+                  |> Config.onLogin loginSuccess
                   |> PostgRestAdmin.application
 
 // Elm init
@@ -164,9 +164,9 @@ Tipically used to persist the JWT to session storage.
         });
 
 -}
-withOnLogin : (String -> Cmd msg) -> Config m msg -> Config m msg
-withOnLogin =
-    Config.withOnLogin
+onLogin : (String -> Cmd msg) -> Config m msg -> Config m msg
+onLogin =
+    Config.onLogin
 
 
 {-| Callback triggered when authentication fails when attempting to perform a
@@ -183,7 +183,7 @@ request. You can use to perform external authentication.
           main =
               Config.init
                   |> Config.withAuthFailed authFailed
-                  |> Config.withOnExternalLogin tokenReceiver
+                  |> Config.subscribeToExternalLogin tokenReceiver
                   |> PostgRestAdmin.application
 
 // Elm init
@@ -201,18 +201,18 @@ request. You can use to perform external authentication.
         });
 
 -}
-withOnAuthFailed : (String -> Cmd msg) -> Config m msg -> Config m msg
-withOnAuthFailed =
-    Config.withOnAuthFailed
+onAuthFailed : (String -> Cmd msg) -> Config m msg -> Config m msg
+onAuthFailed =
+    Config.onAuthFailed
 
 
 {-| Send the access token and reload attempted path on succcessful external
 login.
 
-See [withOnAuthFailed](#withOnAuthFailed).
+See [onAuthFailed](#onAuthFailed).
 
 -}
-withOnExternalLogin :
+subscribeToExternalLogin :
     (({ path : String, accessToken : String }
       -> { path : String, accessToken : String }
      )
@@ -220,8 +220,8 @@ withOnExternalLogin :
     )
     -> Config m msg
     -> Config m msg
-withOnExternalLogin =
-    Config.withOnExternalLogin
+subscribeToExternalLogin =
+    Config.subscribeToExternalLogin
 
 
 {-| Callback triggered when authentication fails when attempting to perform a
@@ -232,7 +232,7 @@ request. You can use to perform external authentication.
           main : PostgRestAdmin.Program Never Never
           main =
               Config.init
-                  |> Config.withOnLogout logout
+                  |> Config.onLogout logout
                   |> PostgRestAdmin.application
 
 // Elm init
@@ -244,9 +244,9 @@ request. You can use to perform external authentication.
         });
 
 -}
-withOnLogout : (() -> Cmd msg) -> Config m msg -> Config m msg
-withOnLogout =
-    Config.withOnLogout
+onLogout : (() -> Cmd msg) -> Config m msg -> Config m msg
+onLogout =
+    Config.onLogout
 
 
 {-| Specify which fields should be present in the the edit and create forms,
@@ -256,26 +256,26 @@ the forms.
       main : PostgRestAdmin.Program Never Never
       main =
           Config.init
-              |> Config.withFormFields "posts" ["id", "title", "content"]
+              |> Config.formFields "posts" ["id", "title", "content"]
               |> PostgRestAdmin.application
 
 Alternatively this parameter can be configured using flags, configuring using
-`withFormFields`. Program flags take precedence.
+`formFields`. Program flags take precedence.
 
       Elm.Main.init({
           flags: { formFields: { posts: [ "id", "title", "content" ]} }
       })
 
 -}
-withFormFields : String -> List String -> Config m msg -> Config m msg
-withFormFields =
-    Config.withFormFields
+formFields : String -> List String -> Config m msg -> Config m msg
+formFields =
+    Config.formFields
 
 
 {-| Specify a number of actions buttons to be shown in the detail page of a
 record along with Edit and Delete buttons.
 
-`withDetailActions` expect a dict where the keys correspond with the name of a
+`detailActions` expect a dict where the keys correspond with the name of a
 table and the values are a list of tuples, the first element of the tuple
 corresponds to the button text and the second is a function that takes the id of
 the resource and returns a url string.
@@ -285,7 +285,7 @@ the resource and returns a url string.
       main : PostgRestAdmin.Program Never Never
       main =
           Config.init
-              |> Config.withDetailActions "posts"
+              |> Config.detailActions "posts"
                   [ ( "View Comments"
                     , \_ id -> Url.absolute [ "posts", id, "comments" ] []
                     )
@@ -294,13 +294,13 @@ the resource and returns a url string.
           |> PostgRestAdmin.application
 
 -}
-withDetailActions :
+detailActions :
     String
     -> List ( String, Record -> String -> String )
     -> Config m msg
     -> Config m msg
-withDetailActions =
-    Config.withDetailActions
+detailActions =
+    Config.detailActions
 
 
 {-| Pass a list of table names to restrict the editable resources, also sets the
@@ -309,11 +309,11 @@ order of the left resources menu.
       main : PostgRestAdmin.Program Never Never
       main =
           Config.init
-              |> Config.withTables ["posts", "comments"]
+              |> Config.tables ["posts", "comments"]
               |> PostgRestAdmin.application
 
 Alternatively the host can be specified using flags, configuring using
-`withTables`.
+`tables`.
 Program flags take precedence.
 
       Elm.Main.init({
@@ -321,9 +321,9 @@ Program flags take precedence.
       })
 
 -}
-withTables : List String -> Config m msg -> Config m msg
-withTables =
-    Config.withTables
+tables : List String -> Config m msg -> Config m msg
+tables =
+    Config.tables
 
 
 {-| Mount an application on a give path using
@@ -349,7 +349,7 @@ to parse many routes.
     main : PostgRestAdmin.Program Model Msg
     main =
         Config.init
-            |> Config.withMountPoint
+            |> Config.routes
                 { view = view
                 , update = update
                 , init = init
@@ -364,7 +364,7 @@ The `application` is initialized with a [Client](PostgRestAdmin-Client) you can
 use to perform requests.
 
 -}
-withMountPoint :
+routes :
     { init : Client -> Nav.Key -> ( model, AppCmd.Cmd msg )
     , view : model -> Html msg
     , update : msg -> model -> ( model, AppCmd.Cmd msg )
@@ -374,5 +374,5 @@ withMountPoint :
     -> Parser (msg -> msg) msg
     -> Config model msg
     -> Config model msg
-withMountPoint =
-    Config.withMountPoint
+routes =
+    Config.routes

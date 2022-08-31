@@ -1,9 +1,9 @@
 module PostgRestAdmin.Config.FormAuth exposing
     ( FormAuth
     , config
-    , withAuthUrl
-    , withEncoder
-    , withDecoder
+    , authUrl
+    , encoder
+    , decoder
     )
 
 {-| Configuration for form based authentication.
@@ -29,13 +29,13 @@ to get a better understanding of JWT and roles in PostgREST.
 
 # Host
 
-@docs withAuthUrl
+@docs authUrl
 
 
 # Encode/Decode
 
-@docs withEncoder
-@docs withDecoder
+@docs encoder
+@docs decoder
 
 -}
 
@@ -62,26 +62,26 @@ config =
 JWT via a post request.
 
       config
-          |> withAuthUrl "http://localhost:3000/rpc/login"
+          |> authUrl "http://localhost:3000/rpc/login"
 
 Alternatively the host can be specified using flags, configuring using
-`withAuthUrl`. Program flags take precedence.
+`authUrl`. Program flags take precedence.
 
       Elm.Main.init({
           flags: { authUrl: "http://localhost:3000/rpc/login" }
       })
 
 -}
-withAuthUrl : String -> FormAuth -> FormAuth
-withAuthUrl =
-    FormAuth.withAuthUrl
+authUrl : String -> FormAuth -> FormAuth
+authUrl =
+    FormAuth.authUrl
 
 
 {-| Override the credentials JSON encoder to be used when posting to the login
 url.
 
       config
-        |> withEncoder
+        |> encoder
               (\creds ->
                   Encode.object
                       [ ( "credentials"
@@ -91,21 +91,21 @@ url.
               )
 
 -}
-withEncoder :
+encoder :
     (Dict String String -> Value)
     -> FormAuth
     -> FormAuth
-withEncoder =
-    FormAuth.withEncoder
+encoder =
+    FormAuth.encoder
 
 
 {-| Override the JSON decoder used to obtain the JWT from the login response.
 
       config
-        |> withDecoder
+        |> decoder
             (Decode.at ["auth", "jwt"] Decode.string)
 
 -}
-withDecoder : Decoder String -> FormAuth -> FormAuth
-withDecoder =
-    FormAuth.withDecoder
+decoder : Decoder String -> FormAuth -> FormAuth
+decoder =
+    FormAuth.decoder

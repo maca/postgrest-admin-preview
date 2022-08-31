@@ -285,20 +285,20 @@ update msg listing =
             fetchListing
                 { listing | client = client }
 
-        Fetched (Ok { list }) ->
+        Fetched (Ok { records }) ->
             ( { listing
                 | page = listing.page + 1
                 , pages =
                     case listing.pages of
                         Blank :: ps ->
-                            if List.length list < perPage then
-                                Blank :: Page list :: ps
+                            if List.length records < perPage then
+                                Blank :: Page records :: ps
 
                             else
-                                Page list :: ps
+                                Page records :: ps
 
                         _ ->
-                            Page list :: listing.pages
+                            Page records :: listing.pages
               }
             , AppCmd.none
             )
