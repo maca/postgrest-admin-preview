@@ -166,7 +166,21 @@ mapField updateField input =
             Number (updateField field)
 
         Checkbox field ->
-            Checkbox (updateField field)
+            let
+                value =
+                    case field.value of
+                        PBool maybeBool ->
+                            case maybeBool of
+                                Just bool ->
+                                    PBool (Just bool)
+
+                                Nothing ->
+                                    PBool (Just False)
+
+                        _ ->
+                            PBool (Just False)
+            in
+            Checkbox (updateField { field | value = value })
 
         DateTime field ->
             DateTime (updateField field)
