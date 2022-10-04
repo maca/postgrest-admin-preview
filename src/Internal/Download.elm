@@ -3,10 +3,10 @@ module Internal.Download exposing (Download, Format(..), fetch, init, save)
 import Bytes exposing (Bytes)
 import File.Download as Download
 import Http exposing (header)
+import Internal.Client exposing (endpoint)
 import Internal.Http exposing (Error(..), handleResponse)
 import PostgRestAdmin.Client as Client exposing (Client)
 import Task exposing (Task)
-import Url
 
 
 type Format
@@ -46,10 +46,6 @@ format download =
 
 fetch : Client -> Download -> Task Error Download
 fetch client download =
-    let
-        host =
-            Client.toHostUrl client
-    in
     case Client.toJwtString client of
         Just token ->
             Http.task
@@ -63,7 +59,7 @@ fetch client download =
                         JSON ->
                             header "Accept" "application/json"
                     ]
-                , url = Url.toString { host | path = url download }
+                , url = endpoint client (url download)
                 , body = Http.emptyBody
                 , resolver =
                     Http.bytesResolver (handleResponse (\_ body -> Ok body))

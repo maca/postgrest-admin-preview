@@ -119,7 +119,15 @@ updateWithString string value =
             PInt (String.toInt string)
 
         PBool prev ->
-            PBool (Maybe.map not prev)
+            case String.uncons (String.toLower string) of
+                Just ( 't', _ ) ->
+                    PBool (Just True)
+
+                Just ( 'f', _ ) ->
+                    PBool (Just False)
+
+                _ ->
+                    PBool (Maybe.map not prev)
 
         PTime _ ->
             let

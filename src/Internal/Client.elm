@@ -3,6 +3,7 @@ module Internal.Client exposing
     , Msg
     , authFailed
     , authHeader
+    , endpoint
     , fetchSchema
     , getTable
     , init
@@ -37,6 +38,8 @@ import Internal.Schema as Schema
         )
 import Internal.Value exposing (Value(..))
 import Postgrest.Client as PG exposing (Selectable)
+import Regex
+import String.Extra as String
 import Task exposing (Task)
 import Url exposing (Url)
 
@@ -188,16 +191,12 @@ task :
     }
     -> Task Error a
 task { client, method, headers, path, body, resolver, timeout } =
-    let
-        host =
-            client.host
-    in
     case authHeader client of
         Just auth ->
             Http.task
                 { method = method
                 , headers = auth :: headers
-                , url = Url.toString { host | path = path }
+                , url = endpoint client path
                 , body = body
                 , resolver = resolver
                 , timeout = timeout
@@ -276,3 +275,24 @@ associationJoin { constraint } =
 
         _ ->
             Nothing
+
+
+endpoint : Client -> String -> String
+endpoint { host } path =
+    Url.toString
+        { host
+            | path =
+                "/"
+                    ++ ([ host.path, path ]
+                            |> List.filterMap
+                                (Regex.replace leadingOrTrailingSlash (always "")
+                                    >> String.nonBlank
+                                )
+                            |> String.join "/"
+                       )
+        }
+
+
+leadingOrTrailingSlash : Regex.Regex
+leadingOrTrailingSlash =
+    Maybe.withDefault Regex.never (Regex.fromString "^/|/$")

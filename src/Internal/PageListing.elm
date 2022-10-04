@@ -62,7 +62,7 @@ import Html.Events as Events
         )
 import Http
 import Inflect
-import Internal.Client exposing (listableColumns, listingSelects)
+import Internal.Client exposing (endpoint, listableColumns, listingSelects)
 import Internal.Cmd as AppCmd
 import Internal.Download as Download exposing (Download, Format(..))
 import Internal.Field as Field
@@ -774,20 +774,13 @@ processCsv { table, client } csv =
         ids
             |> List.map
                 (\chunk ->
-                    let
-                        url =
-                            Client.toHostUrl client
-
-                        path =
-                            Url.absolute
-                                [ table.name ]
-                                (existenceQuery primaryKeyName
-                                    chunk
-                                )
-                    in
                     Http.task
                         { url =
-                            Url.toString { url | path = path }
+                            endpoint client
+                                (Url.absolute
+                                    [ table.name ]
+                                    (existenceQuery primaryKeyName chunk)
+                                )
                         , method = "GET"
                         , headers = []
                         , body = Http.emptyBody
