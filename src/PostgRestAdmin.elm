@@ -138,6 +138,7 @@ applicationParams decoder =
         init
             (decoder
                 |> Flag.string "host" Config.hostDecoder
+                |> Flag.string "mountPoint" Config.mountPointDecoder
                 |> Flag.stringDict "formFields" Config.formFieldsDecoder
                 |> Flag.stringList "tables" Config.tablesDecoder
             )
@@ -349,7 +350,20 @@ update msg model =
         LinkClicked urlRequest ->
             case urlRequest of
                 Browser.Internal url ->
-                    ( model, Nav.pushUrl model.key (Url.toString url) )
+                    ( model
+                    , Nav.pushUrl model.key
+                        (Url.toString
+                            { url
+                                | path =
+                                    [ model.config.mountPoint
+                                        |> Maybe.map (\p -> "/" ++ p)
+                                    , Just url.path
+                                    ]
+                                        |> List.filterMap identity
+                                        |> String.join ""
+                            }
+                        )
+                    )
 
                 Browser.External href ->
                     ( model, Nav.load href )
@@ -557,7 +571,16 @@ parseRoute : Url -> Model m msg -> ( Route m msg, Cmd (Msg m msg) )
 parseRoute url model =
     let
         routeTuple params =
-            Parser.parse (routeParser url params) url
+            Parser.parse
+                (case params.config.mountPoint of
+                    Just mountPoint ->
+                        Parser.map identity
+                            (s mountPoint </> routeParser url params)
+
+                    Nothing ->
+                        routeParser url params
+                )
+                url
                 |> Maybe.withDefault ( RouteNotFound, Cmd.none )
     in
     if Client.schemaIsLoaded model.client then
@@ -580,7 +603,7 @@ routeParser :
     -> Parser (( Route m msg, Cmd (Msg m msg) ) -> a) a
 routeParser url params =
     let
-        mountPoint =
+        appRoutes =
             case params.config.application of
                 Just ( appParams, parser ) ->
                     [ Parser.map
@@ -597,7 +620,7 @@ routeParser url params =
                     []
     in
     Parser.oneOf
-        (mountPoint
+        (appRoutes
             ++ [ -- /
                  Parser.map ( RouteRoot, Cmd.none ) Parser.top
 

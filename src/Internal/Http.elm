@@ -4,12 +4,14 @@ module Internal.Http exposing
     , errorToString
     , handleJsonResponse
     , handleResponse
+    , removeLeadingOrTrailingSlash
     , toError
     )
 
 import Dict exposing (Dict)
 import Http
 import Json.Decode as Decode exposing (Decoder, Value)
+import Regex
 
 
 type Error
@@ -122,3 +124,13 @@ errorToString error =
 
         AuthError ->
             "There was an error authorising your credentials."
+
+
+removeLeadingOrTrailingSlash : String -> String
+removeLeadingOrTrailingSlash =
+    Regex.replace leadingOrTrailingSlash (always "")
+
+
+leadingOrTrailingSlash : Regex.Regex
+leadingOrTrailingSlash =
+    Maybe.withDefault Regex.never (Regex.fromString "^/|/$")

@@ -28,7 +28,12 @@ import Dict.Extra as Dict
 import Html exposing (Html)
 import Http exposing (header)
 import Internal.AuthScheme as AuthScheme exposing (AuthScheme)
-import Internal.Http exposing (Error(..), handleJsonResponse)
+import Internal.Http
+    exposing
+        ( Error(..)
+        , handleJsonResponse
+        , removeLeadingOrTrailingSlash
+        )
 import Internal.Schema as Schema
     exposing
         ( Column
@@ -38,7 +43,6 @@ import Internal.Schema as Schema
         )
 import Internal.Value exposing (Value(..))
 import Postgrest.Client as PG exposing (Selectable)
-import Regex
 import String.Extra as String
 import Task exposing (Task)
 import Url exposing (Url)
@@ -285,14 +289,7 @@ endpoint { host } path =
                 "/"
                     ++ ([ host.path, path ]
                             |> List.filterMap
-                                (Regex.replace leadingOrTrailingSlash (always "")
-                                    >> String.nonBlank
-                                )
+                                (removeLeadingOrTrailingSlash >> String.nonBlank)
                             |> String.join "/"
                        )
         }
-
-
-leadingOrTrailingSlash : Regex.Regex
-leadingOrTrailingSlash =
-    Maybe.withDefault Regex.never (Regex.fromString "^/|/$")

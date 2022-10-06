@@ -2,6 +2,7 @@ module PostgRestAdmin.Config exposing
     ( Config
     , init
     , host
+    , mountPoint
     , formFields
     , detailActions
     , tables
@@ -27,6 +28,7 @@ module PostgRestAdmin.Config exposing
 # Basics
 
 @docs host
+@docs mountPoint
 @docs formFields
 @docs detailActions
 @docs tables
@@ -99,6 +101,28 @@ Program flags take precedence.
 host : String -> Config m msg -> Config m msg
 host =
     Config.host
+
+
+{-| Specify a path prefix for all routes, in case the app is not mounted in the
+root path.
+
+      main : PostgRestAdmin.Program Never Never
+      main =
+          Config.init
+              |> Config.mountPoint "/back-office"
+              |> PostgRestAdmin.application
+
+Alternatively the host can be specified using flags, configuring using
+`mountPoint`. Program flags take precedence.
+
+      Elm.Main.init({
+          flags: { mountPoint: "/back-office" }
+      })
+
+-}
+mountPoint : String -> Config m msg -> Config m msg
+mountPoint =
+    Config.mountPoint
 
 
 {-| Enable user credentials form and configure the parameters. Credentials
