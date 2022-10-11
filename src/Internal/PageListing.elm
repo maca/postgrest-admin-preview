@@ -57,8 +57,6 @@ import Html.Events as Events
     exposing
         ( on
         , onClick
-        , onMouseDown
-        , onMouseUp
         )
 import Http
 import Inflect
@@ -121,16 +119,12 @@ type Msg
     = LoggedIn Client
     | Fetched (Result Error (Collection Record))
     | ParentFetched (Result Error Record)
-    | RecordLinkClicked String String
     | ApplyFilters
     | Sort SortOrder
     | Reload
     | Scrolled
     | ScrollInfo (Result Dom.Error Viewport)
     | SearchChanged Search.Msg
-    | SelectEnter
-    | SelectOn
-    | SelectOff
     | DownloadRequested Format
     | Downloaded (Result Error Download)
     | ToggleSearchOpen
@@ -142,12 +136,6 @@ type Msg
     | CsvUploadAccepted
     | CsvUploadCanceled
     | NoOp
-
-
-type TextSelect
-    = Enter
-    | On
-    | Off
 
 
 type alias PageListing =
@@ -162,15 +150,7 @@ type alias PageListing =
     , order : SortOrder
     , search : Search
     , searchOpen : Bool
-    , textSelect : TextSelect
     , uploadState : UploadState
-    }
-
-
-type alias EventConfig =
-    { stopPropagation : Bool
-    , preventDefault : Bool
-    , message : Msg
     }
 
 
@@ -211,7 +191,6 @@ init { client, table, parent } url key =
             , order = order
             , search = Search.init table (url.query |> Maybe.withDefault "")
             , searchOpen = False
-            , textSelect = Off
             , uploadState = Idle
             }
     in
@@ -321,13 +300,6 @@ update msg listing =
         ParentFetched (Err err) ->
             ( listing, Notification.error (Internal.Http.errorToString err) )
 
-        RecordLinkClicked tableName id ->
-            ( listing
-            , Url.absolute [ tableName, id ] []
-                |> Nav.pushUrl listing.key
-                |> AppCmd.wrap
-            )
-
         ApplyFilters ->
             ( listing, reload listing.table )
 
@@ -389,21 +361,6 @@ update msg listing =
 
         ToggleSearchOpen ->
             ( { listing | searchOpen = not listing.searchOpen }
-            , AppCmd.none
-            )
-
-        SelectEnter ->
-            ( { listing | textSelect = Enter }
-            , AppCmd.none
-            )
-
-        SelectOff ->
-            ( { listing | textSelect = Off }
-            , AppCmd.none
-            )
-
-        SelectOn ->
-            ( { listing | textSelect = On }
             , AppCmd.none
             )
 
@@ -918,7 +875,7 @@ tableHeading : PageListing -> List String -> Html Msg
 tableHeading listing fields =
     thead
         []
-        [ tr [] (List.map (tableHeader listing) fields) ]
+        [ tr [] (List.map (tableHeader listing) fields ++ [ th [] [] ]) ]
 
 
 tableHeader : PageListing -> String -> Html Msg
@@ -1003,52 +960,38 @@ pageHtml listing fields pageNum records =
 
 
 rowHtml : PageListing -> List String -> Record -> Html Msg
-rowHtml { table, textSelect } names record =
-    let
-        cell fieldName =
-            Dict.get fieldName record.fields
-                |> Maybe.map
-                    (\field ->
-                        td
-                            []
-                            [ span
-                                []
-                                [ field
-                                    |> Field.toHtml (clickRecord textSelect)
-                                        table.name
-                                ]
-                            ]
-                    )
-    in
+rowHtml { table } names record =
     tr
-        [ class "listing-row"
-        , onMouseDown SelectEnter
-        , if textSelect == Enter then
-            on "mousemove" (Decode.succeed SelectOn)
-
-          else
-            class ""
-        , onMouseUp SelectOff
-        , Record.id record
-            |> Maybe.withDefault ""
-            |> clickRecord textSelect table.name
-        ]
-        (List.filterMap cell names)
-
-
-clickRecord : TextSelect -> String -> String -> Html.Attribute Msg
-clickRecord textSelect tableName id =
-    let
-        msg =
-            if textSelect == On then
-                SelectOff
-
-            else
-                RecordLinkClicked tableName id
-    in
-    Events.custom "click" <|
-        Decode.map (EventConfig True True)
-            (Decode.succeed msg)
+        [ class "listing-row" ]
+        (List.filterMap
+            (\fieldName ->
+                Dict.get fieldName record.fields
+                    |> Maybe.map
+                        (\field ->
+                            td
+                                []
+                                [ span [] [ Field.toHtml table.name field ] ]
+                        )
+            )
+            names
+            ++ [ td []
+                    [ Record.id record
+                        |> Maybe.map
+                            (\id ->
+                                a
+                                    [ class "button button-clear button-small"
+                                    , href
+                                        (Url.absolute
+                                            [ Record.tableName record, id ]
+                                            []
+                                        )
+                                    ]
+                                    [ text "View" ]
+                            )
+                        |> Maybe.withDefault (text "")
+                    ]
+               ]
+        )
 
 
 toggleSearchButton : PageListing -> Html Msg

@@ -11,7 +11,7 @@ module Internal.Field exposing
     )
 
 import Html exposing (Html, a, pre, text)
-import Html.Attributes exposing (href, target)
+import Html.Attributes exposing (href)
 import Internal.Schema exposing (Constraint(..))
 import Internal.Value as Value exposing (Value(..))
 import List.Extra as List
@@ -98,14 +98,14 @@ compareTuple ( name, column ) ( name_, column_ ) =
 -- Html
 
 
-toHtml : (String -> String -> Html.Attribute msg) -> String -> Field -> Html msg
-toHtml onClick resourcesName { constraint, value } =
+toHtml : String -> Field -> Html msg
+toHtml resourcesName { constraint, value } =
     case constraint of
         PrimaryKey ->
-            recordLink resourcesName onClick value Nothing
+            recordLink resourcesName value Nothing
 
         ForeignKey { tableName, label } ->
-            recordLink tableName onClick value label
+            recordLink tableName value label
 
         NoConstraint ->
             valueToHtml value
@@ -162,22 +162,14 @@ maybeToHtml func maybe =
     Maybe.map func maybe |> Maybe.withDefault "" |> text
 
 
-recordLink :
-    String
-    -> (String -> String -> Html.Attribute msg)
-    -> Value
-    -> Maybe String
-    -> Html msg
-recordLink resourcesName onClick value mtext =
+recordLink : String -> Value -> Maybe String -> Html msg
+recordLink resourcesName value mtext =
     let
         id =
-            Value.toString value |> Maybe.withDefault ""
+            Maybe.withDefault "" (Value.toString value)
     in
     a
-        [ href <| Url.absolute [ resourcesName, id ] []
-        , target "_self"
-        , onClick resourcesName id
-        ]
+        [ href (Url.absolute [ resourcesName, id ] []) ]
         [ Maybe.map text mtext |> Maybe.withDefault (valueToHtml value) ]
 
 

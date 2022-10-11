@@ -318,7 +318,7 @@ tableRow resourcesName ( name, field ) =
     tr
         []
         [ th [] [ text (String.humanize name) ]
-        , td [] [ Field.toHtml (\_ _ -> class "") resourcesName field ]
+        , td [] [ Field.toHtml resourcesName field ]
         ]
 
 
