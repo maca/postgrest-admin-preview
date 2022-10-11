@@ -247,7 +247,7 @@ fetch pageListing =
     Client.requestMany
         { client = pageListing.client
         , method = "GET"
-        , headers = [ Http.header "Prefer" "count=planned" ]
+        , headers = [ Http.header "Prefer" "count=exact" ]
         , path =
             listingPath { limit = True, selectAll = False, nest = False }
                 pageListing
@@ -264,20 +264,32 @@ update msg listing =
             fetchListing
                 { listing | client = client }
 
-        Fetched (Ok { records }) ->
+        Fetched (Ok { records, total }) ->
+            let
+                recordCount =
+                    List.length records
+            in
             ( { listing
                 | page = listing.page + 1
                 , pages =
                     case listing.pages of
-                        Blank :: ps ->
-                            if List.length records < perPage then
-                                Blank :: Page records :: ps
+                        Blank :: pages ->
+                            if recordCount < perPage then
+                                Blank :: Page records :: pages
 
                             else
-                                Page records :: ps
+                                Page records :: pages
 
-                        _ ->
-                            Page records :: listing.pages
+                        pages ->
+                            let
+                                loadedRecords =
+                                    (List.length pages * perPage) + recordCount
+                            in
+                            if loadedRecords >= total then
+                                Blank :: Page records :: pages
+
+                            else
+                                Page records :: pages
               }
             , AppCmd.none
             )
@@ -331,8 +343,7 @@ update msg listing =
                         case listing.pages of
                             Blank :: _ ->
                                 ( { listing
-                                    | scrollPosition =
-                                        viewport.viewport.y
+                                    | scrollPosition = viewport.viewport.y
                                   }
                                 , AppCmd.none
                                 )
