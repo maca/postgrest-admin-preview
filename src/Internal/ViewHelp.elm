@@ -26,8 +26,13 @@ breadcrumbsHelp tableName acc segments =
             breadcrumbsHelp tableName
                 (span [ class "divisor" ] [ text " / " ]
                     :: a
-                        [ classList [ ( "current-segment", tableName == segment ) ]
-                        , href (Url.absolute (List.map Tuple.first (List.reverse segments)) [])
+                        [ classList
+                            [ ( "current-segment", tableName == segment ) ]
+                        , href
+                            (Url.absolute
+                                (List.map Tuple.first (List.reverse segments))
+                                []
+                            )
                         ]
                         [ text (String.toTitleCase (String.humanize segment))
                         , case segmentText of

@@ -180,7 +180,7 @@ init decoder flags url key =
                     makeModel config
 
                 ( route, cmd ) =
-                    parseRoute url model
+                    processRoute url model
             in
             ( { model | route = route }, cmd )
 
@@ -351,18 +351,7 @@ update msg model =
             case urlRequest of
                 Browser.Internal url ->
                     ( model
-                    , Nav.pushUrl model.key
-                        (Url.toString
-                            { url
-                                | path =
-                                    [ model.config.mountPoint
-                                        |> Maybe.map (\p -> "/" ++ p)
-                                    , Just url.path
-                                    ]
-                                        |> List.filterMap identity
-                                        |> String.join ""
-                            }
-                        )
+                    , Nav.pushUrl model.key (Url.toString url)
                     )
 
                 Browser.External href ->
@@ -371,7 +360,7 @@ update msg model =
         UrlChanged url ->
             let
                 ( route, cmd ) =
-                    parseRoute url model
+                    processRoute url model
             in
             ( { model | route = route, attemptedPath = urlToPath url }
             , cmd
@@ -565,6 +554,29 @@ subscriptions { mountedApp, route, config } =
 
 
 -- ROUTES
+
+
+processRoute : Url -> Model m msg -> ( Route m msg, Cmd (Msg m msg) )
+processRoute url model =
+    case model.config.mountPoint of
+        Just mountPoint ->
+            if String.startsWith ("/" ++ mountPoint) url.path then
+                parseRoute url model
+
+            else
+                ( RouteNotFound
+                , Nav.replaceUrl model.key
+                    (Url.toString
+                        { url
+                            | path =
+                                [ "/" ++ mountPoint, url.path ]
+                                    |> String.join ""
+                        }
+                    )
+                )
+
+        Nothing ->
+            parseRoute url model
 
 
 parseRoute : Url -> Model m msg -> ( Route m msg, Cmd (Msg m msg) )
