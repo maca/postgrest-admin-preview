@@ -139,8 +139,9 @@ applicationParams decoder =
             (decoder
                 |> Flag.string "host" Config.hostDecoder
                 |> Flag.string "mountPoint" Config.mountPointDecoder
-                |> Flag.stringDict "formFields" Config.formFieldsDecoder
+                |> Flag.stringListDict "formFields" Config.formFieldsDecoder
                 |> Flag.stringList "tables" Config.tablesDecoder
+                |> Flag.stringDict "tableAliases" Config.tableAliasesDecoder
             )
     , update = update
     , view = view
@@ -243,7 +244,7 @@ update msg model =
                             else
                                 ( model.route
                                 , Cmd.map ClientChanged
-                                    (Client.fetchSchema model.config.tables
+                                    (Client.fetchSchema model.config
                                         client
                                     )
                                 )
@@ -605,7 +606,7 @@ parseRoute url model =
     else
         ( RouteLoadingSchema routeTuple
         , Cmd.map ClientChanged
-            (Client.fetchSchema model.config.tables model.client)
+            (Client.fetchSchema model.config model.client)
         )
 
 

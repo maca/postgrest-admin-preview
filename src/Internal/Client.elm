@@ -159,8 +159,11 @@ update msg client =
                     ( client, Cmd.none )
 
 
-fetchSchema : List String -> Client -> Cmd Msg
-fetchSchema tableNames client =
+fetchSchema :
+    { a | tables : List String, tableAliases : Dict String String }
+    -> Client
+    -> Cmd Msg
+fetchSchema config client =
     task
         { client = client
         , method = "GET"
@@ -169,7 +172,7 @@ fetchSchema tableNames client =
         , body = Http.emptyBody
         , resolver =
             Http.stringResolver
-                (handleJsonResponse (Schema.decoder tableNames))
+                (handleJsonResponse (Schema.decoder config))
         , timeout = Nothing
         }
         |> Task.attempt SchemaFetched

@@ -17,6 +17,8 @@ module Internal.Config exposing
     , onLogin
     , onLogout
     , routes
+    , tableAliases
+    , tableAliasesDecoder
     , tables
     , tablesDecoder
     )
@@ -60,6 +62,7 @@ type alias Config m msg =
     , onAuthFailed : String -> Cmd msg
     , onExternalLogin : (Login -> Login) -> Sub Login
     , onLogout : () -> Cmd msg
+    , tableAliases : Dict String String
     }
 
 
@@ -172,6 +175,22 @@ formFieldsDecoder fields conf =
     Decode.succeed { conf | formFields = Dict.union fields conf.formFields }
 
 
+tableAliases :
+    Dict String String
+    -> Decoder (Config m msg)
+    -> Decoder (Config m msg)
+tableAliases aliases =
+    Decode.andThen (\conf -> Decode.succeed { conf | tableAliases = aliases })
+
+
+tableAliasesDecoder :
+    Dict String String
+    -> Config m msg
+    -> Decoder (Config m msg)
+tableAliasesDecoder aliases conf =
+    Decode.succeed { conf | tableAliases = aliases }
+
+
 detailActions :
     String
     -> DetailActions
@@ -230,4 +249,5 @@ default =
     , onAuthFailed = always Cmd.none
     , onExternalLogin = always Sub.none
     , onLogout = always Cmd.none
+    , tableAliases = Dict.empty
     }

@@ -84,18 +84,19 @@ columnNames { columns } =
     Set.fromList (Dict.keys columns)
 
 
-decoder : List String -> Decoder Schema
-decoder tableNames =
+decoder :
+    { a | tables : List String, tableAliases : Dict String String }
+    -> Decoder Schema
+decoder { tables, tableAliases } =
     columnNamesDecoder
         |> Decode.andThen
-            (case tableNames of
+            (case tables of
                 [] ->
-                    schemaDecoder
+                    schemaDecoder tableAliases
 
                 _ ->
-                    Dict.filter
-                        (\k _ -> List.member k tableNames)
-                        >> schemaDecoder
+                    Dict.filter (\k _ -> List.member k tables)
+                        >> schemaDecoder tableAliases
             )
 
 
@@ -125,21 +126,28 @@ columnNamesDecoder =
         )
 
 
-schemaDecoder : Dict String (List String) -> Decoder Schema
-schemaDecoder colNames =
+schemaDecoder :
+    Dict String String
+    -> Dict String (List String)
+    -> Decoder Schema
+schemaDecoder tableAliases colNames =
     field "definitions" (Decode.keyValuePairs Decode.value)
-        |> Decode.andThen (decodeResults (tableDecoder colNames))
+        |> Decode.andThen (decodeResults (tableDecoder tableAliases colNames))
 
 
-tableDecoder : Dict String (List String) -> String -> Decoder Table
-tableDecoder colNames tableName =
+tableDecoder :
+    Dict String String
+    -> Dict String (List String)
+    -> String
+    -> Decoder Table
+tableDecoder tableAliases colNames tableName =
     requiredColumnsDecoder
         |> Decode.andThen
             (\requiredColumns ->
                 field "properties" (Decode.keyValuePairs Decode.value)
                     |> Decode.andThen
                         (decodeResults
-                            (columnDecoder colNames requiredColumns)
+                            (columnDecoder tableAliases colNames requiredColumns)
                         )
             )
         |> Decode.map (\columns -> { columns = columns, name = tableName })
@@ -152,11 +160,12 @@ requiredColumnsDecoder =
 
 
 columnDecoder :
-    Dict String (List String)
+    Dict String String
+    -> Dict String (List String)
     -> List String
     -> String
     -> Decoder Column
-columnDecoder colNames requiredColumns columnName =
+columnDecoder tableAliases colNames requiredColumns columnName =
     Decode.map4 ColumnDefinition
         (Decode.map (Maybe.withDefault "string")
             (maybe (field "type" string))
@@ -169,7 +178,9 @@ columnDecoder colNames requiredColumns columnName =
                 let
                     makeColumn valueDecoder val =
                         { constraint =
-                            Maybe.map (columnConstraint colNames) description
+                            description
+                                |> Maybe.map
+                                    (columnConstraint tableAliases colNames)
                                 |> Maybe.withDefault NoConstraint
                         , required = List.member columnName requiredColumns
                         , decoder = valueDecoder
@@ -253,15 +264,24 @@ decodeResults valueDecoder values =
                 |> Decode.succeed
 
 
-columnConstraint : Dict String (List String) -> String -> Constraint
-columnConstraint colNames description =
+columnConstraint :
+    Dict String String
+    -> Dict String (List String)
+    -> String
+    -> Constraint
+columnConstraint tableAliases colNames description =
     case extractForeignKey description of
         [ tableName, primaryKeyName ] ->
+            let
+                table =
+                    Dict.get tableName tableAliases
+                        |> Maybe.withDefault tableName
+            in
             ForeignKey
-                { tableName = tableName
+                { tableName = table
                 , primaryKeyName = primaryKeyName
                 , labelColumnName =
-                    Dict.get tableName colNames
+                    Dict.get table colNames
                         |> Maybe.andThen findLabelColum
                 , label = Nothing
                 }

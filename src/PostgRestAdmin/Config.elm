@@ -6,6 +6,7 @@ module PostgRestAdmin.Config exposing
     , formFields
     , detailActions
     , tables
+    , tableAliases
     , formAuth
     , jwt
     , onLogin
@@ -31,7 +32,12 @@ module PostgRestAdmin.Config exposing
 @docs mountPoint
 @docs formFields
 @docs detailActions
+
+
+# Tables
+
 @docs tables
+@docs tableAliases
 
 
 # Auth
@@ -51,6 +57,7 @@ module PostgRestAdmin.Config exposing
 -}
 
 import Browser.Navigation as Nav
+import Dict exposing (Dict)
 import Html exposing (Html)
 import Internal.Cmd as AppCmd
 import Internal.Config as Config
@@ -348,6 +355,31 @@ Program flags take precedence.
 tables : List String -> Config m msg -> Config m msg
 tables =
     Config.tables
+
+
+{-| Rename a table referenced in a foreign key. PostgREST OpenApi genreated docs
+confuses tables with views when describing the foreign key for a resource,
+because of this some links might be incorrectly generated.
+
+      main : PostgRestAdmin.Program Never Never
+      main =
+          Config.init
+              |> Config.tableAliases
+                   (Dict.fromList [("published_posts", "posts")])
+              |> PostgRestAdmin.application
+
+Alternatively the host can be specified using flags, configuring using
+`tableAliases`.
+Program flags take precedence.
+
+      Elm.Main.init({
+          tableAliases: { "published_posts" : "posts "}
+      })
+
+-}
+tableAliases : Dict String String -> Config m msg -> Config m msg
+tableAliases =
+    Config.tableAliases
 
 
 {-| Mount an application on a give path using
