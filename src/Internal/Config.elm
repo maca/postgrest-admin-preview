@@ -3,6 +3,7 @@ module Internal.Config exposing
     , DetailActions
     , default
     , detailActions
+    , flagsDecoder
     , formAuth
     , formFields
     , formFieldsDecoder
@@ -30,6 +31,7 @@ import Internal.Flag as Flag
 import Internal.FormAuth as FormAuth exposing (FormAuth)
 import Internal.Http exposing (removeLeadingOrTrailingSlash)
 import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode
 import PostgRestAdmin.Record exposing (Record)
 import String.Extra as String
 import Url exposing (Protocol(..), Url)
@@ -46,14 +48,14 @@ type alias Login =
     }
 
 
-type alias Config m msg =
+type alias Config flags model msg =
     { host : Url
     , mountPoint : Maybe String
     , authScheme : AuthScheme
     , formFields : Dict String (List String)
     , application :
         Maybe
-            ( Application.Params m msg
+            ( Application.Params flags model msg
             , Parser (msg -> msg) msg
             )
     , detailActions : Dict String DetailActions
@@ -63,20 +65,21 @@ type alias Config m msg =
     , onExternalLogin : (Login -> Login) -> Sub Login
     , onLogout : () -> Cmd msg
     , tableAliases : Dict String String
+    , flagsDecoder : Decoder flags
     }
 
 
-init : Decoder (Config m msg)
+init : Decoder (Config f m msg)
 init =
     Decode.succeed default
 
 
-host : String -> Decoder (Config m msg) -> Decoder (Config m msg)
+host : String -> Decoder (Config f m msg) -> Decoder (Config f m msg)
 host urlStr =
     Decode.andThen (hostDecoder urlStr)
 
 
-hostDecoder : String -> Config m msg -> Decoder (Config m msg)
+hostDecoder : String -> Config f m msg -> Decoder (Config f m msg)
 hostDecoder urlStr conf =
     Url.fromString urlStr
         |> Maybe.map (\u -> Decode.succeed { conf | host = u })
@@ -84,12 +87,12 @@ hostDecoder urlStr conf =
             (Decode.fail "`Config.host` was given an invalid URL")
 
 
-mountPoint : String -> Decoder (Config m msg) -> Decoder (Config m msg)
+mountPoint : String -> Decoder (Config f m msg) -> Decoder (Config f m msg)
 mountPoint path =
     Decode.andThen (mountPointDecoder path)
 
 
-mountPointDecoder : String -> Config m msg -> Decoder (Config m msg)
+mountPointDecoder : String -> Config f m msg -> Decoder (Config f m msg)
 mountPointDecoder path conf =
     Decode.succeed
         { conf
@@ -99,8 +102,8 @@ mountPointDecoder path conf =
 
 formAuth :
     Decoder FormAuth
-    -> Decoder (Config m msg)
-    -> Decoder (Config m msg)
+    -> Decoder (Config f m msg)
+    -> Decoder (Config f m msg)
 formAuth authDecoder =
     Decode.map2 (\auth conf -> { conf | authScheme = AuthScheme.basic auth })
         (authDecoder
@@ -108,7 +111,7 @@ formAuth authDecoder =
         )
 
 
-jwt : String -> Decoder (Config m msg) -> Decoder (Config m msg)
+jwt : String -> Decoder (Config f m msg) -> Decoder (Config f m msg)
 jwt tokenStr =
     Decode.andThen
         (\conf ->
@@ -118,8 +121,8 @@ jwt tokenStr =
 
 onLogin :
     (String -> Cmd msg)
-    -> Decoder (Config m msg)
-    -> Decoder (Config m msg)
+    -> Decoder (Config f m msg)
+    -> Decoder (Config f m msg)
 onLogin f =
     Decode.andThen
         (\conf -> Decode.succeed { conf | onLogin = f })
@@ -127,8 +130,8 @@ onLogin f =
 
 onLogout :
     (() -> Cmd msg)
-    -> Decoder (Config m msg)
-    -> Decoder (Config m msg)
+    -> Decoder (Config f m msg)
+    -> Decoder (Config f m msg)
 onLogout f =
     Decode.andThen
         (\conf -> Decode.succeed { conf | onLogout = f })
@@ -136,8 +139,8 @@ onLogout f =
 
 onAuthFailed :
     (String -> Cmd msg)
-    -> Decoder (Config m msg)
-    -> Decoder (Config m msg)
+    -> Decoder (Config f m msg)
+    -> Decoder (Config f m msg)
 onAuthFailed f =
     Decode.andThen
         (\conf -> Decode.succeed { conf | onAuthFailed = f })
@@ -145,8 +148,8 @@ onAuthFailed f =
 
 onExternalLogin :
     ((Login -> Login) -> Sub Login)
-    -> Decoder (Config m msg)
-    -> Decoder (Config m msg)
+    -> Decoder (Config f m msg)
+    -> Decoder (Config f m msg)
 onExternalLogin sub =
     Decode.andThen
         (\conf -> Decode.succeed { conf | onExternalLogin = sub })
@@ -155,8 +158,8 @@ onExternalLogin sub =
 formFields :
     String
     -> List String
-    -> Decoder (Config m msg)
-    -> Decoder (Config m msg)
+    -> Decoder (Config f m msg)
+    -> Decoder (Config f m msg)
 formFields tableName fields =
     Decode.andThen
         (\conf ->
@@ -169,24 +172,24 @@ formFields tableName fields =
 
 formFieldsDecoder :
     Dict String (List String)
-    -> Config m msg
-    -> Decoder (Config m msg)
+    -> Config f m msg
+    -> Decoder (Config f m msg)
 formFieldsDecoder fields conf =
     Decode.succeed { conf | formFields = Dict.union fields conf.formFields }
 
 
 tableAliases :
     Dict String String
-    -> Decoder (Config m msg)
-    -> Decoder (Config m msg)
+    -> Decoder (Config f m msg)
+    -> Decoder (Config f m msg)
 tableAliases aliases =
     Decode.andThen (\conf -> Decode.succeed { conf | tableAliases = aliases })
 
 
 tableAliasesDecoder :
     Dict String String
-    -> Config m msg
-    -> Decoder (Config m msg)
+    -> Config f m msg
+    -> Decoder (Config f m msg)
 tableAliasesDecoder aliases conf =
     Decode.succeed { conf | tableAliases = aliases }
 
@@ -194,8 +197,8 @@ tableAliasesDecoder aliases conf =
 detailActions :
     String
     -> DetailActions
-    -> Decoder (Config m msg)
-    -> Decoder (Config m msg)
+    -> Decoder (Config f m msg)
+    -> Decoder (Config f m msg)
 detailActions tableName actions =
     Decode.andThen
         (\conf ->
@@ -208,10 +211,10 @@ detailActions tableName actions =
 
 
 routes :
-    Application.Params m msg
+    Application.Params f m msg
     -> Parser (msg -> msg) msg
-    -> Decoder (Config m msg)
-    -> Decoder (Config m msg)
+    -> Decoder (Config f m msg)
+    -> Decoder (Config f m msg)
 routes program parser =
     Decode.andThen
         (\conf ->
@@ -219,17 +222,25 @@ routes program parser =
         )
 
 
-tables : List String -> Decoder (Config m msg) -> Decoder (Config m msg)
+flagsDecoder :
+    Decoder f
+    -> Decoder (Config f m msg)
+    -> Decoder (Config f m msg)
+flagsDecoder decoder =
+    Decode.andThen (\conf -> Decode.succeed { conf | flagsDecoder = decoder })
+
+
+tables : List String -> Decoder (Config f m msg) -> Decoder (Config f m msg)
 tables tableNames =
     Decode.andThen (tablesDecoder tableNames)
 
 
-tablesDecoder : List String -> Config m msg -> Decoder (Config m msg)
+tablesDecoder : List String -> Config f m msg -> Decoder (Config f m msg)
 tablesDecoder tableNames conf =
     Decode.succeed { conf | tables = tableNames }
 
 
-default : Config m msg
+default : Config f m msg
 default =
     { authScheme = AuthScheme.unset
     , host =
@@ -250,4 +261,5 @@ default =
     , onExternalLogin = always Sub.none
     , onLogout = always Cmd.none
     , tableAliases = Dict.empty
+    , flagsDecoder = Decode.fail "No flags decoder provided"
     }

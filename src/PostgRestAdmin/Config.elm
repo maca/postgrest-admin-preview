@@ -14,6 +14,7 @@ module PostgRestAdmin.Config exposing
     , onExternalLogin
     , onLogout
     , routes
+    , flagsDecoder
     )
 
 {-| Program configuration
@@ -53,6 +54,7 @@ module PostgRestAdmin.Config exposing
 # Application mounting
 
 @docs routes
+@docs flagsDecoder
 
 -}
 
@@ -72,26 +74,26 @@ import Url.Parser exposing (Parser)
 {-| [PostgRestAdmin.application](PostgRestAdmin#application) configuration
 params.
 -}
-type alias Config m msg =
-    Decoder (Config.Config m msg)
+type alias Config f m msg =
+    Decoder (Config.Config f m msg)
 
 
 {-| [PostgRestAdmin.application](PostgRestAdmin#application) decoder with
 defaults.
 
-    main : PostgRestAdmin.Program Never Never
+    main : PostgRestAdmin.Program Never Never Never
     main =
         PostgRestAdmin.application Config.init
 
 -}
-init : Config m msg
+init : Config f m msg
 init =
     Config.init
 
 
 {-| Specify the postgREST host.
 
-      main : PostgRestAdmin.Program Never Never
+      main : PostgRestAdmin.Program Never Never Never
       main =
           Config.init
               |> Config.host "http://localhost:3000"
@@ -105,7 +107,7 @@ Program flags take precedence.
       })
 
 -}
-host : String -> Config m msg -> Config m msg
+host : String -> Config f m msg -> Config f m msg
 host =
     Config.host
 
@@ -113,7 +115,7 @@ host =
 {-| Specify a path prefix for all routes, in case the app is not mounted in the
 root path.
 
-      main : PostgRestAdmin.Program Never Never
+      main : PostgRestAdmin.Program Never Never Never
       main =
           Config.init
               |> Config.mountPoint "/back-office"
@@ -127,7 +129,7 @@ Alternatively the host can be specified using flags, configuring using
       })
 
 -}
-mountPoint : String -> Config m msg -> Config m msg
+mountPoint : String -> Config f m msg -> Config f m msg
 mountPoint =
     Config.mountPoint
 
@@ -139,14 +141,14 @@ See [FormAuth](PostgRestAdmin.FormAuth) for configuration options.
 
       import PostgRestAdmin.Config.FormAuth as FormAuth
 
-      main : PostgRestAdmin.Program Never Never
+      main : PostgRestAdmin.Program Never Never Never
       main =
           Config.init
               |> Config.formAuth FormAuth.config
               |> PostgRestAdmin.application
 
 -}
-formAuth : FormAuth -> Config m msg -> Config m msg
+formAuth : FormAuth -> Config f m msg -> Config f m msg
 formAuth =
     Config.formAuth
 
@@ -154,7 +156,7 @@ formAuth =
 {-| Set a JWT to authenticate postgREST requests. Even when using
 [formAuth](#formAuth) it's possible to set an initial JWT.
 
-      main : PostgRestAdmin.Program Never Never
+      main : PostgRestAdmin.Program Never Never Never
       main =
           Config.init
               |> Config.jwt "8abf3a...9ac36d"
@@ -168,7 +170,7 @@ Program flags take precedence.
       })
 
 -}
-jwt : String -> Config m msg -> Config m msg
+jwt : String -> Config f m msg -> Config f m msg
 jwt =
     Config.jwt
 
@@ -178,7 +180,7 @@ Tipically used to persist the JWT to session storage.
 
           port loginSuccess : String -> Cmd msg
 
-          main : PostgRestAdmin.Program Never Never
+          main : PostgRestAdmin.Program Never Never Never
           main =
               Config.init
                   |> Config.onLogin loginSuccess
@@ -195,7 +197,7 @@ Tipically used to persist the JWT to session storage.
         });
 
 -}
-onLogin : (String -> Cmd msg) -> Config m msg -> Config m msg
+onLogin : (String -> Cmd msg) -> Config f m msg -> Config f m msg
 onLogin =
     Config.onLogin
 
@@ -210,7 +212,7 @@ request. You can use to perform external authentication.
               -> Sub msg
 
 
-          main : PostgRestAdmin.Program Never Never
+          main : PostgRestAdmin.Program Never Never Never
           main =
               Config.init
                   |> Config.withAuthFailed authFailed
@@ -232,7 +234,7 @@ request. You can use to perform external authentication.
         });
 
 -}
-onAuthFailed : (String -> Cmd msg) -> Config m msg -> Config m msg
+onAuthFailed : (String -> Cmd msg) -> Config f m msg -> Config f m msg
 onAuthFailed =
     Config.onAuthFailed
 
@@ -249,8 +251,8 @@ onExternalLogin :
      )
      -> Sub { path : String, accessToken : String }
     )
-    -> Config m msg
-    -> Config m msg
+    -> Config f m msg
+    -> Config f m msg
 onExternalLogin =
     Config.onExternalLogin
 
@@ -260,7 +262,7 @@ request. You can use to perform external authentication.
 
           port logout : () -> Cmd msg
 
-          main : PostgRestAdmin.Program Never Never
+          main : PostgRestAdmin.Program Never Never Never
           main =
               Config.init
                   |> Config.onLogout logout
@@ -275,7 +277,7 @@ request. You can use to perform external authentication.
         });
 
 -}
-onLogout : (() -> Cmd msg) -> Config m msg -> Config m msg
+onLogout : (() -> Cmd msg) -> Config f m msg -> Config f m msg
 onLogout =
     Config.onLogout
 
@@ -284,7 +286,7 @@ onLogout =
 overriding the table schema. By default a primary key field is not present in
 the forms.
 
-      main : PostgRestAdmin.Program Never Never
+      main : PostgRestAdmin.Program Never Never Never
       main =
           Config.init
               |> Config.formFields "posts" ["id", "title", "content"]
@@ -298,7 +300,7 @@ Alternatively this parameter can be configured using flags, configuring using
       })
 
 -}
-formFields : String -> List String -> Config m msg -> Config m msg
+formFields : String -> List String -> Config f m msg -> Config f m msg
 formFields =
     Config.formFields
 
@@ -313,7 +315,7 @@ the resource and returns a url string.
 
       import Url.Builder as Url
 
-      main : PostgRestAdmin.Program Never Never
+      main : PostgRestAdmin.Program Never Never Never
       main =
           Config.init
               |> Config.detailActions "posts"
@@ -328,8 +330,8 @@ the resource and returns a url string.
 detailActions :
     String
     -> List ( String, Record -> String -> String )
-    -> Config m msg
-    -> Config m msg
+    -> Config f m msg
+    -> Config f m msg
 detailActions =
     Config.detailActions
 
@@ -337,7 +339,7 @@ detailActions =
 {-| Pass a list of table names to restrict the editable resources, also sets the
 order of the left resources menu.
 
-      main : PostgRestAdmin.Program Never Never
+      main : PostgRestAdmin.Program Never Never Never
       main =
           Config.init
               |> Config.tables ["posts", "comments"]
@@ -352,7 +354,7 @@ Program flags take precedence.
       })
 
 -}
-tables : List String -> Config m msg -> Config m msg
+tables : List String -> Config f m msg -> Config f m msg
 tables =
     Config.tables
 
@@ -361,7 +363,7 @@ tables =
 confuses tables with views when describing the foreign key for a resource,
 because of this some links might be incorrectly generated.
 
-      main : PostgRestAdmin.Program Never Never
+      main : PostgRestAdmin.Program Never Never Never
       main =
           Config.init
               |> Config.tableAliases
@@ -377,7 +379,7 @@ Program flags take precedence.
       })
 
 -}
-tableAliases : Dict String String -> Config m msg -> Config m msg
+tableAliases : Dict String String -> Config f m msg -> Config f m msg
 tableAliases =
     Config.tableAliases
 
@@ -393,7 +395,7 @@ with the addition of `onLogin` param for which a msg should be provided to be
 sent on successful login.
 
 Note that the type signature changes from
-`PostgRestAdmin.Program Nothing Nothing`.
+`PostgRestAdmin.Program Never Nothing Nothing`.
 `Model` and `Msg` are defined by your application.
 
 The url parser should map to a Msg to be used to `update` your application when
@@ -402,7 +404,7 @@ use
 [Url.Parser.oneOf](https://package.elm-lang.org/packages/elm/url/latest/Url.Parser#oneOf)
 to parse many routes.
 
-    main : PostgRestAdmin.Program Model Msg
+    main : PostgRestAdmin.Program Never Model Msg
     main =
         Config.init
             |> Config.routes
@@ -421,14 +423,41 @@ use to perform requests.
 
 -}
 routes :
-    { init : Client -> Nav.Key -> ( model, AppCmd.Cmd msg )
+    { init : flags -> Client -> Nav.Key -> ( model, AppCmd.Cmd msg )
     , view : model -> Html msg
     , update : msg -> model -> ( model, AppCmd.Cmd msg )
     , subscriptions : model -> Sub msg
     , onLogin : Client -> msg
     }
     -> Parser (msg -> msg) msg
-    -> Config model msg
-    -> Config model msg
+    -> Config flags model msg
+    -> Config flags model msg
 routes =
     Config.routes
+
+
+{-| Decode flags to be passed to the `init` function for an application mounted
+using [routes](#routes).
+
+    main : PostgRestAdmin.Program String Model Msg
+    main =
+        Config.init
+            |> Config.routes
+                { view = view
+                , update = update
+                , init = init
+                , onLogin = LoggedIn
+                }
+                (Parser.map MyPostLoadedMsg
+                    (s "posts" </> Parser.string </> s "comments")
+                )
+            |> Config.flagsDecoder (Decode.field "hostUrl" Decode.string)
+            |> PostgRestAdmin.application
+
+The `application` is initialized with a [Client](PostgRestAdmin-Client) you can
+use to perform requests.
+
+-}
+flagsDecoder : Decoder flags -> Config flags model msg -> Config flags model msg
+flagsDecoder =
+    Config.flagsDecoder

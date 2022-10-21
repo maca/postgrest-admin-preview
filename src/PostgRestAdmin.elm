@@ -47,42 +47,43 @@ import Url.Parser as Parser exposing ((</>), Parser, s)
 {-| An alias to elm's Platform.Program providing the type signature for a
 PostgRestAdmin program.
 -}
-type alias Program model msg =
-    Platform.Program Decode.Value (Model model msg) (Msg model msg)
+type alias Program flags model msg =
+    Platform.Program Decode.Value (Model flags model msg) (Msg flags model msg)
 
 
-type alias Params m msg =
-    { init : Value -> Url.Url -> Nav.Key -> ( Model m msg, Cmd (Msg m msg) )
-    , view : Model m msg -> Browser.Document (Msg m msg)
-    , update : Msg m msg -> Model m msg -> ( Model m msg, Cmd (Msg m msg) )
-    , subscriptions : Model m msg -> Sub (Msg m msg)
-    , onUrlRequest : Browser.UrlRequest -> Msg m msg
-    , onUrlChange : Url -> Msg m msg
+type alias Params f m msg =
+    { init : Value -> Url.Url -> Nav.Key -> ( Model f m msg, Cmd (Msg f m msg) )
+    , view : Model f m msg -> Browser.Document (Msg f m msg)
+    , update : Msg f m msg -> Model f m msg -> ( Model f m msg, Cmd (Msg f m msg) )
+    , subscriptions : Model f m msg -> Sub (Msg f m msg)
+    , onUrlRequest : Browser.UrlRequest -> Msg f m msg
+    , onUrlChange : Url -> Msg f m msg
     }
 
 
-type alias Model m msg =
-    { route : Route m msg
+type alias Model f m msg =
+    { route : Route f m msg
     , key : Nav.Key
     , notification : Notification
     , error : Maybe Error
     , client : Client
-    , onLogin : Maybe String -> Cmd (Msg m msg)
-    , mountedApp : Application.Application m msg
-    , config : Config m msg
+    , onLogin : Maybe String -> Cmd (Msg f m msg)
+    , mountedApp : Application.Application f m msg
+    , mountedAppFlags : Result Decode.Error f
+    , config : Config f m msg
     , attemptedPath : String
     }
 
 
-type alias InitParams m msg =
+type alias InitParams f m msg =
     { client : Client
     , key : Nav.Key
-    , config : Config m msg
+    , config : Config f m msg
     }
 
 
-type Msg m msg
-    = ApplicationInit ( Application.Params m msg, msg )
+type Msg f m msg
+    = ApplicationInit ( Application.Params f m msg, msg )
     | ClientChanged Client.Msg
     | PageListingChanged PageListing.Msg
     | PageDetailChanged PageDetail.Msg
@@ -90,7 +91,7 @@ type Msg m msg
     | PageApplicationChanged msg
     | RequestPerformed
         (Result Error Response
-         -> Msg m msg
+         -> Msg f m msg
         )
         (Result Error Response)
     | NotificationChanged Notification.Msg
@@ -101,9 +102,12 @@ type Msg m msg
     | NoOp
 
 
-type Route m msg
+type Route f m msg
     = RouteRoot
-    | RouteLoadingSchema (InitParams m msg -> ( Route m msg, Cmd (Msg m msg) ))
+    | RouteLoadingSchema
+        (InitParams f m msg
+         -> ( Route f m msg, Cmd (Msg f m msg) )
+        )
     | RouteListing PageListing
     | RouteDetail PageDetail
     | RouteForm PageForm
@@ -121,7 +125,7 @@ options.
           PostgRestAdmin.application Config.init
 
 -}
-application : Decoder (Config m msg) -> Program m msg
+application : Decoder (Config f m msg) -> Program f m msg
 application decoder =
     Browser.application (applicationParams decoder)
 
@@ -132,7 +136,7 @@ breadcrumbs =
     ViewHelp.breadcrumbs
 
 
-applicationParams : Decoder (Config m msg) -> Params m msg
+applicationParams : Decoder (Config f m msg) -> Params f m msg
 applicationParams decoder =
     { init =
         init
@@ -152,11 +156,11 @@ applicationParams decoder =
 
 
 init :
-    Decoder (Config m msg)
+    Decoder (Config f m msg)
     -> Value
     -> Url.Url
     -> Nav.Key
-    -> ( Model m msg, Cmd (Msg m msg) )
+    -> ( Model f m msg, Cmd (Msg f m msg) )
 init decoder flags url key =
     let
         makeModel config =
@@ -170,6 +174,7 @@ init decoder flags url key =
                     >> config.onLogin
                     >> Cmd.map (always NoOp)
             , mountedApp = Application.none
+            , mountedAppFlags = Decode.decodeValue config.flagsDecoder flags
             , config = config
             , attemptedPath = urlToPath url
             }
@@ -199,19 +204,26 @@ init decoder flags url key =
 -- UPDATE
 
 
-update : Msg m msg -> Model m msg -> ( Model m msg, Cmd (Msg m msg) )
+update : Msg f m msg -> Model f m msg -> ( Model f m msg, Cmd (Msg f m msg) )
 update msg model =
     case msg of
         ApplicationInit ( params, childMsg ) ->
             let
                 ( app, initCmd ) =
                     case model.mountedApp of
-                        Application _ _ ->
-                            ( model.mountedApp, AppCmd.none )
-
                         None ->
-                            params.init model.client model.key
-                                |> Tuple.mapFirst (Application params)
+                            case model.mountedAppFlags of
+                                Ok flags ->
+                                    params.init flags model.client model.key
+                                        |> Tuple.mapFirst (Application params)
+
+                                Err err ->
+                                    ( Application.DecodeFailed err
+                                    , AppCmd.none
+                                    )
+
+                        _ ->
+                            ( model.mountedApp, AppCmd.none )
 
                 ( app_, cmd ) =
                     Application.update childMsg app
@@ -385,7 +397,7 @@ update msg model =
 --
 
 
-loginCmd : Model m msg -> Client -> Cmd (Msg m msg)
+loginCmd : Model f m msg -> Client -> Cmd (Msg f m msg)
 loginCmd model client =
     let
         appLoginCmd =
@@ -396,7 +408,7 @@ loginCmd model client =
                         Task.succeed (params.onLogin client)
                             |> Task.perform PageApplicationChanged
 
-                    None ->
+                    _ ->
                         Cmd.none
                 ]
     in
@@ -430,7 +442,7 @@ loginCmd model client =
 -- VIEW
 
 
-view : Model m msg -> Browser.Document (Msg m msg)
+view : Model f m msg -> Browser.Document (Msg f m msg)
 view model =
     { title = "Admin"
     , body =
@@ -461,7 +473,7 @@ view model =
     }
 
 
-sideMenu : Model m msg -> Html (Msg m msg)
+sideMenu : Model f m msg -> Html (Msg f m msg)
 sideMenu model =
     div
         [ class "side-menu" ]
@@ -484,7 +496,7 @@ sideMenu model =
         ]
 
 
-menuItem : String -> Html (Msg m msg)
+menuItem : String -> Html (Msg f m msg)
 menuItem name =
     li
         []
@@ -494,7 +506,7 @@ menuItem name =
         ]
 
 
-mainContent : Model m msg -> Html (Msg m msg)
+mainContent : Model f m msg -> Html (Msg f m msg)
 mainContent model =
     case model.route of
         RouteRoot ->
@@ -517,6 +529,9 @@ mainContent model =
                 Application program childModel ->
                     Html.map PageApplicationChanged (program.view childModel)
 
+                DecodeFailed err ->
+                    pre [ class "error" ] [ text (Decode.errorToString err) ]
+
                 None ->
                     notFound
 
@@ -524,12 +539,12 @@ mainContent model =
             notFound
 
 
-notFound : Html (Msg m msg)
+notFound : Html (Msg f m msg)
 notFound =
     text "Not found"
 
 
-loading : Html (Msg m msg)
+loading : Html (Msg f m msg)
 loading =
     text ""
 
@@ -538,7 +553,7 @@ loading =
 -- SUBSCRIPTIONS
 
 
-subscriptions : Model m msg -> Sub (Msg m msg)
+subscriptions : Model f m msg -> Sub (Msg f m msg)
 subscriptions { mountedApp, route, config } =
     Sub.batch
         [ Sub.map PageApplicationChanged (Application.subscriptions mountedApp)
@@ -557,7 +572,7 @@ subscriptions { mountedApp, route, config } =
 -- ROUTES
 
 
-processRoute : Url -> Model m msg -> ( Route m msg, Cmd (Msg m msg) )
+processRoute : Url -> Model f m msg -> ( Route f m msg, Cmd (Msg f m msg) )
 processRoute url model =
     case model.config.mountPoint of
         Just mountPoint ->
@@ -580,7 +595,7 @@ processRoute url model =
             parseRoute url model
 
 
-parseRoute : Url -> Model m msg -> ( Route m msg, Cmd (Msg m msg) )
+parseRoute : Url -> Model f m msg -> ( Route f m msg, Cmd (Msg f m msg) )
 parseRoute url model =
     let
         routeTuple params =
@@ -612,8 +627,8 @@ parseRoute url model =
 
 routeParser :
     Url
-    -> InitParams m msg
-    -> Parser (( Route m msg, Cmd (Msg m msg) ) -> a) a
+    -> InitParams f m msg
+    -> Parser (( Route f m msg, Cmd (Msg f m msg) ) -> a) a
 routeParser url params =
     let
         appRoutes =
@@ -676,11 +691,11 @@ routeParser url params =
 
 
 initListing :
-    InitParams m msg
+    InitParams f m msg
     -> Url
     -> Maybe { tableName : String, id : String }
     -> String
-    -> ( Route m msg, Cmd (Msg m msg) )
+    -> ( Route f m msg, Cmd (Msg f m msg) )
 initListing params url parent tableName =
     case Client.getTable tableName params.client of
         Just table ->
@@ -700,29 +715,29 @@ initListing params url parent tableName =
 
 
 initNewForm :
-    InitParams m msg
+    InitParams f m msg
     -> Maybe { tableName : String, id : String }
     -> String
-    -> ( Route m msg, Cmd (Msg m msg) )
+    -> ( Route f m msg, Cmd (Msg f m msg) )
 initNewForm params parent tableName =
     initFormHelp params parent tableName Nothing
 
 
 initForm :
-    InitParams m msg
+    InitParams f m msg
     -> String
     -> String
-    -> ( Route m msg, Cmd (Msg m msg) )
+    -> ( Route f m msg, Cmd (Msg f m msg) )
 initForm params tableName id =
     initFormHelp params Nothing tableName (Just id)
 
 
 initFormHelp :
-    InitParams m msg
+    InitParams f m msg
     -> Maybe { tableName : String, id : String }
     -> String
     -> Maybe String
-    -> ( Route m msg, Cmd (Msg m msg) )
+    -> ( Route f m msg, Cmd (Msg f m msg) )
 initFormHelp { client, key, config } parent tableName id =
     case Client.getTable tableName client of
         Just table ->
@@ -746,10 +761,10 @@ initFormHelp { client, key, config } parent tableName id =
 
 
 initDetail :
-    InitParams m msg
+    InitParams f m msg
     -> String
     -> String
-    -> ( Route m msg, Cmd (Msg m msg) )
+    -> ( Route f m msg, Cmd (Msg f m msg) )
 initDetail { client, key, config } tableName id =
     case Client.getTable tableName client of
         Just table ->
@@ -776,7 +791,7 @@ initDetail { client, key, config } tableName id =
 -- UTILS
 
 
-resources : Model m msg -> List String
+resources : Model f m msg -> List String
 resources { client, config } =
     if List.isEmpty config.tables then
         Dict.keys (Client.toSchema client) |> List.sort
@@ -785,7 +800,7 @@ resources { client, config } =
         config.tables
 
 
-mapAppCmd : (a -> Msg m b) -> AppCmd.Cmd a -> Cmd (Msg m b)
+mapAppCmd : (a -> Msg f m b) -> AppCmd.Cmd a -> Cmd (Msg f m b)
 mapAppCmd tagger appCmd =
     case appCmd of
         AppCmd.ChildCmd cmd ->
