@@ -15,6 +15,8 @@ or to an external authentication provided.
 This module provides configuration functions for defining what is the
 authentication form POST url, how the credentials are to be encoded and how the
 JWT is to be decoded.
+`FormAuth` configurations are to be used with
+[Config.formAuth](PostgRestAdmin.Config#formAuth).
 
 See
 [PostgREST documentation](https://postgrest.org/en/stable/auth.html?highlight=authentication#)
@@ -61,15 +63,14 @@ config =
 {-| Set authentication request login url. Credentials are to be exchanged for a
 JWT via a post request.
 
-      config
-          |> authUrl "http://localhost:3000/rpc/login"
+    authUrl "http://localhost:3000/rpc/login" config
 
 Alternatively the host can be specified using flags, configuring using
 `authUrl`. Program flags take precedence.
 
-      Elm.Main.init({
-          flags: { authUrl: "http://localhost:3000/rpc/login" }
-      })
+    Elm.Main.init
+        { flags = { authUrl = "http://localhost:3000/rpc/login" }
+        }
 
 -}
 authUrl : String -> FormAuth -> FormAuth
@@ -80,15 +81,15 @@ authUrl =
 {-| Override the credentials JSON encoder to be used when posting to the login
 url.
 
-      config
-        |> encoder
-              (\creds ->
-                  Encode.object
-                      [ ( "credentials"
-                        , Encode.dict identity Encode.string creds
-                        )
-                      ]
-              )
+    encoder
+        (\creds ->
+            Encode.object
+                [ ( "credentials"
+                  , Encode.dict identity Encode.string creds
+                  )
+                ]
+        )
+        config
 
 -}
 encoder :
@@ -101,9 +102,7 @@ encoder =
 
 {-| Override the JSON decoder used to obtain the JWT from the login response.
 
-      config
-        |> decoder
-            (Decode.at ["auth", "jwt"] Decode.string)
+    decoder (Decode.at [ "auth", "jwt" ] Decode.string) config
 
 -}
 decoder : Decoder String -> FormAuth -> FormAuth

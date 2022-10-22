@@ -11,7 +11,7 @@
         "PostgRestAdmin.Config",
         "PostgRestAdmin.Config.FormAuth",
         "PostgRestAdmin.Detail",
-        "PostgRestAdmin.MountPoint",
+        "PostgRestAdmin.MountPath",
         "PostgRestAdmin.Notification",
         "PostgRestAdmin.Record"
     ],

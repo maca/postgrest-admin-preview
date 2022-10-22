@@ -38,10 +38,10 @@ type alias Cmd msg =
 
 {-| Wraps the [Platform.Cmd](https://package.elm-lang.org/packages/elm/core/latest/Platform-Cmd#Cmd).
 
-      import Time exposing (Posix)
+    import Time exposing (Posix)
 
-      getNewTime : (Posix -> Msg) -> PostgRestAdmin.Cmd Msg
-      getNewTime tagger =
+    getNewTime : (Posix -> Msg) -> PostgRestAdmin.Cmd Msg
+    getNewTime tagger =
         Task.perform tagger Time.now
             |> PostgRestAdmin.Cmd.wrap
 

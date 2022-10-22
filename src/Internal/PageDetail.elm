@@ -38,7 +38,7 @@ import Internal.Schema exposing (Constraint(..), Reference, Table)
 import Internal.Value exposing (Value(..))
 import Json.Decode as Decode
 import PostgRestAdmin.Client as Client exposing (Client, Collection)
-import PostgRestAdmin.MountPoint exposing (MountPoint, breadcrumbs, path)
+import PostgRestAdmin.MountPath exposing (MountPath, breadcrumbs, path)
 import PostgRestAdmin.Notification as Notification
 import String.Extra as String
 import Url
@@ -57,7 +57,7 @@ type Msg
 
 type alias PageDetail =
     { client : Client
-    , mountPoint : MountPoint
+    , mountPath : MountPath
     , key : Nav.Key
     , table : Table
     , id : String
@@ -70,18 +70,18 @@ type alias PageDetail =
 
 init :
     { client : Client
-    , mountPoint : MountPoint
+    , mountPath : MountPath
     , table : Table
     , id : String
     , detailActions : DetailActions
     }
     -> Nav.Key
     -> ( PageDetail, AppCmd.Cmd Msg )
-init { client, mountPoint, table, id, detailActions } key =
+init { client, mountPath, table, id, detailActions } key =
     let
         pageDetail =
             { client = client
-            , mountPoint = mountPoint
+            , mountPath = mountPath
             , key = key
             , table = table
             , id = id
@@ -207,7 +207,7 @@ view params =
         Just record ->
             section
                 [ class "record-detail" ]
-                [ breadcrumbs params.mountPoint
+                [ breadcrumbs params.mountPath
                     tableName
                     [ ( tableName, Nothing )
                     , ( params.id, Record.label record )
@@ -224,7 +224,7 @@ view params =
                         []
                         (sortedFields record
                             |> List.map
-                                (tableRow params.mountPoint
+                                (tableRow params.mountPath
                                     (Record.tableName record)
                                 )
                         )
@@ -268,11 +268,11 @@ view params =
 
 
 referenceToHtml : PageDetail -> Record -> Reference -> Html Msg
-referenceToHtml { mountPoint, counts } record { table, foreignKeyValue } =
+referenceToHtml { mountPath, counts } record { table, foreignKeyValue } =
     a
         [ class "card association"
         , href
-            (path mountPoint <|
+            (path mountPath <|
                 Url.absolute [ record.table.name, foreignKeyValue, table.name ] []
             )
         ]
@@ -285,7 +285,7 @@ referenceToHtml { mountPoint, counts } record { table, foreignKeyValue } =
 
 
 actions : PageDetail -> Record -> Html Msg
-actions { mountPoint, detailActions } record =
+actions { mountPath, detailActions } record =
     case Record.id record of
         Just id ->
             div
@@ -293,7 +293,7 @@ actions { mountPoint, detailActions } record =
                 (List.map
                     (\( copy, buildUrl ) ->
                         a
-                            [ href (path mountPoint (buildUrl record id))
+                            [ href (path mountPath (buildUrl record id))
                             , class "button"
                             ]
                             [ text copy ]
@@ -301,7 +301,7 @@ actions { mountPoint, detailActions } record =
                     detailActions
                     ++ [ a
                             [ href
-                                (path mountPoint <|
+                                (path mountPath <|
                                     Url.absolute
                                         [ Record.tableName record, id, "edit" ]
                                         []
@@ -321,12 +321,12 @@ actions { mountPoint, detailActions } record =
             text ""
 
 
-tableRow : MountPoint -> String -> ( String, Field ) -> Html Msg
-tableRow mountPoint resourcesName ( name, field ) =
+tableRow : MountPath -> String -> ( String, Field ) -> Html Msg
+tableRow mountPath resourcesName ( name, field ) =
     tr
         []
         [ th [] [ text (String.humanize name) ]
-        , td [] [ Field.toHtml mountPoint resourcesName field ]
+        , td [] [ Field.toHtml mountPath resourcesName field ]
         ]
 
 

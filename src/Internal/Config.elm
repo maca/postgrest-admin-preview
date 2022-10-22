@@ -11,8 +11,8 @@ module Internal.Config exposing
     , hostDecoder
     , init
     , jwt
-    , mountPoint
-    , mountPointDecoder
+    , mountPath
+    , mountPathDecoder
     , onAuthFailed
     , onExternalLogin
     , onLogin
@@ -30,7 +30,7 @@ import Internal.AuthScheme as AuthScheme exposing (AuthScheme)
 import Internal.Flag as Flag
 import Internal.FormAuth as FormAuth exposing (FormAuth)
 import Json.Decode as Decode exposing (Decoder)
-import PostgRestAdmin.MountPoint as MountPoint exposing (MountPoint)
+import PostgRestAdmin.MountPath as MountPath exposing (MountPath)
 import PostgRestAdmin.Record exposing (Record)
 import Url exposing (Protocol(..), Url)
 import Url.Parser exposing (Parser)
@@ -48,7 +48,7 @@ type alias Login =
 
 type alias Config flags model msg =
     { host : Url
-    , mountPoint : MountPoint
+    , mountPath : MountPath
     , authScheme : AuthScheme
     , formFields : Dict String (List String)
     , application :
@@ -85,14 +85,14 @@ hostDecoder urlStr conf =
             (Decode.fail "`Config.host` was given an invalid URL")
 
 
-mountPoint : String -> Decoder (Config f m msg) -> Decoder (Config f m msg)
-mountPoint p =
-    Decode.andThen (mountPointDecoder p)
+mountPath : String -> Decoder (Config f m msg) -> Decoder (Config f m msg)
+mountPath p =
+    Decode.andThen (mountPathDecoder p)
 
 
-mountPointDecoder : String -> Config f m msg -> Decoder (Config f m msg)
-mountPointDecoder p conf =
-    Decode.succeed { conf | mountPoint = MountPoint.fromString p }
+mountPathDecoder : String -> Config f m msg -> Decoder (Config f m msg)
+mountPathDecoder p conf =
+    Decode.succeed { conf | mountPath = MountPath.fromString p }
 
 
 formAuth :
@@ -244,7 +244,7 @@ default =
         , query = Nothing
         , fragment = Nothing
         }
-    , mountPoint = MountPoint.fromString ""
+    , mountPath = MountPath.fromString ""
     , formFields = Dict.empty
     , application = Nothing
     , detailActions = Dict.empty

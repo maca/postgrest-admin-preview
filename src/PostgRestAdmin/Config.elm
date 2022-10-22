@@ -1,8 +1,8 @@
 module PostgRestAdmin.Config exposing
-    ( Config, Decoder
+    ( Config
     , init
     , host
-    , mountPoint
+    , mountPath
     , formFields
     , detailActions
     , tables
@@ -22,7 +22,7 @@ module PostgRestAdmin.Config exposing
 
 # Program configuration
 
-@docs Config, Decoder
+@docs Config
 
 
 # Init
@@ -33,7 +33,7 @@ module PostgRestAdmin.Config exposing
 # Basics
 
 @docs host
-@docs mountPoint
+@docs mountPath
 @docs formFields
 @docs detailActions
 
@@ -69,7 +69,7 @@ import Internal.Config as Config
 import Json.Decode as Decode
 import PostgRestAdmin.Client exposing (Client)
 import PostgRestAdmin.Config.FormAuth exposing (FormAuth)
-import PostgRestAdmin.MountPoint exposing (MountPoint)
+import PostgRestAdmin.MountPath exposing (MountPath)
 import PostgRestAdmin.Record exposing (Record)
 import Url exposing (Protocol(..))
 import Url.Parser exposing (Parser)
@@ -79,14 +79,7 @@ import Url.Parser exposing (Parser)
 params.
 -}
 type alias Config f m msg =
-    Config.Config f m msg
-
-
-{-| [PostgRestAdmin.application](PostgRestAdmin#application) configuration
-decoder.
--}
-type alias Decoder f m msg =
-    Decode.Decoder (Config f m msg)
+    Decode.Decoder (Config.Config f m msg)
 
 
 {-| [PostgRestAdmin.application](PostgRestAdmin#application) decoder with
@@ -97,28 +90,28 @@ defaults.
         PostgRestAdmin.application Config.init
 
 -}
-init : Decoder f m msg
+init : Config f m msg
 init =
     Config.init
 
 
 {-| Specify the postgREST host.
 
-      main : PostgRestAdmin.Program Never Never Never
-      main =
-          Config.init
-              |> Config.host "http://localhost:3000"
-              |> PostgRestAdmin.application
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.host "http://localhost:3000"
+            |> PostgRestAdmin.application
 
 Alternatively the host can be specified using flags, configuring using `host`.
 Program flags take precedence.
 
-      Elm.Main.init({
-          flags: { host: "http://localhost:3000" }
-      })
+    Elm.Main.init
+        { flags = { host = "http://localhost:3000" }
+        }
 
 -}
-host : String -> Decoder f m msg -> Decoder f m msg
+host : String -> Config f m msg -> Config f m msg
 host =
     Config.host
 
@@ -126,23 +119,23 @@ host =
 {-| Specify a path prefix for all routes, in case the app is not mounted in the
 root path.
 
-      main : PostgRestAdmin.Program Never Never Never
-      main =
-          Config.init
-              |> Config.mountPoint "/back-office"
-              |> PostgRestAdmin.application
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.mountPath "/back-office"
+            |> PostgRestAdmin.application
 
 Alternatively the host can be specified using flags, configuring using
-`mountPoint`. Program flags take precedence.
+`mountPath`. Program flags take precedence.
 
-      Elm.Main.init({
-          flags: { mountPoint: "/back-office" }
-      })
+    Elm.Main.init
+        { flags = { mountPath = "/back-office" }
+        }
 
 -}
-mountPoint : String -> Decoder f m msg -> Decoder f m msg
-mountPoint =
-    Config.mountPoint
+mountPath : String -> Config f m msg -> Config f m msg
+mountPath =
+    Config.mountPath
 
 
 {-| Enable user credentials form and configure the parameters. Credentials
@@ -150,16 +143,16 @@ are be used to obtain a JWT.
 
 See [FormAuth](PostgRestAdmin.FormAuth) for configuration options.
 
-      import PostgRestAdmin.Config.FormAuth as FormAuth
+    import PostgRestAdmin.Config.FormAuth as FormAuth
 
-      main : PostgRestAdmin.Program Never Never Never
-      main =
-          Config.init
-              |> Config.formAuth FormAuth.config
-              |> PostgRestAdmin.application
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.formAuth FormAuth.config
+            |> PostgRestAdmin.application
 
 -}
-formAuth : FormAuth -> Decoder f m msg -> Decoder f m msg
+formAuth : FormAuth -> Config f m msg -> Config f m msg
 formAuth =
     Config.formAuth
 
@@ -167,21 +160,21 @@ formAuth =
 {-| Set a JWT to authenticate postgREST requests. Even when using
 [formAuth](#formAuth) it's possible to set an initial JWT.
 
-      main : PostgRestAdmin.Program Never Never Never
-      main =
-          Config.init
-              |> Config.jwt "8abf3a...9ac36d"
-              |> PostgRestAdmin.application
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.jwt "8abf3a...9ac36d"
+            |> PostgRestAdmin.application
 
 Alternatively the token can be passed using flags, configuring using `jwt`.
 Program flags take precedence.
 
-      Elm.Main.init({
-          flags: { jwt: sessionStorage.getItem("jwt") }
-      })
+    Elm.Main.init
+        { flags = { jwt = sessionStorage.getItem "jwt" }
+        }
 
 -}
-jwt : String -> Decoder f m msg -> Decoder f m msg
+jwt : String -> Config f m msg -> Config f m msg
 jwt =
     Config.jwt
 
@@ -189,26 +182,26 @@ jwt =
 {-| Callback triggered with a JWT string on successful login.
 Tipically used to persist the JWT to session storage.
 
-          port loginSuccess : String -> Cmd msg
+    port loginSuccess : String -> Cmd msg
 
-          main : PostgRestAdmin.Program Never Never Never
-          main =
-              Config.init
-                  |> Config.onLogin loginSuccess
-                  |> PostgRestAdmin.application
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.onLogin loginSuccess
+            |> PostgRestAdmin.application
 
-// Elm init
+Then subscribe to the corresponding port.
 
-        app = Elm.Main.init({
-          flags: { jwt: sessionStorage.getItem("jwt") }
-        })
+    app = Elm.Main.init({
+      flags: { jwt: sessionStorage.getItem("jwt") }
+    })
 
-        app.ports.loginSuccess.subscribe(jwt => {
-          sessionStorage.setItem("jwt", jwt)
-        });
+    app.ports.loginSuccess.subscribe(jwt => {
+      sessionStorage.setItem("jwt", jwt)
+    });
 
 -}
-onLogin : (String -> Cmd msg) -> Decoder f m msg -> Decoder f m msg
+onLogin : (String -> Cmd msg) -> Config f m msg -> Config f m msg
 onLogin =
     Config.onLogin
 
@@ -216,36 +209,34 @@ onLogin =
 {-| Callback triggered when authentication fails when attempting to perform a
 request. You can use to perform external authentication.
 
-          port authFailure : String -> Cmd msg
+    port authFailure : String -> Cmd msg
 
-          port tokenReceiver :
-              ({ path : String, accessToken : String } -> msg)
-              -> Sub msg
+    port tokenReceiver :
+        ({ path : String, accessToken : String } -> msg)
+        -> Sub msg
 
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.withAuthFailed authFailed
+            |> Config.onExternalLogin tokenReceiver
+            |> PostgRestAdmin.application
 
-          main : PostgRestAdmin.Program Never Never Never
-          main =
-              Config.init
-                  |> Config.withAuthFailed authFailed
-                  |> Config.onExternalLogin tokenReceiver
-                  |> PostgRestAdmin.application
+Then wire to the corresponding ports.
 
-// Elm init
+    app = Elm.Main.init()
 
-        app = Elm.Main.init()
-
-        app.ports.authFailure.subscribe(requestedPath => {
-            authenticate(requestedPath).then((accessToken) => {
-                app.ports.tokenReceiver.send({
-                    path : requestedPath,
-                    accessToken : accessToken
-                })
-
+    app.ports.authFailure.subscribe(requestedPath => {
+        authenticate(requestedPath).then((accessToken) => {
+            app.ports.tokenReceiver.send({
+                path : requestedPath,
+                accessToken : accessToken
             })
-        });
+        })
+    });
 
 -}
-onAuthFailed : (String -> Cmd msg) -> Decoder f m msg -> Decoder f m msg
+onAuthFailed : (String -> Cmd msg) -> Config f m msg -> Config f m msg
 onAuthFailed =
     Config.onAuthFailed
 
@@ -262,8 +253,8 @@ onExternalLogin :
      )
      -> Sub { path : String, accessToken : String }
     )
-    -> Decoder f m msg
-    -> Decoder f m msg
+    -> Config f m msg
+    -> Config f m msg
 onExternalLogin =
     Config.onExternalLogin
 
@@ -271,24 +262,24 @@ onExternalLogin =
 {-| Callback triggered when authentication fails when attempting to perform a
 request. You can use to perform external authentication.
 
-          port logout : () -> Cmd msg
+    port logout : () -> Cmd msg
 
-          main : PostgRestAdmin.Program Never Never Never
-          main =
-              Config.init
-                  |> Config.onLogout logout
-                  |> PostgRestAdmin.application
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.onLogout logout
+            |> PostgRestAdmin.application
 
-// Elm init
+Then subscribe to the corresponding port.
 
-        app = Elm.Main.init()
+    app = Elm.Main.init()
 
-        app.ports.logout.subscribe(_ => {
-            externalLogout()
-        });
+    app.ports.logout.subscribe(_ => {
+        externalLogout()
+    });
 
 -}
-onLogout : (() -> Cmd msg) -> Decoder f m msg -> Decoder f m msg
+onLogout : (() -> Cmd msg) -> Config f m msg -> Config f m msg
 onLogout =
     Config.onLogout
 
@@ -297,21 +288,21 @@ onLogout =
 overriding the table schema. By default a primary key field is not present in
 the forms.
 
-      main : PostgRestAdmin.Program Never Never Never
-      main =
-          Config.init
-              |> Config.formFields "posts" ["id", "title", "content"]
-              |> PostgRestAdmin.application
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.formFields "posts" [ "id", "title", "content" ]
+            |> PostgRestAdmin.application
 
 Alternatively this parameter can be configured using flags, configuring using
 `formFields`. Program flags take precedence.
 
-      Elm.Main.init({
-          flags: { formFields: { posts: [ "id", "title", "content" ]} }
-      })
+    Elm.Main.init
+        { flags = { formFields = { posts = [ "id", "title", "content" ] } }
+        }
 
 -}
-formFields : String -> List String -> Decoder f m msg -> Decoder f m msg
+formFields : String -> List String -> Config f m msg -> Config f m msg
 formFields =
     Config.formFields
 
@@ -324,25 +315,24 @@ table and the values are a list of tuples, the first element of the tuple
 corresponds to the button text and the second is a function that takes the id of
 the resource and returns a url string.
 
-      import Url.Builder as Url
+    import Url.Builder as Url
 
-      main : PostgRestAdmin.Program Never Never Never
-      main =
-          Config.init
-              |> Config.detailActions "posts"
-                  [ ( "View Comments"
-                    , \_ id -> Url.absolute [ "posts", id, "comments" ] []
-                    )
-                  ]
-
-          |> PostgRestAdmin.application
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.detailActions "posts"
+                [ ( "View Comments"
+                  , \_ id -> Url.absolute [ "posts", id, "comments" ] []
+                  )
+                ]
+            |> PostgRestAdmin.application
 
 -}
 detailActions :
     String
     -> List ( String, Record -> String -> String )
-    -> Decoder f m msg
-    -> Decoder f m msg
+    -> Config f m msg
+    -> Config f m msg
 detailActions =
     Config.detailActions
 
@@ -350,22 +340,22 @@ detailActions =
 {-| Pass a list of table names to restrict the editable resources, also sets the
 order of the left resources menu.
 
-      main : PostgRestAdmin.Program Never Never Never
-      main =
-          Config.init
-              |> Config.tables ["posts", "comments"]
-              |> PostgRestAdmin.application
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.tables [ "posts", "comments" ]
+            |> PostgRestAdmin.application
 
 Alternatively the host can be specified using flags, configuring using
 `tables`.
 Program flags take precedence.
 
-      Elm.Main.init({
-          tables: ["posts", "comments"]
-      })
+    Elm.Main.init
+        { tables = [ "posts", "comments" ]
+        }
 
 -}
-tables : List String -> Decoder f m msg -> Decoder f m msg
+tables : List String -> Config f m msg -> Config f m msg
 tables =
     Config.tables
 
@@ -374,23 +364,23 @@ tables =
 confuses tables with views when describing the foreign key for a resource,
 because of this some links might be incorrectly generated.
 
-      main : PostgRestAdmin.Program Never Never Never
-      main =
-          Config.init
-              |> Config.tableAliases
-                   (Dict.fromList [("published_posts", "posts")])
-              |> PostgRestAdmin.application
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.tableAliases
+                (Dict.fromList [ ( "published_posts", "posts" ) ])
+            |> PostgRestAdmin.application
 
 Alternatively the host can be specified using flags, configuring using
 `tableAliases`.
 Program flags take precedence.
 
-      Elm.Main.init({
-          tableAliases: { "published_posts" : "posts "}
-      })
+    Elm.Main.init({
+        tableAliases: { "published_posts" : "posts "}
+    })
 
 -}
-tableAliases : Dict String String -> Decoder f m msg -> Decoder f m msg
+tableAliases : Dict String String -> Config f m msg -> Config f m msg
 tableAliases =
     Config.tableAliases
 
@@ -437,7 +427,7 @@ routes :
     { init :
         { flags : flags
         , client : Client
-        , mountPoint : MountPoint
+        , mountPath : MountPath
         }
         -> Nav.Key
         -> ( model, AppCmd.Cmd msg )
@@ -447,8 +437,8 @@ routes :
     , onLogin : Client -> msg
     }
     -> Parser (msg -> msg) msg
-    -> Decoder flags model msg
-    -> Decoder flags model msg
+    -> Config flags model msg
+    -> Config flags model msg
 routes =
     Config.routes
 
@@ -477,7 +467,7 @@ use to perform requests.
 -}
 flagsDecoder :
     Decode.Decoder flags
-    -> Decoder flags model msg
-    -> Decoder flags model msg
+    -> Config flags model msg
+    -> Config flags model msg
 flagsDecoder =
     Config.flagsDecoder

@@ -11,7 +11,6 @@ module PostgRestAdmin exposing
 # Init
 
 @docs application
-@docs breadcrumbs
 
 -}
 
@@ -35,7 +34,7 @@ import Internal.PageListing as PageListing exposing (PageListing)
 import Json.Decode as Decode exposing (Decoder, Value)
 import Json.Encode exposing (Value)
 import PostgRestAdmin.Client exposing (Client)
-import PostgRestAdmin.MountPoint as MountPoint exposing (MountPoint, path)
+import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
 import String.Extra as String
 import Task
 import Url exposing (Url)
@@ -119,9 +118,9 @@ type Route f m msg
 See [Config](PostgRestAdmin.Config) to check all configuration
 options.
 
-      main : PostgRestAdmin.Program Never Never
-      main =
-          PostgRestAdmin.application Config.init
+    main : PostgRestAdmin.Program Never Never
+    main =
+        PostgRestAdmin.application Config.init
 
 -}
 application : Decoder (Config f m msg) -> Program f m msg
@@ -135,7 +134,7 @@ applicationParams decoder =
         init
             (decoder
                 |> Flag.string "host" Config.hostDecoder
-                |> Flag.string "mountPoint" Config.mountPointDecoder
+                |> Flag.string "mountPath" Config.mountPathDecoder
                 |> Flag.stringListDict "formFields" Config.formFieldsDecoder
                 |> Flag.stringList "tables" Config.tablesDecoder
                 |> Flag.stringDict "tableAliases" Config.tableAliasesDecoder
@@ -210,7 +209,7 @@ update msg model =
                                     params.init
                                         { flags = flags
                                         , client = model.client
-                                        , mountPoint = model.config.mountPoint
+                                        , mountPath = model.config.mountPath
                                         }
                                         model.key
                                         |> Tuple.mapFirst (Application params)
@@ -481,7 +480,7 @@ sideMenu model =
             [ class "resources-menu" ]
             [ ul
                 []
-                (List.map (menuItem model.config.mountPoint) (resources model))
+                (List.map (menuItem model.config.mountPath) (resources model))
             ]
         , div
             [ class "account-management" ]
@@ -496,12 +495,12 @@ sideMenu model =
         ]
 
 
-menuItem : MountPoint -> String -> Html (Msg f m msg)
-menuItem mountPoint name =
+menuItem : MountPath -> String -> Html (Msg f m msg)
+menuItem mountPath name =
     li
         []
         [ a
-            [ href (path mountPoint name) ]
+            [ href (path mountPath name) ]
             [ text (String.toTitleCase (String.humanize name)) ]
         ]
 
@@ -593,7 +592,7 @@ routeCons url params =
     Parser.parse
         (List.foldr (\p acc -> s p </> acc)
             (routeParser url params)
-            (MountPoint.segments params.config.mountPoint)
+            (MountPath.segments params.config.mountPath)
         )
         url
         |> Maybe.withDefault ( RouteNotFound, Cmd.none )
@@ -676,7 +675,7 @@ initListing params url parent tableName =
             let
                 listingParams =
                     { client = params.client
-                    , mountPoint = params.config.mountPoint
+                    , mountPath = params.config.mountPath
                     , table = table
                     , parent = parent
                     }
@@ -719,7 +718,7 @@ initFormHelp { client, key, config } parent tableName id =
             let
                 params =
                     { client = client
-                    , mountPoint = config.mountPoint
+                    , mountPath = config.mountPath
                     , fieldNames =
                         Dict.get tableName config.formFields
                             |> Maybe.withDefault []
@@ -747,7 +746,7 @@ initDetail { client, key, config } tableName id =
             let
                 detailParams =
                     { client = client
-                    , mountPoint = config.mountPoint
+                    , mountPath = config.mountPath
                     , table = table
                     , id = id
                     , detailActions =

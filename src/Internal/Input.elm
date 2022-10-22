@@ -36,7 +36,7 @@ import Internal.Value as Value exposing (Value(..))
 import Json.Decode as Decode
 import Maybe.Extra as Maybe
 import PostgRestAdmin.Client as Client exposing (Client, Collection)
-import PostgRestAdmin.MountPoint exposing (MountPoint, path)
+import PostgRestAdmin.MountPath exposing (MountPath, path)
 import Postgrest.Client as PG
 import String.Extra as String
 import Url.Builder as Url
@@ -295,8 +295,8 @@ toError input =
     .error <| toField input
 
 
-toHtml : MountPoint -> String -> Input -> Html Msg
-toHtml mountPoint name input =
+toHtml : MountPath -> String -> Input -> Html Msg
+toHtml mountPath name input =
     case input of
         Text { value } ->
             Value.toString value
@@ -334,7 +334,7 @@ toHtml mountPoint name input =
                 |> wrapInput input name
 
         Association field params ->
-            displayAutocompleteInput mountPoint params field input
+            displayAutocompleteInput mountPath params field input
                 |> wrapInput input name
 
         Blank _ ->
@@ -357,13 +357,13 @@ wrapInput input name buildInput =
 
 
 displayAutocompleteInput :
-    MountPoint
+    MountPath
     -> Autocomplete
     -> Field
     -> Input
     -> String
     -> Html Msg
-displayAutocompleteInput mountPoint autocomplete field input name =
+displayAutocompleteInput mountPath autocomplete field input name =
     case field.constraint of
         ForeignKey foreignKeyParams ->
             let
@@ -389,7 +389,7 @@ displayAutocompleteInput mountPoint autocomplete field input name =
                     )
                 , div
                     [ class "association-link" ]
-                    [ associationLink mountPoint foreignKeyParams field ]
+                    [ associationLink mountPath foreignKeyParams field ]
                 , Html.input
                     [ onInput inputCallback
                     , id name
@@ -405,8 +405,8 @@ displayAutocompleteInput mountPoint autocomplete field input name =
             text ""
 
 
-associationLink : MountPoint -> ForeignKeyParams -> Field -> Html Msg
-associationLink mountPoint params { value } =
+associationLink : MountPath -> ForeignKeyParams -> Field -> Html Msg
+associationLink mountPath params { value } =
     if Value.isNothing value then
         text "-"
 
@@ -416,7 +416,7 @@ associationLink mountPoint params { value } =
                 Value.toString value |> Maybe.withDefault ""
         in
         a
-            [ href (path mountPoint (Url.absolute [ params.tableName, id ] []))
+            [ href (path mountPath (Url.absolute [ params.tableName, id ] []))
             , target "_blank"
             ]
             [ text id ]

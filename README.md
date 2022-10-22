@@ -70,7 +70,7 @@ from PostgREST Open API description.
     import PostgRestAdmin.Config as Config
 
 
-    main : PostgRestAdmin.Program Never Never
+    main : PostgRestAdmin.Program Never Never Never
     main =
         PostgRestAdmin.application Config.init
 
@@ -113,7 +113,7 @@ configured with
     port loginSuccess : String -> Cmd msg
 
 
-    main : PostgRestAdmin.Program Never Never
+    main : PostgRestAdmin.Program Never Never Never
     main =
         Config.init
             |> Config.host "https://postgrest.example.com"
