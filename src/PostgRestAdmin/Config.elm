@@ -1,5 +1,5 @@
 module PostgRestAdmin.Config exposing
-    ( Config
+    ( Config, Decoder
     , init
     , host
     , mountPoint
@@ -17,9 +17,12 @@ module PostgRestAdmin.Config exposing
     , flagsDecoder
     )
 
-{-| Program configuration
+{-|
 
-@docs Config
+
+# Program configuration
+
+@docs Config, Decoder
 
 
 # Init
@@ -63,9 +66,10 @@ import Dict exposing (Dict)
 import Html exposing (Html)
 import Internal.Cmd as AppCmd
 import Internal.Config as Config
-import Json.Decode exposing (Decoder)
+import Json.Decode as Decode
 import PostgRestAdmin.Client exposing (Client)
 import PostgRestAdmin.Config.FormAuth exposing (FormAuth)
+import PostgRestAdmin.MountPoint exposing (MountPoint)
 import PostgRestAdmin.Record exposing (Record)
 import Url exposing (Protocol(..))
 import Url.Parser exposing (Parser)
@@ -75,7 +79,14 @@ import Url.Parser exposing (Parser)
 params.
 -}
 type alias Config f m msg =
-    Decoder (Config.Config f m msg)
+    Config.Config f m msg
+
+
+{-| [PostgRestAdmin.application](PostgRestAdmin#application) configuration
+decoder.
+-}
+type alias Decoder f m msg =
+    Decode.Decoder (Config f m msg)
 
 
 {-| [PostgRestAdmin.application](PostgRestAdmin#application) decoder with
@@ -86,7 +97,7 @@ defaults.
         PostgRestAdmin.application Config.init
 
 -}
-init : Config f m msg
+init : Decoder f m msg
 init =
     Config.init
 
@@ -107,7 +118,7 @@ Program flags take precedence.
       })
 
 -}
-host : String -> Config f m msg -> Config f m msg
+host : String -> Decoder f m msg -> Decoder f m msg
 host =
     Config.host
 
@@ -129,7 +140,7 @@ Alternatively the host can be specified using flags, configuring using
       })
 
 -}
-mountPoint : String -> Config f m msg -> Config f m msg
+mountPoint : String -> Decoder f m msg -> Decoder f m msg
 mountPoint =
     Config.mountPoint
 
@@ -148,7 +159,7 @@ See [FormAuth](PostgRestAdmin.FormAuth) for configuration options.
               |> PostgRestAdmin.application
 
 -}
-formAuth : FormAuth -> Config f m msg -> Config f m msg
+formAuth : FormAuth -> Decoder f m msg -> Decoder f m msg
 formAuth =
     Config.formAuth
 
@@ -170,7 +181,7 @@ Program flags take precedence.
       })
 
 -}
-jwt : String -> Config f m msg -> Config f m msg
+jwt : String -> Decoder f m msg -> Decoder f m msg
 jwt =
     Config.jwt
 
@@ -197,7 +208,7 @@ Tipically used to persist the JWT to session storage.
         });
 
 -}
-onLogin : (String -> Cmd msg) -> Config f m msg -> Config f m msg
+onLogin : (String -> Cmd msg) -> Decoder f m msg -> Decoder f m msg
 onLogin =
     Config.onLogin
 
@@ -234,7 +245,7 @@ request. You can use to perform external authentication.
         });
 
 -}
-onAuthFailed : (String -> Cmd msg) -> Config f m msg -> Config f m msg
+onAuthFailed : (String -> Cmd msg) -> Decoder f m msg -> Decoder f m msg
 onAuthFailed =
     Config.onAuthFailed
 
@@ -251,8 +262,8 @@ onExternalLogin :
      )
      -> Sub { path : String, accessToken : String }
     )
-    -> Config f m msg
-    -> Config f m msg
+    -> Decoder f m msg
+    -> Decoder f m msg
 onExternalLogin =
     Config.onExternalLogin
 
@@ -277,7 +288,7 @@ request. You can use to perform external authentication.
         });
 
 -}
-onLogout : (() -> Cmd msg) -> Config f m msg -> Config f m msg
+onLogout : (() -> Cmd msg) -> Decoder f m msg -> Decoder f m msg
 onLogout =
     Config.onLogout
 
@@ -300,7 +311,7 @@ Alternatively this parameter can be configured using flags, configuring using
       })
 
 -}
-formFields : String -> List String -> Config f m msg -> Config f m msg
+formFields : String -> List String -> Decoder f m msg -> Decoder f m msg
 formFields =
     Config.formFields
 
@@ -330,8 +341,8 @@ the resource and returns a url string.
 detailActions :
     String
     -> List ( String, Record -> String -> String )
-    -> Config f m msg
-    -> Config f m msg
+    -> Decoder f m msg
+    -> Decoder f m msg
 detailActions =
     Config.detailActions
 
@@ -354,7 +365,7 @@ Program flags take precedence.
       })
 
 -}
-tables : List String -> Config f m msg -> Config f m msg
+tables : List String -> Decoder f m msg -> Decoder f m msg
 tables =
     Config.tables
 
@@ -379,7 +390,7 @@ Program flags take precedence.
       })
 
 -}
-tableAliases : Dict String String -> Config f m msg -> Config f m msg
+tableAliases : Dict String String -> Decoder f m msg -> Decoder f m msg
 tableAliases =
     Config.tableAliases
 
@@ -423,15 +434,21 @@ use to perform requests.
 
 -}
 routes :
-    { init : flags -> Client -> Nav.Key -> ( model, AppCmd.Cmd msg )
+    { init :
+        { flags : flags
+        , client : Client
+        , mountPoint : MountPoint
+        }
+        -> Nav.Key
+        -> ( model, AppCmd.Cmd msg )
     , view : model -> Html msg
     , update : msg -> model -> ( model, AppCmd.Cmd msg )
     , subscriptions : model -> Sub msg
     , onLogin : Client -> msg
     }
     -> Parser (msg -> msg) msg
-    -> Config flags model msg
-    -> Config flags model msg
+    -> Decoder flags model msg
+    -> Decoder flags model msg
 routes =
     Config.routes
 
@@ -458,6 +475,9 @@ The `application` is initialized with a [Client](PostgRestAdmin-Client) you can
 use to perform requests.
 
 -}
-flagsDecoder : Decoder flags -> Config flags model msg -> Config flags model msg
+flagsDecoder :
+    Decode.Decoder flags
+    -> Decoder flags model msg
+    -> Decoder flags model msg
 flagsDecoder =
     Config.flagsDecoder

@@ -20,8 +20,8 @@ import Internal.Http exposing (Error(..))
 import Internal.Input as Input exposing (Input)
 import Internal.Schema exposing (Constraint(..), Table)
 import Internal.Value exposing (Value(..))
-import Internal.ViewHelp exposing (breadcrumbs)
 import PostgRestAdmin.Client as Client exposing (Client)
+import PostgRestAdmin.MountPoint exposing (MountPoint, breadcrumbs, path)
 import PostgRestAdmin.Notification as Notification
 import PostgRestAdmin.Record as Record exposing (Record)
 import Url
@@ -44,6 +44,7 @@ type alias Inputs =
 type PageForm
     = PageForm
         { client : Client
+        , mountPoint : MountPoint
         , key : Nav.Key
         , inputs : Inputs
         , fieldNames : List String
@@ -55,6 +56,7 @@ type PageForm
 
 init :
     { client : Client
+    , mountPoint : MountPoint
     , fieldNames : List String
     , id : Maybe String
     , table : Table
@@ -62,7 +64,7 @@ init :
     }
     -> Nav.Key
     -> ( PageForm, AppCmd.Cmd Msg )
-init { client, fieldNames, id, table, parent } key =
+init { client, mountPoint, fieldNames, id, table, parent } key =
     let
         parentParams =
             Maybe.andThen
@@ -75,6 +77,7 @@ init { client, fieldNames, id, table, parent } key =
         pageForm =
             PageForm
                 { client = client
+                , mountPoint = mountPoint
                 , key = key
                 , inputs =
                     Maybe.map (always Dict.empty) id
@@ -300,7 +303,7 @@ toId (PageForm params) =
 
 
 view : PageForm -> Html Msg
-view ((PageForm { table, id, parent }) as form) =
+view ((PageForm { table, id, parent, mountPoint }) as form) =
     let
         fields =
             filterInputs form
@@ -309,7 +312,7 @@ view ((PageForm { table, id, parent }) as form) =
                     (\( name, input ) ->
                         let
                             inputView =
-                                Input.toHtml name input
+                                Input.toHtml mountPoint name input
                                     |> Html.map InputChanged
                         in
                         case Input.toField input |> .constraint of
@@ -334,7 +337,7 @@ view ((PageForm { table, id, parent }) as form) =
     in
     section
         [ class "resource-form" ]
-        [ breadcrumbs
+        [ breadcrumbs mountPoint
             table.name
             (case id of
                 Just idStr ->
@@ -375,15 +378,16 @@ view ((PageForm { table, id, parent }) as form) =
                 [ a
                     [ class "button button-clear"
                     , href
-                        (Url.absolute
-                            (List.filterMap identity
-                                [ Maybe.map (Record.getTable >> .name) parent
-                                , Maybe.andThen Record.id parent
-                                , Just table.name
-                                , id
-                                ]
-                            )
-                            []
+                        (path mountPoint <|
+                            Url.absolute
+                                (List.filterMap identity
+                                    [ Maybe.map (Record.getTable >> .name) parent
+                                    , Maybe.andThen Record.id parent
+                                    , Just table.name
+                                    , id
+                                    ]
+                                )
+                                []
                         )
                     ]
                     [ text "Cancel" ]

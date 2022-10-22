@@ -29,11 +29,9 @@ import Internal.Application as Application
 import Internal.AuthScheme as AuthScheme exposing (AuthScheme)
 import Internal.Flag as Flag
 import Internal.FormAuth as FormAuth exposing (FormAuth)
-import Internal.Http exposing (removeLeadingOrTrailingSlash)
 import Json.Decode as Decode exposing (Decoder)
-import Json.Encode as Encode
+import PostgRestAdmin.MountPoint as MountPoint exposing (MountPoint)
 import PostgRestAdmin.Record exposing (Record)
-import String.Extra as String
 import Url exposing (Protocol(..), Url)
 import Url.Parser exposing (Parser)
 
@@ -50,7 +48,7 @@ type alias Login =
 
 type alias Config flags model msg =
     { host : Url
-    , mountPoint : Maybe String
+    , mountPoint : MountPoint
     , authScheme : AuthScheme
     , formFields : Dict String (List String)
     , application :
@@ -88,16 +86,13 @@ hostDecoder urlStr conf =
 
 
 mountPoint : String -> Decoder (Config f m msg) -> Decoder (Config f m msg)
-mountPoint path =
-    Decode.andThen (mountPointDecoder path)
+mountPoint p =
+    Decode.andThen (mountPointDecoder p)
 
 
 mountPointDecoder : String -> Config f m msg -> Decoder (Config f m msg)
-mountPointDecoder path conf =
-    Decode.succeed
-        { conf
-            | mountPoint = String.nonBlank (removeLeadingOrTrailingSlash path)
-        }
+mountPointDecoder p conf =
+    Decode.succeed { conf | mountPoint = MountPoint.fromString p }
 
 
 formAuth :
@@ -106,9 +101,7 @@ formAuth :
     -> Decoder (Config f m msg)
 formAuth authDecoder =
     Decode.map2 (\auth conf -> { conf | authScheme = AuthScheme.basic auth })
-        (authDecoder
-            |> Flag.string "authUrl" FormAuth.authUrlDecoder
-        )
+        (Flag.string "authUrl" FormAuth.authUrlDecoder authDecoder)
 
 
 jwt : String -> Decoder (Config f m msg) -> Decoder (Config f m msg)
@@ -251,7 +244,7 @@ default =
         , query = Nothing
         , fragment = Nothing
         }
-    , mountPoint = Nothing
+    , mountPoint = MountPoint.fromString ""
     , formFields = Dict.empty
     , application = Nothing
     , detailActions = Dict.empty

@@ -11,10 +11,17 @@ import Html exposing (Html)
 import Internal.Cmd as AppCmd
 import Json.Decode as Decode
 import PostgRestAdmin.Client exposing (Client)
+import PostgRestAdmin.MountPoint exposing (MountPoint)
 
 
 type alias Params flags model msg =
-    { init : flags -> Client -> Nav.Key -> ( model, AppCmd.Cmd msg )
+    { init :
+        { flags : flags
+        , client : Client
+        , mountPoint : MountPoint
+        }
+        -> Nav.Key
+        -> ( model, AppCmd.Cmd msg )
     , view : model -> Html msg
     , update : msg -> model -> ( model, AppCmd.Cmd msg )
     , subscriptions : model -> Sub msg

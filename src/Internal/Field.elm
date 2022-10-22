@@ -15,6 +15,7 @@ import Html.Attributes exposing (href)
 import Internal.Schema exposing (Constraint(..))
 import Internal.Value as Value exposing (Value(..))
 import List.Extra as List
+import PostgRestAdmin.MountPoint exposing (MountPoint, path)
 import String.Extra as String
 import Time
 import Time.Extra as Time
@@ -98,14 +99,14 @@ compareTuple ( name, column ) ( name_, column_ ) =
 -- Html
 
 
-toHtml : String -> Field -> Html msg
-toHtml resourcesName { constraint, value } =
+toHtml : MountPoint -> String -> Field -> Html msg
+toHtml mountPoint resourcesName { constraint, value } =
     case constraint of
         PrimaryKey ->
-            recordLink resourcesName value Nothing
+            recordLink mountPoint resourcesName value Nothing
 
         ForeignKey { tableName, label } ->
-            recordLink tableName value label
+            recordLink mountPoint tableName value label
 
         NoConstraint ->
             valueToHtml value
@@ -162,14 +163,15 @@ maybeToHtml func maybe =
     Maybe.map func maybe |> Maybe.withDefault "" |> text
 
 
-recordLink : String -> Value -> Maybe String -> Html msg
-recordLink resourcesName value mtext =
+recordLink : MountPoint -> String -> Value -> Maybe String -> Html msg
+recordLink mountPoint resourcesName value mtext =
     let
         id =
             Maybe.withDefault "" (Value.toString value)
     in
     a
-        [ href (Url.absolute [ resourcesName, id ] []) ]
+        [ href (path mountPoint (Url.absolute [ resourcesName, id ] []))
+        ]
         [ Maybe.map text mtext |> Maybe.withDefault (valueToHtml value) ]
 
 

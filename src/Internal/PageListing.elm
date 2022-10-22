@@ -69,13 +69,13 @@ import Internal.Record exposing (primaryKey, setValidation, updateWithString)
 import Internal.Schema as Schema exposing (Constraint(..), Table)
 import Internal.Search as Search exposing (Search)
 import Internal.Value as Value
-import Internal.ViewHelp exposing (breadcrumbs)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import List.Extra as List
 import List.Split as List
 import Markdown
 import PostgRestAdmin.Client as Client exposing (Client, Collection)
+import PostgRestAdmin.MountPoint exposing (MountPoint, breadcrumbs, path)
 import PostgRestAdmin.Notification as Notification
 import PostgRestAdmin.Record as Record exposing (Record)
 import Postgrest.Client as PG
@@ -140,6 +140,7 @@ type Msg
 
 type alias PageListing =
     { client : Client
+    , mountPoint : MountPoint
     , key : Nav.Key
     , table : Table
     , parent : Maybe Record
@@ -156,13 +157,14 @@ type alias PageListing =
 
 init :
     { client : Client
+    , mountPoint : MountPoint
     , table : Table
     , parent : Maybe { tableName : String, id : String }
     }
     -> Url.Url
     -> Nav.Key
     -> ( PageListing, AppCmd.Cmd Msg )
-init { client, table, parent } url key =
+init { client, mountPoint, table, parent } url key =
     let
         order =
             Maybe.map parseQuery url.query
@@ -181,6 +183,7 @@ init { client, table, parent } url key =
 
         listing =
             { client = client
+            , mountPoint = mountPoint
             , key = key
             , table = table
             , parent = Nothing
@@ -837,12 +840,13 @@ view listing =
 
 
 listHeader : PageListing -> Html Msg
-listHeader { parent, table } =
+listHeader { mountPoint, parent, table } =
     header
         []
         [ case parent of
             Just record ->
-                breadcrumbs table.name
+                breadcrumbs mountPoint
+                    table.name
                     [ ( Record.getTable record |> .name, Nothing )
                     , ( Record.id record |> Maybe.withDefault ""
                       , Record.label record
@@ -851,7 +855,7 @@ listHeader { parent, table } =
                     ]
 
             Nothing ->
-                breadcrumbs table.name [ ( table.name, Nothing ) ]
+                breadcrumbs mountPoint table.name [ ( table.name, Nothing ) ]
         , div
             []
             [ button
@@ -864,16 +868,18 @@ listHeader { parent, table } =
             , a
                 [ class "button"
                 , class ("button-new-" ++ table.name)
-                , href <|
-                    Url.absolute
-                        (List.filterMap identity
-                            [ Maybe.map (Record.getTable >> .name) parent
-                            , Maybe.andThen Record.id parent
-                            , Just table.name
-                            , Just "new"
-                            ]
-                        )
-                        []
+                , href
+                    (path mountPoint <|
+                        Url.absolute
+                            (List.filterMap identity
+                                [ Maybe.map (Record.getTable >> .name) parent
+                                , Maybe.andThen Record.id parent
+                                , Just table.name
+                                , Just "new"
+                                ]
+                            )
+                            []
+                    )
                 ]
                 [ text
                     ("New " ++ (String.humanize table.name |> Inflect.toSingular))
@@ -971,7 +977,7 @@ pageHtml listing fields pageNum records =
 
 
 rowHtml : PageListing -> List String -> Record -> Html Msg
-rowHtml { table } names record =
+rowHtml { mountPoint, table } names record =
     tr
         [ class "listing-row" ]
         (List.filterMap
@@ -981,7 +987,10 @@ rowHtml { table } names record =
                         (\field ->
                             td
                                 []
-                                [ span [] [ Field.toHtml table.name field ] ]
+                                [ span
+                                    []
+                                    [ Field.toHtml mountPoint table.name field ]
+                                ]
                         )
             )
             names
@@ -992,9 +1001,10 @@ rowHtml { table } names record =
                                 a
                                     [ class "button button-clear button-small"
                                     , href
-                                        (Url.absolute
-                                            [ Record.tableName record, id ]
-                                            []
+                                        (path mountPoint <|
+                                            Url.absolute
+                                                [ Record.tableName record, id ]
+                                                []
                                         )
                                     ]
                                     [ text "View" ]

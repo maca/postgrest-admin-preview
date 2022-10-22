@@ -36,9 +36,9 @@ import Internal.Http exposing (Error(..))
 import Internal.Record as Record exposing (Record)
 import Internal.Schema exposing (Constraint(..), Reference, Table)
 import Internal.Value exposing (Value(..))
-import Internal.ViewHelp exposing (breadcrumbs)
 import Json.Decode as Decode
 import PostgRestAdmin.Client as Client exposing (Client, Collection)
+import PostgRestAdmin.MountPoint exposing (MountPoint, breadcrumbs, path)
 import PostgRestAdmin.Notification as Notification
 import String.Extra as String
 import Url
@@ -55,40 +55,41 @@ type Msg
     | DeleteConfirmed
 
 
-type PageDetail
-    = PageDetail
-        { client : Client
-        , key : Nav.Key
-        , table : Table
-        , id : String
-        , record : Maybe Record
-        , detailActions : DetailActions
-        , confirmDelete : Bool
-        , counts : Dict String Int
-        }
+type alias PageDetail =
+    { client : Client
+    , mountPoint : MountPoint
+    , key : Nav.Key
+    , table : Table
+    , id : String
+    , record : Maybe Record
+    , detailActions : DetailActions
+    , confirmDelete : Bool
+    , counts : Dict String Int
+    }
 
 
 init :
     { client : Client
+    , mountPoint : MountPoint
     , table : Table
     , id : String
     , detailActions : DetailActions
     }
     -> Nav.Key
     -> ( PageDetail, AppCmd.Cmd Msg )
-init { client, table, id, detailActions } key =
+init { client, mountPoint, table, id, detailActions } key =
     let
         pageDetail =
-            PageDetail
-                { client = client
-                , key = key
-                , table = table
-                , id = id
-                , record = Nothing
-                , detailActions = detailActions
-                , confirmDelete = False
-                , counts = Dict.empty
-                }
+            { client = client
+            , mountPoint = mountPoint
+            , key = key
+            , table = table
+            , id = id
+            , record = Nothing
+            , detailActions = detailActions
+            , confirmDelete = False
+            , counts = Dict.empty
+            }
     in
     ( pageDetail
     , fetch pageDetail
@@ -96,7 +97,7 @@ init { client, table, id, detailActions } key =
 
 
 fetch : PageDetail -> AppCmd.Cmd Msg
-fetch (PageDetail { client, table, id }) =
+fetch { client, table, id } =
     Client.fetchRecord
         { client = client
         , table = table
@@ -111,17 +112,17 @@ onLogin =
 
 
 update : Msg -> PageDetail -> ( PageDetail, AppCmd.Cmd Msg )
-update msg (PageDetail params) =
+update msg params =
     case msg of
         LoggedIn client ->
             let
                 pageDetail =
-                    PageDetail { params | client = client }
+                    { params | client = client }
             in
             ( pageDetail, fetch pageDetail )
 
         Fetched (Ok record) ->
-            ( PageDetail { params | record = Just record }
+            ( { params | record = Just record }
             , references params.client record
                 |> List.map
                     (\ref ->
@@ -139,23 +140,22 @@ update msg (PageDetail params) =
             )
 
         GotCount tableName (Ok { total }) ->
-            ( PageDetail
-                { params
-                    | counts = Dict.insert tableName total params.counts
-                }
+            ( { params
+                | counts = Dict.insert tableName total params.counts
+              }
             , AppCmd.none
             )
 
         GotCount _ _ ->
-            ( PageDetail params, AppCmd.none )
+            ( params, AppCmd.none )
 
         Fetched (Err err) ->
-            ( PageDetail params
+            ( params
             , Notification.error (Internal.Http.errorToString err)
             )
 
         Deleted (Ok _) ->
-            ( PageDetail params
+            ( params
             , AppCmd.batch
                 [ Url.absolute [ params.table.name ] []
                     |> Nav.pushUrl params.key
@@ -165,18 +165,18 @@ update msg (PageDetail params) =
             )
 
         Deleted (Err err) ->
-            ( PageDetail params
+            ( params
             , Notification.error (Internal.Http.errorToString err)
             )
 
         DeleteModalOpened ->
-            ( PageDetail { params | confirmDelete = True }, AppCmd.none )
+            ( { params | confirmDelete = True }, AppCmd.none )
 
         DeleteModalClosed ->
-            ( PageDetail { params | confirmDelete = False }, AppCmd.none )
+            ( { params | confirmDelete = False }, AppCmd.none )
 
         DeleteConfirmed ->
-            ( PageDetail params
+            ( params
             , case params.record of
                 Just record ->
                     Client.deleteRecord
@@ -195,7 +195,7 @@ update msg (PageDetail params) =
 
 
 view : PageDetail -> Html Msg
-view (PageDetail params) =
+view params =
     let
         tableName =
             params.table.name
@@ -207,7 +207,8 @@ view (PageDetail params) =
         Just record ->
             section
                 [ class "record-detail" ]
-                [ breadcrumbs tableName
+                [ breadcrumbs params.mountPoint
+                    tableName
                     [ ( tableName, Nothing )
                     , ( params.id, Record.label record )
                     ]
@@ -222,9 +223,12 @@ view (PageDetail params) =
                     [ table
                         []
                         (sortedFields record
-                            |> List.map (tableRow (Record.tableName record))
+                            |> List.map
+                                (tableRow params.mountPoint
+                                    (Record.tableName record)
+                                )
                         )
-                    , actions params.detailActions record
+                    , actions params record
                     ]
                 , if params.confirmDelete then
                     div
@@ -257,17 +261,20 @@ view (PageDetail params) =
                 , aside
                     [ class "associations" ]
                     (references params.client record
-                        |> List.map (referenceToHtml record params.counts)
+                        |> List.map
+                            (referenceToHtml params record)
                     )
                 ]
 
 
-referenceToHtml : Record -> Dict String Int -> Reference -> Html Msg
-referenceToHtml record counts { table, foreignKeyValue } =
+referenceToHtml : PageDetail -> Record -> Reference -> Html Msg
+referenceToHtml { mountPoint, counts } record { table, foreignKeyValue } =
     a
         [ class "card association"
         , href
-            (Url.absolute [ record.table.name, foreignKeyValue, table.name ] [])
+            (path mountPoint <|
+                Url.absolute [ record.table.name, foreignKeyValue, table.name ] []
+            )
         ]
         [ text (String.humanize table.name)
         , Dict.get table.name counts
@@ -277,8 +284,8 @@ referenceToHtml record counts { table, foreignKeyValue } =
         ]
 
 
-actions : DetailActions -> Record -> Html Msg
-actions customActions record =
+actions : PageDetail -> Record -> Html Msg
+actions { mountPoint, detailActions } record =
     case Record.id record of
         Just id ->
             div
@@ -286,17 +293,18 @@ actions customActions record =
                 (List.map
                     (\( copy, buildUrl ) ->
                         a
-                            [ href (buildUrl record id)
+                            [ href (path mountPoint (buildUrl record id))
                             , class "button"
                             ]
                             [ text copy ]
                     )
-                    customActions
+                    detailActions
                     ++ [ a
                             [ href
-                                (Url.absolute
-                                    [ Record.tableName record, id, "edit" ]
-                                    []
+                                (path mountPoint <|
+                                    Url.absolute
+                                        [ Record.tableName record, id, "edit" ]
+                                        []
                                 )
                             , class "button"
                             ]
@@ -313,12 +321,12 @@ actions customActions record =
             text ""
 
 
-tableRow : String -> ( String, Field ) -> Html Msg
-tableRow resourcesName ( name, field ) =
+tableRow : MountPoint -> String -> ( String, Field ) -> Html Msg
+tableRow mountPoint resourcesName ( name, field ) =
     tr
         []
         [ th [] [ text (String.humanize name) ]
-        , td [] [ Field.toHtml resourcesName field ]
+        , td [] [ Field.toHtml mountPoint resourcesName field ]
         ]
 
 

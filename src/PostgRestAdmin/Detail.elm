@@ -26,6 +26,7 @@ import Internal.PageDetail as PageDetail exposing (PageDetail)
 import Internal.Schema exposing (Constraint(..), Table)
 import PostgRestAdmin.Client exposing (Client)
 import PostgRestAdmin.Cmd as AppCmd
+import PostgRestAdmin.MountPoint exposing (MountPoint)
 import PostgRestAdmin.Record exposing (Record)
 
 
@@ -42,6 +43,7 @@ type Detail
 {-| -}
 init :
     { client : Client
+    , mountPoint : MountPoint
     , table : Table
     , id : String
     , detailActions : List ( String, Record -> String -> String )

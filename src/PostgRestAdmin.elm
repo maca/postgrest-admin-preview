@@ -1,7 +1,6 @@
 module PostgRestAdmin exposing
     ( Program
     , application
-    , breadcrumbs
     )
 
 {-|
@@ -33,10 +32,10 @@ import Internal.Notification as Notification exposing (Notification)
 import Internal.PageDetail as PageDetail exposing (PageDetail)
 import Internal.PageForm as PageForm exposing (PageForm)
 import Internal.PageListing as PageListing exposing (PageListing)
-import Internal.ViewHelp as ViewHelp
 import Json.Decode as Decode exposing (Decoder, Value)
 import Json.Encode exposing (Value)
 import PostgRestAdmin.Client exposing (Client)
+import PostgRestAdmin.MountPoint as MountPoint exposing (MountPoint, path)
 import String.Extra as String
 import Task
 import Url exposing (Url)
@@ -130,12 +129,6 @@ application decoder =
     Browser.application (applicationParams decoder)
 
 
-{-| -}
-breadcrumbs : String -> List ( String, Maybe String ) -> Html msg
-breadcrumbs =
-    ViewHelp.breadcrumbs
-
-
 applicationParams : Decoder (Config f m msg) -> Params f m msg
 applicationParams decoder =
     { init =
@@ -186,7 +179,7 @@ init decoder flags url key =
                     makeModel config
 
                 ( route, cmd ) =
-                    processRoute url model
+                    parseRoute url model
             in
             ( { model | route = route }, cmd )
 
@@ -214,7 +207,12 @@ update msg model =
                         None ->
                             case model.mountedAppFlags of
                                 Ok flags ->
-                                    params.init flags model.client model.key
+                                    params.init
+                                        { flags = flags
+                                        , client = model.client
+                                        , mountPoint = model.config.mountPoint
+                                        }
+                                        model.key
                                         |> Tuple.mapFirst (Application params)
 
                                 Err err ->
@@ -373,15 +371,17 @@ update msg model =
         UrlChanged url ->
             let
                 ( route, cmd ) =
-                    processRoute url model
+                    parseRoute url model
             in
             ( { model | route = route, attemptedPath = urlToPath url }
             , cmd
             )
 
-        LoggedIn { path, accessToken } ->
-            ( { model | client = Client.updateJwt accessToken model.client }
-            , Nav.pushUrl model.key path
+        LoggedIn params ->
+            ( { model
+                | client = Client.updateJwt params.accessToken model.client
+              }
+            , Nav.pushUrl model.key params.path
             )
 
         LoggedOut ->
@@ -481,7 +481,7 @@ sideMenu model =
             [ class "resources-menu" ]
             [ ul
                 []
-                (List.map menuItem (resources model))
+                (List.map (menuItem model.config.mountPoint) (resources model))
             ]
         , div
             [ class "account-management" ]
@@ -496,12 +496,12 @@ sideMenu model =
         ]
 
 
-menuItem : String -> Html (Msg f m msg)
-menuItem name =
+menuItem : MountPoint -> String -> Html (Msg f m msg)
+menuItem mountPoint name =
     li
         []
         [ a
-            [ href <| "/" ++ name ]
+            [ href (path mountPoint name) ]
             [ text (String.toTitleCase (String.humanize name)) ]
         ]
 
@@ -572,57 +572,31 @@ subscriptions { mountedApp, route, config } =
 -- ROUTES
 
 
-processRoute : Url -> Model f m msg -> ( Route f m msg, Cmd (Msg f m msg) )
-processRoute url model =
-    case model.config.mountPoint of
-        Just mountPoint ->
-            if String.startsWith ("/" ++ mountPoint) url.path then
-                parseRoute url model
-
-            else
-                ( RouteNotFound
-                , Nav.replaceUrl model.key
-                    (Url.toString
-                        { url
-                            | path =
-                                [ "/" ++ mountPoint, url.path ]
-                                    |> String.join ""
-                        }
-                    )
-                )
-
-        Nothing ->
-            parseRoute url model
-
-
 parseRoute : Url -> Model f m msg -> ( Route f m msg, Cmd (Msg f m msg) )
 parseRoute url model =
-    let
-        routeTuple params =
-            Parser.parse
-                (case params.config.mountPoint of
-                    Just mountPoint ->
-                        Parser.map identity
-                            (s mountPoint </> routeParser url params)
-
-                    Nothing ->
-                        routeParser url params
-                )
-                url
-                |> Maybe.withDefault ( RouteNotFound, Cmd.none )
-    in
     if Client.schemaIsLoaded model.client then
-        routeTuple
+        routeCons url
             { client = model.client
             , key = model.key
             , config = model.config
             }
 
     else
-        ( RouteLoadingSchema routeTuple
+        ( RouteLoadingSchema (routeCons url)
         , Cmd.map ClientChanged
             (Client.fetchSchema model.config model.client)
         )
+
+
+routeCons : Url -> InitParams f m msg -> ( Route f m msg, Cmd (Msg f m msg) )
+routeCons url params =
+    Parser.parse
+        (List.foldr (\p acc -> s p </> acc)
+            (routeParser url params)
+            (MountPoint.segments params.config.mountPoint)
+        )
+        url
+        |> Maybe.withDefault ( RouteNotFound, Cmd.none )
 
 
 routeParser :
@@ -702,6 +676,7 @@ initListing params url parent tableName =
             let
                 listingParams =
                     { client = params.client
+                    , mountPoint = params.config.mountPoint
                     , table = table
                     , parent = parent
                     }
@@ -744,6 +719,7 @@ initFormHelp { client, key, config } parent tableName id =
             let
                 params =
                     { client = client
+                    , mountPoint = config.mountPoint
                     , fieldNames =
                         Dict.get tableName config.formFields
                             |> Maybe.withDefault []
@@ -771,6 +747,7 @@ initDetail { client, key, config } tableName id =
             let
                 detailParams =
                     { client = client
+                    , mountPoint = config.mountPoint
                     , table = table
                     , id = id
                     , detailActions =
