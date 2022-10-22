@@ -106,9 +106,7 @@ init =
 Alternatively the host can be specified using flags, configuring using `host`.
 Program flags take precedence.
 
-    Elm.Main.init
-        { flags = { host = "http://localhost:3000" }
-        }
+    Elm.Main.init({ "flags" : { "host" : "http://localhost:3000" }})
 
 -}
 host : String -> Config f m msg -> Config f m msg
@@ -128,9 +126,7 @@ root path.
 Alternatively the host can be specified using flags, configuring using
 `mountPath`. Program flags take precedence.
 
-    Elm.Main.init
-        { flags = { mountPath = "/back-office" }
-        }
+    Elm.Main.init({ "flags" : { "mountPath" : "/back-office" }})
 
 -}
 mountPath : String -> Config f m msg -> Config f m msg
@@ -169,9 +165,9 @@ formAuth =
 Alternatively the token can be passed using flags, configuring using `jwt`.
 Program flags take precedence.
 
-    Elm.Main.init
-        { flags = { jwt = sessionStorage.getItem "jwt" }
-        }
+    Elm.Main.init({
+        "flags" : { "jwt" : sessionStorage.getItem("jwt") }
+     })
 
 -}
 jwt : String -> Config f m msg -> Config f m msg
@@ -297,9 +293,9 @@ the forms.
 Alternatively this parameter can be configured using flags, configuring using
 `formFields`. Program flags take precedence.
 
-    Elm.Main.init
-        { flags = { formFields = { posts = [ "id", "title", "content" ] } }
-        }
+    Elm.Main.init({
+        "flags" : { "formFields" : { "posts" : [ "id", "title", "content" ] } }
+    })
 
 -}
 formFields : String -> List String -> Config f m msg -> Config f m msg
@@ -350,9 +346,7 @@ Alternatively the host can be specified using flags, configuring using
 `tables`.
 Program flags take precedence.
 
-    Elm.Main.init
-        { tables = [ "posts", "comments" ]
-        }
+    Elm.Main.init({ "tables" : [ "posts", "comments" ]})
 
 -}
 tables : List String -> Config f m msg -> Config f m msg

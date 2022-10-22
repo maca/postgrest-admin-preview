@@ -623,7 +623,18 @@ routeParser url params =
     Parser.oneOf
         (appRoutes
             ++ [ -- /
-                 Parser.map ( RouteRoot, Cmd.none ) Parser.top
+                 Parser.map
+                    ( RouteRoot
+                    , resources params
+                        |> List.head
+                        |> Maybe.map
+                            (\p ->
+                                Nav.pushUrl params.key
+                                    (MountPath.path params.config.mountPath p)
+                            )
+                        |> Maybe.withDefault Cmd.none
+                    )
+                    Parser.top
 
                -- /posts/new
                , Parser.map (initNewForm params Nothing)
@@ -767,7 +778,7 @@ initDetail { client, key, config } tableName id =
 -- UTILS
 
 
-resources : Model f m msg -> List String
+resources : { a | client : Client, config : Config f m msg } -> List String
 resources { client, config } =
     if List.isEmpty config.tables then
         Dict.keys (Client.toSchema client) |> List.sort
