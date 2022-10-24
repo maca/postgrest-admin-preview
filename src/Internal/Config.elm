@@ -11,6 +11,8 @@ module Internal.Config exposing
     , hostDecoder
     , init
     , jwt
+    , menuLinks
+    , menuLinksDecoder
     , mountPath
     , mountPathDecoder
     , onAuthFailed
@@ -58,6 +60,8 @@ type alias Config flags model msg =
             )
     , detailActions : Dict String DetailActions
     , tables : List String
+    , menuLinks : List ( String, String )
+    , menuActions : Dict String Url
     , onLogin : String -> Cmd msg
     , onAuthFailed : String -> Cmd msg
     , onExternalLogin : (Login -> Login) -> Sub Login
@@ -233,6 +237,22 @@ tablesDecoder tableNames conf =
     Decode.succeed { conf | tables = tableNames }
 
 
+menuLinks :
+    List ( String, String )
+    -> Decoder (Config f m msg)
+    -> Decoder (Config f m msg)
+menuLinks links =
+    Decode.andThen (menuLinksDecoder links)
+
+
+menuLinksDecoder :
+    List ( String, String )
+    -> Config f m msg
+    -> Decoder (Config f m msg)
+menuLinksDecoder links conf =
+    Decode.succeed { conf | menuLinks = links }
+
+
 default : Config f m msg
 default =
     { authScheme = AuthScheme.unset
@@ -249,6 +269,8 @@ default =
     , application = Nothing
     , detailActions = Dict.empty
     , tables = []
+    , menuLinks = []
+    , menuActions = Dict.empty
     , onLogin = always Cmd.none
     , onAuthFailed = always Cmd.none
     , onExternalLogin = always Sub.none

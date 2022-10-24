@@ -5,6 +5,7 @@ module PostgRestAdmin.Config exposing
     , mountPath
     , formFields
     , detailActions
+    , menuLinks
     , tables
     , tableAliases
     , formAuth
@@ -36,6 +37,7 @@ module PostgRestAdmin.Config exposing
 @docs mountPath
 @docs formFields
 @docs detailActions
+@docs menuLinks
 
 
 # Tables
@@ -290,8 +292,8 @@ the forms.
             |> Config.formFields "posts" [ "id", "title", "content" ]
             |> PostgRestAdmin.application
 
-Alternatively this parameter can be configured using flags, configuring using
-`formFields`. Program flags take precedence.
+Alternatively this parameter can be configured passing the flag `formFields`.
+Program flags take precedence.
 
     Elm.Main.init({
         "flags" : { "formFields" : { "posts" : [ "id", "title", "content" ] } }
@@ -342,8 +344,7 @@ order of the left resources menu.
             |> Config.tables [ "posts", "comments" ]
             |> PostgRestAdmin.application
 
-Alternatively the host can be specified using flags, configuring using
-`tables`.
+Alternatively the host can be specified passing the flag `tables`.
 Program flags take precedence.
 
     Elm.Main.init({ "tables" : [ "posts", "comments" ]})
@@ -352,6 +353,30 @@ Program flags take precedence.
 tables : List String -> Config f m msg -> Config f m msg
 tables =
     Config.tables
+
+
+{-| Pass a dict of links to display in the side menu. The list consists of a
+tuples of the link text and a url.
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.menuLinks [ ( "Api Docs", "/api/docs" ) ]
+            |> PostgRestAdmin.application
+
+Alternatively the menu links can be specified passing the flag `menuLinks`.
+Program flags take precedence.
+
+    Elm.Main.init({
+        "menuLinks" : [
+             { text : "Api Docs", url : "/api/docs" }
+        ]
+    })
+
+-}
+menuLinks : List ( String, String ) -> Config f m msg -> Config f m msg
+menuLinks =
+    Config.menuLinks
 
 
 {-| Rename a table referenced in a foreign key. PostgREST OpenApi genreated docs

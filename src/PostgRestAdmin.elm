@@ -138,6 +138,7 @@ applicationParams decoder =
                 |> Flag.stringListDict "formFields" Config.formFieldsDecoder
                 |> Flag.stringList "tables" Config.tablesDecoder
                 |> Flag.stringDict "tableAliases" Config.tableAliasesDecoder
+                |> Flag.linksList "menuLinks" Config.menuLinksDecoder
             )
     , update = update
     , view = view
@@ -473,14 +474,13 @@ view model =
 
 
 sideMenu : Model f m msg -> Html (Msg f m msg)
-sideMenu model =
+sideMenu ({ config } as model) =
     div
         [ class "side-menu" ]
         [ aside
             [ class "resources-menu" ]
-            [ ul
-                []
-                (List.map (menuItem model.config.mountPath) (resources model))
+            [ ul [] (List.map (menuItem config.mountPath) (resources model))
+            , ul [] (List.map extraMenuItem config.menuLinks)
             ]
         , div
             [ class "account-management" ]
@@ -502,6 +502,16 @@ menuItem mountPath name =
         [ a
             [ href (path mountPath name) ]
             [ text (String.toTitleCase (String.humanize name)) ]
+        ]
+
+
+extraMenuItem : ( String, String ) -> Html (Msg f m msg)
+extraMenuItem ( linkText, url ) =
+    li
+        []
+        [ a
+            [ href url ]
+            [ text (String.toTitleCase linkText) ]
         ]
 
 

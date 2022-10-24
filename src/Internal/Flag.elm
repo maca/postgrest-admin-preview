@@ -1,5 +1,6 @@
 module Internal.Flag exposing
     ( custom
+    , linksList
     , string
     , stringDict
     , stringList
@@ -10,7 +11,7 @@ import Dict exposing (Dict)
 import Json.Decode as Decode exposing (Decoder)
 
 
-string : String -> (String -> c -> Decoder c) -> (Decoder c -> Decoder c)
+string : String -> (String -> c -> Decoder c) -> Decoder c -> Decoder c
 string =
     custom Decode.string
 
@@ -18,7 +19,8 @@ string =
 stringDict :
     String
     -> (Dict String String -> c -> Decoder c)
-    -> (Decoder c -> Decoder c)
+    -> Decoder c
+    -> Decoder c
 stringDict =
     custom (Decode.dict Decode.string)
 
@@ -26,7 +28,8 @@ stringDict =
 stringListDict :
     String
     -> (Dict String (List String) -> c -> Decoder c)
-    -> (Decoder c -> Decoder c)
+    -> Decoder c
+    -> Decoder c
 stringListDict =
     custom (Decode.dict (Decode.list Decode.string))
 
@@ -34,12 +37,28 @@ stringListDict =
 stringList :
     String
     -> (List String -> c -> Decoder c)
-    -> (Decoder c -> Decoder c)
+    -> Decoder c
+    -> Decoder c
 stringList =
     custom (Decode.list Decode.string)
 
 
-custom : Decoder a -> String -> (a -> c -> Decoder c) -> (Decoder c -> Decoder c)
+linksList :
+    String
+    -> (List ( String, String ) -> c -> Decoder c)
+    -> Decoder c
+    -> Decoder c
+linksList =
+    custom
+        (Decode.list
+            (Decode.map2 Tuple.pair
+                (Decode.field "text" Decode.string)
+                (Decode.field "url" Decode.string)
+            )
+        )
+
+
+custom : Decoder a -> String -> (a -> c -> Decoder c) -> Decoder c -> Decoder c
 custom decoder flagName updateFunc =
     Decode.andThen
         (\a ->
