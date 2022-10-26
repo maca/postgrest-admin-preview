@@ -75,7 +75,12 @@ import List.Extra as List
 import List.Split as List
 import Markdown
 import PostgRestAdmin.Client as Client exposing (Client, Collection)
-import PostgRestAdmin.MountPath exposing (MountPath, breadcrumbs, path)
+import PostgRestAdmin.MountPath as MountPath
+    exposing
+        ( MountPath
+        , breadcrumbs
+        , path
+        )
 import PostgRestAdmin.Notification as Notification
 import PostgRestAdmin.Record as Record exposing (Record)
 import Postgrest.Client as PG
@@ -325,6 +330,7 @@ update msg listing =
             ( listing
             , listing
                 |> listingPath { limit = False, selectAll = True, nest = True }
+                |> MountPath.path listing.mountPath
                 |> Nav.replaceUrl listing.key
                 |> AppCmd.wrap
             )
