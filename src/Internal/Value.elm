@@ -127,7 +127,7 @@ updateWithString string value =
                     PBool (Just False)
 
                 _ ->
-                    PBool (Maybe.map not prev)
+                    PBool (Maybe.map not prev |> Maybe.withDefault True |> Just)
 
         PTime _ ->
             let
