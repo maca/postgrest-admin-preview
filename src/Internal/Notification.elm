@@ -12,6 +12,7 @@ module Internal.Notification exposing
 import Html exposing (Html, div, i, pre, text)
 import Html.Attributes exposing (class)
 import Html.Events exposing (onClick)
+import Process
 import Task exposing (Task)
 
 
@@ -47,17 +48,20 @@ dismiss =
     Task.succeed Dismiss
 
 
-update : Msg -> Notification
+update : Msg -> ( Notification, Cmd Msg )
 update msg =
     case msg of
         Confirm message ->
-            Confirmation message
+            ( Confirmation message
+            , Process.sleep 5000
+                |> Task.perform (always Dismiss)
+            )
 
         Alert message ->
-            Error message
+            ( Error message, Cmd.none )
 
         Dismiss ->
-            None
+            ( None, Cmd.none )
 
 
 view : Notification -> Html Msg

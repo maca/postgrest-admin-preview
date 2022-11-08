@@ -354,15 +354,23 @@ update msg model =
             )
 
         NotificationChanged childMsg ->
-            ( { model | notification = Notification.update childMsg }
-            , Cmd.none
+            let
+                ( notification, cmd ) =
+                    Notification.update childMsg
+            in
+            ( { model | notification = notification }
+            , Cmd.map NotificationChanged cmd
             )
 
         LinkClicked urlRequest ->
             case urlRequest of
                 Browser.Internal url ->
                     ( model
-                    , Nav.pushUrl model.key (Url.toString url)
+                    , Cmd.batch
+                        [ Nav.pushUrl model.key (Url.toString url)
+                        , Notification.dismiss
+                            |> Task.perform NotificationChanged
+                        ]
                     )
 
                 Browser.External href ->

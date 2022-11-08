@@ -71,7 +71,7 @@ path mountPath segment =
             String.join "/" [ "", m, removeLeadingOrTrailingSlash segment ]
 
         Blank ->
-            segment
+            "/" ++ removeLeadingOrTrailingSlash segment
 
 
 {-| Html breadcrumbs for a path prepended by the endpoint.
