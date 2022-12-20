@@ -46,12 +46,12 @@ format download =
 
 fetch : Client -> Download -> Task Error Download
 fetch client download =
-    case Client.toJwtString client of
-        Just token ->
+    case Client.authHeader client of
+        Just authHeader ->
             Http.task
                 { method = "GET"
                 , headers =
-                    [ header "Bearer" token
+                    [ authHeader
                     , case format download of
                         CSV ->
                             header "Accept" "text/csv"
