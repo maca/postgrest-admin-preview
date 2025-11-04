@@ -12,7 +12,9 @@
         pkgs = nixpkgs.legacyPackages.${system};
       in
       let
-        postgresql = pkgs.postgresql_17;
+        postgresql = pkgs.postgresql_17.withPackages (ps: [
+          ps.pgjwt
+        ]);
 
         setup = pkgs.writeShellScriptBin "setup" ''
           echo "Setting up database..."
@@ -58,12 +60,19 @@
             echo "Database 'example' already exists"
           fi
 
-          # Load dump
-          echo "Loading database from database/dump.sql..."
+          # Load schema
+          echo "Loading database schema from database/schema.sql..."
           ${postgresql}/bin/psql \
             --host="$PGHOST" \
             -d example \
-            -f "$PWD/database/dump.sql"
+            -f "$PWD/database/schema.sql"
+
+          # Load data
+          echo "Loading sample data from database/data.sql..."
+          ${postgresql}/bin/psql \
+            --host="$PGHOST" \
+            -d example \
+            -f "$PWD/database/data.sql"
           echo "Database loaded successfully"
 
           # Stop PostgreSQL if we started it
@@ -155,6 +164,9 @@
           # Remove existing socket if it exists
           rm -f /tmp/postgrest-example.sock
 
+          # Set PGRST_DB_URI environment variable to override db-uri in config
+          export PGRST_DB_URI="postgres:///?host=$PWD/database/pgdata&dbname=example"
+
           ${pkgs.postgrest}/bin/postgrest $PWD/postgrest.conf &
           POSTGREST_PID=$!
 
@@ -179,8 +191,12 @@
           export PGHOST=$PWD/database/pgdata
           export PGDATABASE=example
 
-          echo "Loading database from database/dump.sql..."
-          ${postgresql}/bin/psql --host="$PGHOST" -d example -f "$PWD/database/dump.sql"
+          echo "Loading database schema from database/schema.sql..."
+          ${postgresql}/bin/psql --host="$PGHOST" -d example -f "$PWD/database/schema.sql"
+
+          echo "Loading sample data from database/data.sql..."
+          ${postgresql}/bin/psql --host="$PGHOST" -d example -f "$PWD/database/data.sql"
+
           echo "Database loaded successfully"
         '';
 
@@ -286,6 +302,27 @@
 
           echo "All services stopped"
         '';
+
+        clean = pkgs.writeShellScriptBin "clean" ''
+          echo "Cleaning database..."
+
+          export PGDATA=$PWD/database/pgdata
+
+          # Stop services first
+          stop
+
+          # Remove PostgreSQL data directory
+          if [ -d "$PGDATA" ]; then
+            echo "Removing PostgreSQL data directory..."
+            rm -rf "$PGDATA"
+            echo "Database cleaned successfully"
+          else
+            echo "Database directory does not exist"
+          fi
+
+          echo ""
+          echo "Run 'setup' to reinitialize the database"
+        '';
       in
       {
         devShells.default = pkgs.mkShell {
@@ -302,6 +339,7 @@
             load-dump
             database
             stop
+            clean
           ];
 
           shellHook = ''
@@ -321,6 +359,7 @@
             echo "  run-postgres    - Start PostgreSQL service only"
             echo "  run-postgrest   - Start PostgREST service only"
             echo "  stop            - Stop all services"
+            echo "  clean           - Remove database and start fresh"
             echo "  database        - Open database shell (psql)"
             echo "  load-dump       - Reload dump.sql into database"
           '';
