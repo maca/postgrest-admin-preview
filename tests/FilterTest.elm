@@ -11,6 +11,7 @@ import Internal.Schema as Table
         , Table
         )
 import Internal.Value exposing (Value(..))
+import Json.Decode
 import Test exposing (..)
 
 
@@ -196,13 +197,24 @@ suite =
 
 table : Table
 table =
-    Dict.fromList
-        [ ( "float", Column False <| PFloat Nothing )
-        , ( "int", Column False <| PInt Nothing )
-        , ( "string", Column False <| PInt Nothing )
-        , ( "text", Column False <| PText Nothing )
-        , ( "enum", Column False <| PEnum Nothing [] )
-        , ( "bool", Column False <| PBool Nothing )
-        , ( "time", Column False <| PTime Nothing )
-        , ( "date", Column False <| PDate Nothing )
-        ]
+    let
+        column val =
+            { constraint = Table.NoConstraint
+            , required = False
+            , value = val
+            , decoder = Json.Decode.succeed val
+            }
+    in
+    { name = "test_table"
+    , columns =
+        Dict.fromList
+            [ ( "float", column <| PFloat Nothing )
+            , ( "int", column <| PInt Nothing )
+            , ( "string", column <| PInt Nothing )
+            , ( "text", column <| PText Nothing )
+            , ( "enum", column <| PEnum Nothing [] )
+            , ( "bool", column <| PBool Nothing )
+            , ( "time", column <| PTime Nothing )
+            , ( "date", column <| PDate Nothing )
+            ]
+    }
