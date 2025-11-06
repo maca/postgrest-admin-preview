@@ -28,9 +28,8 @@ module Internal.Config exposing
 
 import Dict exposing (Dict)
 import Internal.Application as Application
-import Internal.AuthScheme as AuthScheme exposing (AuthScheme)
+import Internal.Client as Client exposing (AuthScheme)
 import Internal.Flag as Flag
-import Internal.FormAuth as FormAuth exposing (FormAuth)
 import Json.Decode as Decode exposing (Decoder)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath)
 import PostgRestAdmin.Record exposing (Record)
@@ -100,19 +99,19 @@ mountPathDecoder p conf =
 
 
 formAuth :
-    Decoder FormAuth
+    Decoder AuthScheme
     -> Decoder (Config f m msg)
     -> Decoder (Config f m msg)
 formAuth authDecoder =
-    Decode.map2 (\auth conf -> { conf | authScheme = AuthScheme.basic auth })
-        (Flag.string "authUrl" FormAuth.authUrlDecoder authDecoder)
+    Decode.map2 (\auth conf -> { conf | authScheme = Client.basic auth })
+        (Flag.string "authUrl" Client.authUrlDecoder authDecoder)
 
 
 jwt : String -> Decoder (Config f m msg) -> Decoder (Config f m msg)
 jwt tokenStr =
     Decode.andThen
         (\conf ->
-            Decode.succeed { conf | authScheme = AuthScheme.jwt tokenStr }
+            Decode.succeed { conf | authScheme = Client.jwt tokenStr }
         )
 
 
@@ -255,7 +254,7 @@ menuLinksDecoder links conf =
 
 default : Config f m msg
 default =
-    { authScheme = AuthScheme.unset
+    { authScheme = Client.unset
     , host =
         { protocol = Http
         , host = "localhost"

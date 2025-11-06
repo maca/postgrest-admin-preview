@@ -2,3 +2,4 @@ elm-stuff
 /.gtm/
 /build/
 node_modules
+.DS_Store

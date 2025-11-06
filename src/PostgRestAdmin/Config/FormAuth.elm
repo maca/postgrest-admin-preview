@@ -42,7 +42,7 @@ to get a better understanding of JWT and roles in PostgREST.
 -}
 
 import Dict exposing (Dict)
-import Internal.FormAuth as FormAuth
+import Internal.Client as Client
 import Json.Decode exposing (Decoder)
 import Json.Encode exposing (Value)
 
@@ -50,14 +50,14 @@ import Json.Encode exposing (Value)
 {-| Basic authentication configuration.
 -}
 type alias FormAuth =
-    Decoder FormAuth.FormAuth
+    Decoder Client.AuthScheme
 
 
 {-| Create a authentication configuration.
 -}
 config : FormAuth
 config =
-    FormAuth.config
+    Client.authSchemeConfig
 
 
 {-| Set authentication request login url. Credentials are to be exchanged for a
@@ -75,7 +75,7 @@ Alternatively the host can be specified using flags, configuring using
 -}
 authUrl : String -> FormAuth -> FormAuth
 authUrl =
-    FormAuth.authUrl
+    Client.authUrl
 
 
 {-| Override the credentials JSON encoder to be used when posting to the login
@@ -97,7 +97,7 @@ encoder :
     -> FormAuth
     -> FormAuth
 encoder =
-    FormAuth.encoder
+    Client.encoder
 
 
 {-| Override the JSON decoder used to obtain the JWT from the login response.
@@ -107,4 +107,4 @@ encoder =
 -}
 decoder : Decoder String -> FormAuth -> FormAuth
 decoder =
-    FormAuth.decoder
+    Client.decoder

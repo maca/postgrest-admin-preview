@@ -2,15 +2,15 @@ module FilterTest exposing (suite)
 
 import Dict
 import Expect exposing (Expectation)
-import Filter exposing (..)
 import Fuzz exposing (Fuzzer, int, list, string)
-import PostgRest.Client as PG
-import PostgRest.Schema.Table as Table
+import Internal.Client as PG
+import Internal.Filter as Filter exposing (..)
+import Internal.Schema as Table
     exposing
-        ( Column(..)
+        ( Column
         , Table
         )
-import PostgRest.Value exposing (Value(..))
+import Internal.Value exposing (Value(..))
 import Test exposing (..)
 
 

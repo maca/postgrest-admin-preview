@@ -17,9 +17,9 @@ module PostgRestAdmin exposing
 import Browser
 import Browser.Navigation as Nav
 import Dict
-import Html exposing (Html, a, aside, button, div, h1, i, li, pre, text, ul)
-import Html.Attributes exposing (class, href)
-import Html.Events exposing (onClick)
+import Html exposing (Html)
+import Html.Attributes as Attrs
+import Html.Events as Events
 import Inflect as String
 import Internal.Application as Application exposing (Application(..), Params)
 import Internal.Client as Client
@@ -46,16 +46,26 @@ import Url.Parser as Parser exposing ((</>), Parser, s)
 PostgRestAdmin program.
 -}
 type alias Program flags model msg =
-    Platform.Program Decode.Value (Model flags model msg) (Msg flags model msg)
+    Platform.Program
+        Decode.Value
+        (Model flags model msg)
+        (Msg flags model msg)
 
 
-type alias Params f m msg =
+type alias AppParams f m msg =
     { init : Value -> Url.Url -> Nav.Key -> ( Model f m msg, Cmd (Msg f m msg) )
     , view : Model f m msg -> Browser.Document (Msg f m msg)
     , update : Msg f m msg -> Model f m msg -> ( Model f m msg, Cmd (Msg f m msg) )
     , subscriptions : Model f m msg -> Sub (Msg f m msg)
     , onUrlRequest : Browser.UrlRequest -> Msg f m msg
     , onUrlChange : Url -> Msg f m msg
+    }
+
+
+type alias InitParams f m msg =
+    { client : Client
+    , key : Nav.Key
+    , config : Config f m msg
     }
 
 
@@ -70,13 +80,6 @@ type alias Model f m msg =
     , mountedAppFlags : Result Decode.Error f
     , config : Config f m msg
     , attemptedPath : String
-    }
-
-
-type alias InitParams f m msg =
-    { client : Client
-    , key : Nav.Key
-    , config : Config f m msg
     }
 
 
@@ -128,7 +131,7 @@ application decoder =
     Browser.application (applicationParams decoder)
 
 
-applicationParams : Decoder (Config f m msg) -> Params f m msg
+applicationParams : Decoder (Config f m msg) -> AppParams f m msg
 applicationParams decoder =
     { init =
         init
@@ -277,7 +280,7 @@ update msg model =
                 )
 
             else
-                ( model
+                ( { model | client = client, route = route }
                 , model.config.onAuthFailed model.attemptedPath
                     |> Cmd.map (always NoOp)
                 )
@@ -456,26 +459,26 @@ view model =
     , body =
         case model.error of
             Just error ->
-                [ h1 [] [ text "Init failed" ]
-                , pre
-                    [ class "parse-errors" ]
-                    [ text (errorToString error) ]
+                [ Html.h1 [] [ Html.text "Init failed" ]
+                , Html.pre
+                    [ Attrs.class "parse-errors" ]
+                    [ Html.text (errorToString error) ]
                 ]
 
             Nothing ->
-                [ div
+                [ Html.div
                     []
-                    [ div
-                        [ class "main-container" ]
+                    [ Html.div
+                        [ Attrs.class "main-container" ]
                         [ sideMenu model
-                        , div
-                            [ class "main-area" ]
+                        , Html.div
+                            [ Attrs.class "main-area" ]
                             [ Notification.view model.notification
                                 |> Html.map NotificationChanged
                             , mainContent model
                             ]
                         ]
-                    , Html.map ClientChanged (Client.view model.client)
+                    , Html.map ClientChanged (Client.viewAuthForm model.client)
                     ]
                 ]
     }
@@ -483,21 +486,21 @@ view model =
 
 sideMenu : Model f m msg -> Html (Msg f m msg)
 sideMenu ({ config } as model) =
-    div
-        [ class "side-menu" ]
-        [ aside
-            [ class "resources-menu" ]
-            [ ul [] (List.map (menuItem config.mountPath) (resources model))
-            , ul [] (List.map extraMenuItem config.menuLinks)
+    Html.div
+        [ Attrs.class "side-menu" ]
+        [ Html.aside
+            [ Attrs.class "resources-menu" ]
+            [ Html.ul [] (List.map (menuItem config.mountPath) (resources model))
+            , Html.ul [] (List.map extraMenuItem config.menuLinks)
             ]
-        , div
-            [ class "account-management" ]
-            [ button
-                [ onClick LoggedOut
-                , class "button button-clear"
+        , Html.div
+            [ Attrs.class "account-management" ]
+            [ Html.button
+                [ Events.onClick LoggedOut
+                , Attrs.class "button button-clear"
                 ]
-                [ i [ class "gg-log-out" ] []
-                , text "Logout"
+                [ Html.i [ Attrs.class "gg-log-out" ] []
+                , Html.text "Logout"
                 ]
             ]
         ]
@@ -505,21 +508,21 @@ sideMenu ({ config } as model) =
 
 menuItem : MountPath -> String -> Html (Msg f m msg)
 menuItem mountPath name =
-    li
+    Html.li
         []
-        [ a
-            [ href (path mountPath name) ]
-            [ text (String.toTitleCase (String.humanize name)) ]
+        [ Html.a
+            [ Attrs.href (path mountPath name) ]
+            [ Html.text (String.toTitleCase (String.humanize name)) ]
         ]
 
 
 extraMenuItem : ( String, String ) -> Html (Msg f m msg)
 extraMenuItem ( linkText, url ) =
-    li
+    Html.li
         []
-        [ a
-            [ href url ]
-            [ text (String.toTitleCase linkText) ]
+        [ Html.a
+            [ Attrs.href url ]
+            [ Html.text (String.toTitleCase linkText) ]
         ]
 
 
@@ -527,7 +530,7 @@ mainContent : Model f m msg -> Html (Msg f m msg)
 mainContent model =
     case model.route of
         RouteRoot ->
-            text ""
+            Html.text ""
 
         RouteLoadingSchema _ ->
             loading
@@ -547,7 +550,9 @@ mainContent model =
                     Html.map PageApplicationChanged (program.view childModel)
 
                 DecodeFailed err ->
-                    pre [ class "error" ] [ text (Decode.errorToString err) ]
+                    Html.pre
+                        [ Attrs.class "error" ]
+                        [ Html.text (Decode.errorToString err) ]
 
                 None ->
                     notFound
@@ -558,12 +563,12 @@ mainContent model =
 
 notFound : Html (Msg f m msg)
 notFound =
-    text "Not found"
+    Html.text "Not found"
 
 
 loading : Html (Msg f m msg)
 loading =
-    text ""
+    Html.text ""
 
 
 
@@ -799,7 +804,7 @@ initDetail { client, key, config } tableName id =
 resources : { a | client : Client, config : Config f m msg } -> List String
 resources { client, config } =
     if List.isEmpty config.tables then
-        Dict.keys (Client.toSchema client) |> List.sort
+        Dict.keys client.schema |> List.sort
 
     else
         config.tables

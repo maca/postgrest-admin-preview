@@ -1,28 +1,11 @@
 module PostgRestAdmin.Client exposing
     ( Client
-    , toHostUrl
-    , Table
-    , getTable
-    , tableName
-    , fetchRecord
-    , fetchRecordList
-    , saveRecord
-    , deleteRecord
-    , request
-    , requestMany
-    , Collection
-    , Error
-    , errorToString
-    , oneResolver
-    , manyResolver
-    , noneResolver
-    , task
-    , attempt
-    , decodeOne
-    , decodeMany
-    , isAuthenticated
-    , toJwtString
-    , authHeader
+    , Table, getTable, tableName
+    , fetchRecord, fetchRecordList, saveRecord, deleteRecord, request, requestMany, Collection
+    , Error, errorToString
+    , oneResolver, manyResolver, noneResolver
+    , task, attempt, decodeOne, decodeMany
+    , isAuthenticated, toJwtString, authHeader
     )
 
 {-|
@@ -31,14 +14,11 @@ module PostgRestAdmin.Client exposing
 # Client
 
 @docs Client
-@docs toHostUrl
 
 
 # Table
 
-@docs Table
-@docs getTable
-@docs tableName
+@docs Table, getTable, tableName
 
 
 # Requests
@@ -47,33 +27,27 @@ Note that the request functions **do not produce a vanilla Elm
 [Cmd](https://package.elm-lang.org/packages/elm/core/latest/Platform-Cmd#Cmd)**
 but a [PostgRestAdmin.Cmd](PostgRestAdmin.Cmd).
 
-@docs fetchRecord
-@docs fetchRecordList
-@docs saveRecord
-@docs deleteRecord
-@docs request
-@docs requestMany
-@docs Collection
+@docs fetchRecord, fetchRecordList, saveRecord, deleteRecord, request, requestMany, Collection
 
-@docs Error
-@docs errorToString
 
-@docs oneResolver
+# Errors
 
-@docs manyResolver
-@docs noneResolver
+@docs Error, errorToString
 
-@docs task
-@docs attempt
-@docs decodeOne
-@docs decodeMany
+
+# Resolvers
+
+@docs oneResolver, manyResolver, noneResolver
+
+
+# Tasks
+
+@docs task, attempt, decodeOne, decodeMany
 
 
 # Authentication
 
-@docs isAuthenticated
-@docs toJwtString
-@docs authHeader
+@docs isAuthenticated, toJwtString, authHeader
 
 -}
 
@@ -138,13 +112,6 @@ type alias Count =
     , to : Int
     , total : Int
     }
-
-
-{-| Obtain the PostgREST instance url.
--}
-toHostUrl : Client -> Url
-toHostUrl =
-    Client.toHostUrl
 
 
 {-| Does the client has a valid JWT?
