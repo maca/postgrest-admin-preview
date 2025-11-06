@@ -26,7 +26,15 @@
     <script type="text/javascript">
       // Elm app init
       const app = Elm.Main.init({
-        flags: { host: "http://localhost:9080" }
+        flags: {
+           host: "http://localhost:9080",
+           jwt: sessionStorage.getItem("jwt")
+         }
       })
+
+      app.ports.loginSuccess.subscribe(jwt => {
+        console.log("got token: " jwt)
+        sessionStorage.setItem("jwt", jwt)
+      });
     </script>
 <body>
