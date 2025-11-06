@@ -66,6 +66,10 @@ GRANT USAGE, SELECT ON SEQUENCE products_id_seq TO web_anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON products TO web_user;
 GRANT USAGE, SELECT ON SEQUENCE products_id_seq TO web_user;
 
+
+
+
+
 -- Login function that validates credentials and returns a JWT
 -- Usage: POST to /rpc/login with body: {"email": "user@example.com", "password": "password"}
 CREATE OR REPLACE FUNCTION login(email text, password text)
@@ -78,12 +82,17 @@ BEGIN
   SELECT * INTO _user FROM users WHERE users.email = login.email;
 
   -- Check if user exists and password is correct
+  -- Using SQLSTATE 'PGRST' with proper JSON format for 401 status code
   IF _user.id IS NULL THEN
-    RAISE EXCEPTION 'Invalid email or password';
+    RAISE SQLSTATE 'PGRST' USING
+      message = '{"code": "PGRST401", "message": "Invalid email or password", "details": "Authentication failed", "hint": "Please check your credentials"}',
+      detail = '{"status": 401, "headers": {}}';
   END IF;
 
   IF _user.password != crypt(login.password, _user.password) THEN
-    RAISE EXCEPTION 'Invalid email or password';
+    RAISE SQLSTATE 'PGRST' USING
+      message = '{"code": "PGRST401", "message": "Invalid email or password", "details": "Authentication failed", "hint": "Please check your credentials"}',
+      detail = '{"status": 401, "headers": {}}';
   END IF;
 
   -- Generate JWT token using HS256 with hardcoded secret (must match jwt-secret in postgrest.conf)
@@ -106,6 +115,10 @@ BEGIN
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+
+
+
 
 -- Grant execute permission to web_anon so unauthenticated users can login
 GRANT EXECUTE ON FUNCTION login(text, text) TO web_anon;

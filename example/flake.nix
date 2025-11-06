@@ -191,6 +191,22 @@
           export PGHOST=$PWD/database/pgdata
           export PGDATABASE=example
 
+          # Check if database is initialized
+          if [ ! -f "$PGDATA/PG_VERSION" ]; then
+            echo "Error: Database not initialized. Run 'setup' first."
+            exit 1
+          fi
+
+          # Check if PostgreSQL is running, start temporarily if not
+          STARTED_POSTGRES=false
+          if ! ${postgresql}/bin/pg_ctl -D "$PGDATA" status > /dev/null 2>&1; then
+            echo "PostgreSQL is not running, starting it temporarily..."
+            run-postgres &
+            POSTGRES_PID=$!
+            sleep 5
+            STARTED_POSTGRES=true
+          fi
+
           echo "Loading database schema from database/schema.sql..."
           ${postgresql}/bin/psql --host="$PGHOST" -d example -f "$PWD/database/schema.sql"
 
@@ -198,6 +214,16 @@
           ${postgresql}/bin/psql --host="$PGHOST" -d example -f "$PWD/database/data.sql"
 
           echo "Database loaded successfully"
+
+          # Stop PostgreSQL if we started it
+          if [ "$STARTED_POSTGRES" = true ]; then
+            echo "Stopping temporary PostgreSQL instance..."
+            if [ -n "$POSTGRES_PID" ] && kill -0 "$POSTGRES_PID" 2>/dev/null; then
+              kill "$POSTGRES_PID" 2>/dev/null
+              wait "$POSTGRES_PID" 2>/dev/null
+            fi
+            ${postgresql}/bin/pg_ctl -D "$PGDATA" stop -m fast 2>/dev/null || true
+          fi
         '';
 
         database = pkgs.writeShellScriptBin "database" ''
