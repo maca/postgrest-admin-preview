@@ -3,10 +3,10 @@ module Internal.Client exposing
     , init
     , toJwtString, getTable
     , isAuthenticated, schemaIsLoaded
-    , updateJwt, clearJwt, logout, authFailed
+    , updateJwt, logout, authFailed
     , authSchemeConfig, basic, jwt, unset, authUrl, authUrlDecoder, encoder, decoder
     , task, authHeader, endpoint, fetchSchema
-    , listableColumns, listingSelects, selects
+    , listableColumns, listingSelects
     , AuthForm, AuthFormStatus(..)
     , requestToken, form
     )
@@ -17,17 +17,16 @@ module Internal.Client exposing
 @docs init
 @docs toJwtString, getTable
 @docs isAuthenticated, schemaIsLoaded
-@docs updateJwt, clearJwt, logout, authFailed
+@docs updateJwt, logout, authFailed
 @docs authSchemeConfig, basic, jwt, unset, authUrl, authUrlDecoder, encoder, decoder
 @docs task, authHeader, endpoint, fetchSchema
-@docs listableColumns, listingSelects, selects
+@docs listableColumns, listingSelects
 @docs AuthForm, AuthFormStatus
 @docs requestToken, form
 
 -}
 
 import Dict exposing (Dict)
-import Dict.Extra as Dict
 import FormToolkit.Field as Field
 import FormToolkit.Parse as Parse
 import Http exposing (header)
@@ -100,6 +99,7 @@ type alias Client =
     , authScheme : AuthScheme
     , schema : Schema
     }
+
 
 
 -- AUTH CONFIG
@@ -188,21 +188,20 @@ authUrlDecoder urlStr authScheme =
 
 encoder : (Dict String String -> Encode.Value) -> Decoder AuthScheme -> Decoder AuthScheme
 encoder authEncoder =
-    Decode.andThen
+    Decode.map
         (\authScheme ->
             case authScheme of
                 FormAuth data ->
                     FormAuth { data | encoder = authEncoder }
-                        |> Decode.succeed
 
                 _ ->
-                    Decode.succeed authScheme
+                    authScheme
         )
 
 
 decoder : Decoder String -> Decoder AuthScheme -> Decoder AuthScheme
 decoder jwtDecoder =
-    Decode.andThen
+    Decode.map
         (\authScheme ->
             case authScheme of
                 FormAuth data ->
@@ -210,10 +209,9 @@ decoder jwtDecoder =
                         { data
                             | decoder = Decode.map (PG.jwt >> Token) jwtDecoder
                         }
-                        |> Decode.succeed
 
                 _ ->
-                    Decode.succeed authScheme
+                    authScheme
         )
 
 
@@ -259,7 +257,7 @@ failAuthScheme authScheme =
 
 schemaIsLoaded : Client -> Bool
 schemaIsLoaded { schema } =
-    not (schema == Dict.empty)
+    not (Dict.isEmpty schema)
 
 
 toJwtString : Client -> Maybe String

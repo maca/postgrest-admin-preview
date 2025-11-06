@@ -32,16 +32,14 @@ import Http exposing (header)
 import Internal.Cmd as AppCmd
 import Internal.Config exposing (DetailActions)
 import Internal.Field as Field exposing (Field)
-import Internal.Http exposing (Error(..))
+import Internal.Http exposing (Error)
 import Internal.Record as Record exposing (Record)
-import Internal.Schema exposing (Constraint(..), Reference, Table)
-import Internal.Value exposing (Value(..))
+import Internal.Schema exposing (Reference, Table)
 import Json.Decode as Decode
 import PostgRestAdmin.Client as Client exposing (Client, Collection)
 import PostgRestAdmin.MountPath exposing (MountPath, breadcrumbs, path)
 import PostgRestAdmin.Notification as Notification
 import String.Extra as String
-import Url
 import Url.Builder as Url exposing (QueryParameter, string)
 
 
@@ -196,15 +194,15 @@ update msg params =
 
 view : PageDetail -> Html Msg
 view params =
-    let
-        tableName =
-            params.table.name
-    in
     case params.record of
         Nothing ->
             text ""
 
         Just record ->
+            let
+                tableName =
+                    params.table.name
+            in
             section
                 [ class "record-detail" ]
                 [ breadcrumbs params.mountPath

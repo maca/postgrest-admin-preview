@@ -134,13 +134,14 @@ toPGQuery name op =
 
         NoneOf enum ->
             let
-                choices =
-                    Operand.choices enum
-
                 chosen =
                     Operand.chosen enum
             in
             if Set.isEmpty chosen then
+                let
+                    choices =
+                        Operand.choices enum
+                in
                 param <| PG.inList PG.string choices
 
             else

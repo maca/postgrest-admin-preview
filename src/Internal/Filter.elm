@@ -37,7 +37,7 @@ module Internal.Filter exposing
 
 import Basics.Extra exposing (flip)
 import Dict
-import Internal.Filter.Operand as Operand exposing (Operand(..))
+import Internal.Filter.Operand as Operand exposing (Operand)
 import Internal.Filter.Operation as Operation exposing (Operation(..))
 import Internal.Filter.Parser as FilterParser
 import Internal.Schema exposing (Column, Table)

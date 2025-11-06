@@ -10,7 +10,6 @@ module Internal.Value exposing
 import Iso8601
 import Json.Decode as Decode
 import Json.Encode as Encode
-import Maybe.Extra as Maybe
 import String.Extra as String
 import Time
 

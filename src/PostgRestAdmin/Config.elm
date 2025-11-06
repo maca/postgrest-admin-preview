@@ -73,7 +73,6 @@ import PostgRestAdmin.Client exposing (Client)
 import PostgRestAdmin.Config.FormAuth exposing (FormAuth)
 import PostgRestAdmin.MountPath exposing (MountPath)
 import PostgRestAdmin.Record exposing (Record)
-import Url exposing (Protocol(..))
 import Url.Parser exposing (Parser)
 
 

@@ -2,10 +2,8 @@ module Internal.Input exposing
     ( Input(..)
     , Msg
     , fromField
-    , isRequired
     , toField
     , toHtml
-    , toValue
     , update
     )
 
@@ -29,7 +27,7 @@ import Html.Attributes
 import Html.Events exposing (onInput)
 import Internal.Cmd as AppCmd
 import Internal.Field as Field exposing (Field)
-import Internal.Http exposing (Error(..))
+import Internal.Http exposing (Error)
 import Internal.Record as Record exposing (Record)
 import Internal.Schema exposing (Constraint(..), ForeignKeyParams)
 import Internal.Value as Value exposing (Value(..))
@@ -278,11 +276,6 @@ fromFieldWithValue field =
 
         Unknown _ ->
             Blank field
-
-
-toValue : Input -> Value
-toValue input =
-    .value <| toField input
 
 
 isRequired : Input -> Bool

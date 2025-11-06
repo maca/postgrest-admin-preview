@@ -20,7 +20,6 @@ type Error
     | RequestError String
     | ExpectedRecord
     | ExpectedRecordList
-    | NoError
     | AuthError
 
 
@@ -118,9 +117,6 @@ errorToString error =
 
         ExpectedRecordList ->
             "Expected a list of records"
-
-        NoError ->
-            "No Error"
 
         AuthError ->
             "There was an error authorising your credentials."

@@ -109,9 +109,9 @@ formAuth authDecoder =
 
 jwt : String -> Decoder (Config f m msg) -> Decoder (Config f m msg)
 jwt tokenStr =
-    Decode.andThen
+    Decode.map
         (\conf ->
-            Decode.succeed { conf | authScheme = Client.jwt tokenStr }
+            { conf | authScheme = Client.jwt tokenStr }
         )
 
 
@@ -120,8 +120,8 @@ onLogin :
     -> Decoder (Config f m msg)
     -> Decoder (Config f m msg)
 onLogin f =
-    Decode.andThen
-        (\conf -> Decode.succeed { conf | onLogin = f })
+    Decode.map
+        (\conf -> { conf | onLogin = f })
 
 
 onLogout :
@@ -129,8 +129,8 @@ onLogout :
     -> Decoder (Config f m msg)
     -> Decoder (Config f m msg)
 onLogout f =
-    Decode.andThen
-        (\conf -> Decode.succeed { conf | onLogout = f })
+    Decode.map
+        (\conf -> { conf | onLogout = f })
 
 
 onAuthFailed :
@@ -138,8 +138,8 @@ onAuthFailed :
     -> Decoder (Config f m msg)
     -> Decoder (Config f m msg)
 onAuthFailed f =
-    Decode.andThen
-        (\conf -> Decode.succeed { conf | onAuthFailed = f })
+    Decode.map
+        (\conf -> { conf | onAuthFailed = f })
 
 
 onExternalLogin :
@@ -147,8 +147,8 @@ onExternalLogin :
     -> Decoder (Config f m msg)
     -> Decoder (Config f m msg)
 onExternalLogin sub =
-    Decode.andThen
-        (\conf -> Decode.succeed { conf | onExternalLogin = sub })
+    Decode.map
+        (\conf -> { conf | onExternalLogin = sub })
 
 
 formFields :
@@ -157,12 +157,11 @@ formFields :
     -> Decoder (Config f m msg)
     -> Decoder (Config f m msg)
 formFields tableName fields =
-    Decode.andThen
+    Decode.map
         (\conf ->
-            Decode.succeed
-                { conf
-                    | formFields = Dict.insert tableName fields conf.formFields
-                }
+            { conf
+                | formFields = Dict.insert tableName fields conf.formFields
+            }
         )
 
 
@@ -179,7 +178,7 @@ tableAliases :
     -> Decoder (Config f m msg)
     -> Decoder (Config f m msg)
 tableAliases aliases =
-    Decode.andThen (\conf -> Decode.succeed { conf | tableAliases = aliases })
+    Decode.map (\conf -> { conf | tableAliases = aliases })
 
 
 tableAliasesDecoder :
@@ -196,13 +195,12 @@ detailActions :
     -> Decoder (Config f m msg)
     -> Decoder (Config f m msg)
 detailActions tableName actions =
-    Decode.andThen
+    Decode.map
         (\conf ->
-            Decode.succeed
-                { conf
-                    | detailActions =
-                        Dict.insert tableName actions conf.detailActions
-                }
+            { conf
+                | detailActions =
+                    Dict.insert tableName actions conf.detailActions
+            }
         )
 
 
@@ -212,9 +210,9 @@ routes :
     -> Decoder (Config f m msg)
     -> Decoder (Config f m msg)
 routes program parser =
-    Decode.andThen
+    Decode.map
         (\conf ->
-            Decode.succeed { conf | application = Just ( program, parser ) }
+            { conf | application = Just ( program, parser ) }
         )
 
 
@@ -223,7 +221,7 @@ flagsDecoder :
     -> Decoder (Config f m msg)
     -> Decoder (Config f m msg)
 flagsDecoder decoder =
-    Decode.andThen (\conf -> Decode.succeed { conf | flagsDecoder = decoder })
+    Decode.map (\conf -> { conf | flagsDecoder = decoder })
 
 
 tables : List String -> Decoder (Config f m msg) -> Decoder (Config f m msg)

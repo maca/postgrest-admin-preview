@@ -1,6 +1,5 @@
 module Internal.Flag exposing
-    ( custom
-    , linksList
+    ( linksList
     , string
     , stringDict
     , stringList

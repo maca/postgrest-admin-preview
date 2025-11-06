@@ -55,8 +55,7 @@ import Html.Attributes
         )
 import Html.Events as Events
     exposing
-        ( on
-        , onClick
+        ( onClick
         )
 import Http
 import Inflect
@@ -64,7 +63,7 @@ import Internal.Client exposing (endpoint, listableColumns, listingSelects)
 import Internal.Cmd as AppCmd
 import Internal.Download as Download exposing (Download, Format(..))
 import Internal.Field as Field
-import Internal.Http exposing (Error(..), errorToString, handleJsonResponse)
+import Internal.Http exposing (Error, errorToString, handleJsonResponse)
 import Internal.Record exposing (primaryKey, setValidation, updateWithString)
 import Internal.Schema as Schema exposing (Constraint(..), Table)
 import Internal.Search as Search exposing (Search)
@@ -88,9 +87,8 @@ import Set
 import String.Extra as String
 import Task
 import Time
-import Time.Extra as Time
 import Url
-import Url.Builder as Url exposing (QueryParameter, string)
+import Url.Builder as Url exposing (QueryParameter)
 
 
 type Page
@@ -174,7 +172,8 @@ init { client, mountPath, table, parent } url key =
         order =
             Maybe.map parseQuery url.query
                 |> Maybe.withDefault []
-                |> (List.filter (Tuple.first >> (==) "order") >> List.head)
+                |> List.filter (Tuple.first >> (==) "order")
+                |> List.head
                 |> Maybe.map (Tuple.second >> parseOrder)
                 |> Maybe.withDefault Unordered
 
@@ -717,13 +716,14 @@ processCsv { table, client } csv =
         primaryKeyName =
             Schema.tablePrimaryKeyName table
 
-        blank =
-            Record.fromTable table
-
         ids =
             primaryKeyName
                 |> Maybe.map
                     (\pkName ->
+                        let
+                            blank =
+                                Record.fromTable table
+                        in
                         List.filterMap
                             (List.zip csv.headers
                                 >> Dict.fromList

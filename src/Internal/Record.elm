@@ -19,7 +19,7 @@ module Internal.Record exposing
     )
 
 import Dict exposing (Dict)
-import Dict.Extra as Dict
+import Dict.Extra
 import Internal.Field as Field exposing (Field)
 import Internal.Schema
     exposing
@@ -31,9 +31,9 @@ import Internal.Schema
         , Table
         )
 import Internal.Value as Value exposing (Value(..))
-import Json.Decode as Decode exposing (Decoder, maybe, string)
+import Json.Decode as Decode exposing (Decoder, string)
 import Json.Encode as Encode
-import Maybe.Extra as Maybe exposing (isNothing)
+import Maybe.Extra exposing (isNothing)
 
 
 type alias Record =
@@ -149,7 +149,7 @@ encode record =
 
 primaryKeyName : Record -> Maybe String
 primaryKeyName record =
-    Dict.find (\_ column -> Field.isPrimaryKey column) record.fields
+    Dict.Extra.find (\_ column -> Field.isPrimaryKey column) record.fields
         |> Maybe.map Tuple.first
 
 

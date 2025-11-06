@@ -1,10 +1,8 @@
 module Internal.PageForm exposing
     ( Msg
     , PageForm
-    , errors
     , init
     , onLogin
-    , toId
     , update
     , view
     )
@@ -16,15 +14,13 @@ import Html.Attributes exposing (autocomplete, class, disabled, href, novalidate
 import Html.Events exposing (onSubmit)
 import Internal.Cmd as AppCmd
 import Internal.Field as Field
-import Internal.Http exposing (Error(..))
+import Internal.Http exposing (Error)
 import Internal.Input as Input exposing (Input)
 import Internal.Schema exposing (Constraint(..), Table)
-import Internal.Value exposing (Value(..))
 import PostgRestAdmin.Client as Client exposing (Client)
 import PostgRestAdmin.MountPath exposing (MountPath, breadcrumbs, path)
 import PostgRestAdmin.Notification as Notification
 import PostgRestAdmin.Record as Record exposing (Record)
-import Url
 import Url.Builder as Url
 
 
@@ -140,7 +136,7 @@ update msg (PageForm params) =
                     PageForm { params | client = client }
             in
             ( pageForm
-            , if params.inputs == Dict.empty then
+            , if Dict.isEmpty params.inputs then
                 fetchRecord pageForm
 
               else

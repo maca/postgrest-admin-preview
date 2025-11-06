@@ -1,6 +1,6 @@
 module Internal.Cmd exposing (Cmd(..), batch, map, none, wrap)
 
-import Internal.Http exposing (Error(..), Response(..))
+import Internal.Http exposing (Error, Response)
 import Internal.Notification as Notification
 import Platform.Cmd as Platform
 import Task exposing (Task)

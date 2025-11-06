@@ -25,7 +25,7 @@ module PostgRestAdmin.Client exposing
 
 Note that the request functions **do not produce a vanilla Elm
 [Cmd](https://package.elm-lang.org/packages/elm/core/latest/Platform-Cmd#Cmd)**
-but a [PostgRestAdmin.Cmd](PostgRestAdmin.Cmd).
+but a [PostgRestAdmin.Cmd](PostgRestAdmin-Cmd).
 
 @docs fetchRecord, fetchRecordList, saveRecord, deleteRecord, request, requestMany, Collection
 
@@ -71,14 +71,13 @@ import PostgRestAdmin.Cmd as AppCmd
 import PostgRestAdmin.Record as Record exposing (Record)
 import Postgrest.Client as PG exposing (Selectable)
 import Task exposing (Task)
-import Url exposing (Url)
 
 
 {-| Represents a client for a PostgREST instance, including authentication
 params.
 
-See [Config](PostgRestAdmin.Config) and
-[Config.FormAuth](PostgRestAdmin.Config.FormAuth) for authentication
+See [Config](PostgRestAdmin-Config) and
+[Config.FormAuth](PostgRestAdmin-Config-FormAuth) for authentication
 configuration options.
 
 -}
@@ -266,7 +265,7 @@ fetchRecordList { client, table, queryString, expect } =
 `expect` param requires a function that returns a `Msg`.
 
 You can use [expectRecord](#expectRecord) to interpret the result as a
-[Record](PostgRestAdmin.Record).
+[Record](PostgRestAdmin-Record).
 
     import PostgRestAdmin.Cmd as AppCmd
 
@@ -558,15 +557,15 @@ tablePrimaryKeyName table =
 {-| -}
 decodeOne : Decoder a -> Result Error Response -> Result Error a
 decodeOne decoder result =
-    let
-        mapper =
-            Decode.decodeValue decoder >> Result.mapError DecodeError
-    in
     result
         |> Result.andThen
             (\response ->
                 case response of
                     One value ->
+                        let
+                            mapper =
+                                Decode.decodeValue decoder >> Result.mapError DecodeError
+                        in
                         mapper value
 
                     Many _ _ ->
@@ -586,13 +585,13 @@ decodeMany decoder result =
     result
         |> Result.andThen
             (\response ->
-                let
-                    mapper =
-                        Decode.decodeValue (Decode.list decoder)
-                            >> Result.mapError DecodeError
-                in
                 case response of
                     Many { from, to, total } list ->
+                        let
+                            mapper =
+                                Decode.decodeValue (Decode.list decoder)
+                                    >> Result.mapError DecodeError
+                        in
                         Encode.list identity list
                             |> mapper
                             |> Result.map (Collection from to total)

@@ -1,14 +1,11 @@
 module FilterTest exposing (suite)
 
 import Dict
-import Expect exposing (Expectation)
-import Fuzz exposing (Fuzzer, int, list, string)
-import Internal.Client as PG
+import Expect
 import Internal.Filter as Filter exposing (..)
 import Internal.Schema as Table
     exposing
-        ( Column
-        , Table
+        ( Table
         )
 import Internal.Value exposing (Value(..))
 import Json.Decode

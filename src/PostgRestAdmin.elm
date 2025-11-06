@@ -22,8 +22,7 @@ import FormToolkit.Parse as Parse
 import Html exposing (Html)
 import Html.Attributes as Attrs
 import Html.Events as Events
-import Inflect as String
-import Internal.Application as Application exposing (Application(..), Params)
+import Internal.Application as Application exposing (Application(..))
 import Internal.Client as Client
 import Internal.Cmd as AppCmd
 import Internal.Config as Config exposing (Config)
@@ -34,15 +33,13 @@ import Internal.PageDetail as PageDetail exposing (PageDetail)
 import Internal.PageForm as PageForm exposing (PageForm)
 import Internal.PageListing as PageListing exposing (PageListing)
 import Internal.Schema exposing (Schema)
-import Json.Decode as Decode exposing (Decoder, Value)
+import Json.Decode as Decode exposing (Decoder)
 import Json.Encode exposing (Value)
-import Postgrest.Client as PG
 import PostgRestAdmin.Client exposing (Client)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
 import String.Extra as String
 import Task
 import Url exposing (Url)
-import Url.Builder as Url
 import Url.Parser as Parser exposing ((</>), Parser, s)
 
 
@@ -125,7 +122,7 @@ type Route f m msg
 
 {-| Takes a Config and creates a PostgRestAdmin application.
 
-See [Config](PostgRestAdmin.Config) to check all configuration
+See [Config](PostgRestAdmin-Config) to check all configuration
 options.
 
     main : PostgRestAdmin.Program Never Never

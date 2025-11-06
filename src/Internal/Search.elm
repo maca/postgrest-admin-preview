@@ -193,9 +193,6 @@ viewFilter table idx filter =
         name =
             Filter.columnName filter
 
-        op =
-            Filter.operation filter
-
         inputs kind content =
             div
                 [ class "filter"
@@ -214,6 +211,10 @@ viewFilter table idx filter =
     in
     case Dict.get name table.columns of
         Just { required, value } ->
+            let
+                op =
+                    Filter.operation filter
+            in
             case value of
                 PString _ ->
                     textFilterInputs required name idx op

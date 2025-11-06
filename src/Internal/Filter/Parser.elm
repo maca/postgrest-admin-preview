@@ -1,8 +1,7 @@
 module Internal.Filter.Parser exposing (OperandConst, enum, operation)
 
-import Internal.Filter.Operand as Operand exposing (Enum, Operand(..))
+import Internal.Filter.Operand as Operand exposing (Enum, Operand)
 import Internal.Filter.Operation exposing (Operation(..))
-import Internal.Value exposing (Value(..))
 import Parser
     exposing
         ( (|.)
@@ -14,7 +13,6 @@ import Parser
         , chompUntil
         , chompWhile
         , getChompedString
-        , spaces
         , succeed
         , symbol
         , token
@@ -172,7 +170,7 @@ item =
             |= variable
                 { start = always True
                 , inner = (/=) ','
-                , reserved = Set.fromList []
+                , reserved = Set.empty
                 }
         ]
 
