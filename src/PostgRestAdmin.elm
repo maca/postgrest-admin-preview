@@ -656,56 +656,32 @@ viewAuthForm model =
         ]
 
 
-requiresAuthentication : AuthFormStatus -> Bool
-requiresAuthentication status =
-    case status of
-        Ready ->
-            True
-
-        Active ->
-            True
-
-        Submitting ->
-            True
-
-        Failure _ ->
-            True
-
-
 errorMessage : AuthFormStatus -> Html (Msg f m msg)
 errorMessage status =
     case status of
         Failure error ->
-            case error of
-                Client.Forbidden ->
-                    errorWrapper
-                        [ Html.text """You may have entered the wrong password,
-                          please try again."""
-                        ]
+            Html.div
+                [ Attrs.class "form-error-message" ]
+                (case error of
+                    Client.Forbidden ->
+                        [ Html.text """You may have entered the wrong password, please try again.""" ]
 
-                Client.Unauthorized ->
-                    errorWrapper
-                        [ Html.text
-                            "Please sign in to continue."
-                        ]
+                    Client.Unauthorized ->
+                        [ Html.text "Please sign in to continue." ]
 
-                Client.ServerError statusCode ->
-                    errorWrapper
+                    Client.ServerError statusCode ->
                         [ Html.text "The server responded with an error: "
                         , Html.pre [] [ Html.text (String.fromInt statusCode) ]
                         ]
 
-                Client.DecodeError err ->
-                    errorWrapper
+                    Client.DecodeError err ->
                         [ Html.text "There was an issue parsing the server response: "
                         , Html.pre [] [ Html.text (Decode.errorToString err) ]
                         ]
 
-                Client.NetworkError ->
-                    errorWrapper
-                        [ Html.text """There was an issue reaching the server,
-                          please try again later."""
-                        ]
+                    Client.NetworkError ->
+                        [ Html.text """There was an issue reaching the server, please try again later.""" ]
+                )
 
         _ ->
             Html.div
@@ -713,11 +689,6 @@ errorMessage status =
                 , Attrs.style "visibility" "hidden"
                 ]
                 []
-
-
-errorWrapper : List (Html (Msg f m msg)) -> Html (Msg f m msg)
-errorWrapper =
-    Html.div [ Attrs.class "form-error-message" ]
 
 
 sideMenu : Model f m msg -> Html (Msg f m msg)
