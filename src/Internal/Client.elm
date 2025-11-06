@@ -1,5 +1,5 @@
 module Internal.Client exposing
-    ( Client, Session(..), AuthScheme(..), AuthError(..)
+    ( Client, AuthScheme(..), AuthError(..)
     , init
     , toJwtString, getTable
     , isAuthenticated, schemaIsLoaded
@@ -7,13 +7,11 @@ module Internal.Client exposing
     , authSchemeConfig, basic, jwt, unset, authUrl, authUrlDecoder, encoder, decoder
     , task, authHeader, endpoint, fetchSchema
     , listableColumns, listingSelects
-    , AuthForm, AuthFormStatus(..)
-    , requestToken, form
     )
 
 {-|
 
-@docs Client, Session, AuthScheme, AuthError
+@docs Client, AuthScheme, AuthError
 @docs init
 @docs toJwtString, getTable
 @docs isAuthenticated, schemaIsLoaded
@@ -21,14 +19,10 @@ module Internal.Client exposing
 @docs authSchemeConfig, basic, jwt, unset, authUrl, authUrlDecoder, encoder, decoder
 @docs task, authHeader, endpoint, fetchSchema
 @docs listableColumns, listingSelects
-@docs AuthForm, AuthFormStatus
-@docs requestToken, form
 
 -}
 
 import Dict exposing (Dict)
-import FormToolkit.Field as Field
-import FormToolkit.Parse as Parse
 import Http exposing (header)
 import Internal.Http
     exposing
@@ -49,37 +43,16 @@ import Json.Encode as Encode
 import Postgrest.Client as PG exposing (Selectable)
 import String.Extra as String
 import Task exposing (Task)
-import Url exposing (Protocol(..), Url)
+import Url exposing (Url)
 
 
 
 -- AUTH TYPES
 
 
-type Session
-    = Token PG.JWT
-
-
 type AuthScheme
-    = FormAuth AuthForm
-    | Jwt PG.JWT
+    = Jwt PG.JWT
     | Unset
-
-
-type alias AuthForm =
-    { url : Url
-    , decoder : Decoder Session
-    , encoder : Dict String String -> Encode.Value
-    , form : Field.Field Never
-    , status : AuthFormStatus
-    }
-
-
-type AuthFormStatus
-    = Ready
-    | Active
-    | Success Session
-    | Failure AuthError
 
 
 type AuthError
@@ -107,48 +80,10 @@ type alias Client =
 
 authSchemeConfig : Decoder AuthScheme
 authSchemeConfig =
-    let
-        formAuthData =
-            { url =
-                { protocol = Http
-                , host = "localhost"
-                , port_ = Just 3000
-                , path = "rpc/login"
-                , query = Nothing
-                , fragment = Nothing
-                }
-            , decoder =
-                Decode.map (PG.jwt >> Token)
-                    (Decode.field "token" Decode.string)
-            , encoder = Encode.dict identity Encode.string
-            , form = form
-            , status = Ready
-            }
-    in
     Decode.oneOf
         [ Decode.field "jwt" Decode.string
-            |> Decode.map
-                (\token ->
-                    FormAuth
-                        { formAuthData | status = Success (Token <| PG.jwt token) }
-                )
-        , Decode.succeed (FormAuth formAuthData)
-        ]
-
-
-form : Field.Field Never
-form =
-    Field.group []
-        [ Field.text
-            [ Field.name "email"
-            , Field.label "Login"
-            , Field.required True
-            ]
-        , Field.password
-            [ Field.name "password"
-            , Field.label "Password"
-            , Field.required True
-            ]
+            |> Decode.map (\token -> Jwt (PG.jwt token))
+        , Decode.succeed Unset
         ]
 
 
@@ -174,45 +109,17 @@ authUrl urlStr =
 
 authUrlDecoder : String -> AuthScheme -> Decoder AuthScheme
 authUrlDecoder urlStr authScheme =
-    case authScheme of
-        FormAuth data ->
-            Url.fromString urlStr
-                |> Maybe.map
-                    (\url -> FormAuth { data | url = url } |> Decode.succeed)
-                |> Maybe.withDefault
-                    (Decode.fail "`authUrl` was given an invalid URL")
-
-        _ ->
-            Decode.succeed authScheme
+    Decode.succeed authScheme
 
 
 encoder : (Dict String String -> Encode.Value) -> Decoder AuthScheme -> Decoder AuthScheme
 encoder authEncoder =
-    Decode.map
-        (\authScheme ->
-            case authScheme of
-                FormAuth data ->
-                    FormAuth { data | encoder = authEncoder }
-
-                _ ->
-                    authScheme
-        )
+    Decode.map identity
 
 
 decoder : Decoder String -> Decoder AuthScheme -> Decoder AuthScheme
 decoder jwtDecoder =
-    Decode.map
-        (\authScheme ->
-            case authScheme of
-                FormAuth data ->
-                    FormAuth
-                        { data
-                            | decoder = Decode.map (PG.jwt >> Token) jwtDecoder
-                        }
-
-                _ ->
-                    authScheme
-        )
+    Decode.map identity
 
 
 
@@ -245,9 +152,6 @@ authFailed client =
 failAuthScheme : AuthScheme -> AuthScheme
 failAuthScheme authScheme =
     case authScheme of
-        FormAuth data ->
-            FormAuth { data | status = Failure Unauthorized }
-
         Jwt _ ->
             Unset
 
@@ -269,31 +173,11 @@ toJwtString { authScheme } =
 toJwt : AuthScheme -> Maybe PG.JWT
 toJwt authScheme =
     case authScheme of
-        FormAuth data ->
-            statusToJwt data.status
-
         Jwt token ->
             Just token
 
         Unset ->
             Nothing
-
-
-statusToJwt : AuthFormStatus -> Maybe PG.JWT
-statusToJwt status =
-    case status of
-        Success session ->
-            Just (sessionToJwt session)
-
-        _ ->
-            Nothing
-
-
-sessionToJwt : Session -> PG.JWT
-sessionToJwt session =
-    case session of
-        Token token ->
-            token
 
 
 getTable : String -> Client -> Maybe Table
@@ -308,12 +192,7 @@ updateJwt tokenStr client =
 
 updateAuthSchemeJwt : String -> AuthScheme -> AuthScheme
 updateAuthSchemeJwt tokenStr authScheme =
-    case authScheme of
-        FormAuth data ->
-            FormAuth { data | status = Success (Token (PG.jwt tokenStr)) }
-
-        _ ->
-            Jwt (PG.jwt tokenStr)
+    Jwt (PG.jwt tokenStr)
 
 
 clearJwt : Client -> Client
@@ -323,12 +202,7 @@ clearJwt client =
 
 clearAuthSchemeJwt : AuthScheme -> AuthScheme
 clearAuthSchemeJwt authScheme =
-    case authScheme of
-        FormAuth data ->
-            FormAuth { data | status = Ready }
-
-        _ ->
-            Unset
+    Unset
 
 
 logout : Client -> Client
@@ -338,47 +212,6 @@ logout client =
         , schema = Dict.empty
     }
 
-
-
--- REQUEST TOKEN
-
-
-requestToken : AuthForm -> Task AuthError Session
-requestToken data =
-    Http.task
-        { method = "POST"
-        , headers = []
-        , url = Url.toString data.url
-        , body =
-            Http.jsonBody
-                (Parse.parse Parse.json data.form
-                    |> Result.withDefault Encode.null
-                )
-        , resolver = Http.stringResolver (handleAuthResponse data.decoder)
-        , timeout = Nothing
-        }
-
-
-handleAuthResponse : Decoder a -> Http.Response String -> Result AuthError a
-handleAuthResponse aDecoder response =
-    case response of
-        Http.BadStatus_ { statusCode } _ ->
-            if statusCode == 401 || statusCode == 403 then
-                Err Forbidden
-
-            else
-                Err (ServerError statusCode)
-
-        Http.GoodStatus_ _ body ->
-            case Decode.decodeString aDecoder body of
-                Err err ->
-                    Err (DecodeError err)
-
-                Ok result ->
-                    Ok result
-
-        _ ->
-            Err NetworkError
 
 
 fetchSchema :

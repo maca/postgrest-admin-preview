@@ -16,12 +16,13 @@ module PostgRestAdmin exposing
 
 import Browser
 import Browser.Navigation as Nav
-import Dict
+import Dict exposing (Dict)
 import FormToolkit.Field as Field
 import FormToolkit.Parse as Parse
 import Html exposing (Html)
 import Html.Attributes as Attrs
 import Html.Events as Events
+import Http
 import Internal.Application as Application exposing (Application(..))
 import Internal.Client as Client
 import Internal.Cmd as AppCmd
@@ -34,13 +35,29 @@ import Internal.PageForm as PageForm exposing (PageForm)
 import Internal.PageListing as PageListing exposing (PageListing)
 import Internal.Schema exposing (Schema)
 import Json.Decode as Decode exposing (Decoder)
-import Json.Encode exposing (Value)
+import Json.Encode as Encode exposing (Value)
 import PostgRestAdmin.Client exposing (Client)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
+import Postgrest.Client as PG
 import String.Extra as String
 import Task
-import Url exposing (Url)
+import Url exposing (Protocol(..), Url)
 import Url.Parser as Parser exposing ((</>), Parser, s)
+
+
+
+-- AUTH FORM TYPES
+
+
+type AuthFormStatus
+    = Ready
+    | Active
+    | Submitting
+    | Failure Client.AuthError
+
+
+
+-- PROGRAM
 
 
 {-| An alias to elm's Platform.Program providing the type signature for a
@@ -80,6 +97,11 @@ type alias Model f m msg =
     , mountedApp : Application.Application f m msg
     , mountedAppFlags : Result Decode.Error f
     , config : Config f m msg
+    , authFormUrl : Url
+    , authFormJwtDecoder : Decoder String
+    , authFormJwtEncoder : Dict String String -> Encode.Value
+    , authFormField : Field.Field Never
+    , authFormStatus : AuthFormStatus
     , attemptedPath : String
     }
 
@@ -88,7 +110,7 @@ type Msg f m msg
     = ApplicationInit ( Application.Params f m msg, msg )
     | AuthFieldsChanged (Field.Msg Never)
     | AuthFormSubmitted
-    | GotToken (Result Client.AuthError Client.Session)
+    | GotToken (Result Client.AuthError String)
     | SchemaFetched (Result Error Schema)
     | PageListingChanged PageListing.Msg
     | PageDetailChanged PageDetail.Msg
@@ -155,6 +177,70 @@ applicationParams decoder =
     }
 
 
+
+-- INIT
+
+
+authFormField : Field.Field Never
+authFormField =
+    Field.group []
+        [ Field.text
+            [ Field.name "email"
+            , Field.label "Login"
+            , Field.required True
+            ]
+        , Field.password
+            [ Field.name "password"
+            , Field.label "Password"
+            , Field.required True
+            ]
+        ]
+
+
+requestToken : Model f m msg -> Cmd (Msg f m msg)
+requestToken model =
+    Task.attempt GotToken
+        (Http.task
+            { method = "POST"
+            , headers = []
+            , url = Url.toString model.authFormUrl
+            , body =
+                Http.jsonBody
+                    (Parse.parse Parse.json model.authFormField
+                        |> Result.withDefault Encode.null
+                    )
+            , resolver = Http.stringResolver (handleAuthResponse model.authFormJwtDecoder)
+            , timeout = Nothing
+            }
+        )
+
+
+handleAuthResponse : Decoder a -> Http.Response String -> Result Client.AuthError a
+handleAuthResponse aDecoder response =
+    case response of
+        Http.BadStatus_ { statusCode } _ ->
+            if statusCode == 401 || statusCode == 403 then
+                Err Client.Forbidden
+
+            else
+                Err (Client.ServerError statusCode)
+
+        Http.GoodStatus_ _ body ->
+            let
+                _ =
+                    Debug.log "body" body
+            in
+            case Decode.decodeString aDecoder body of
+                Err err ->
+                    Err (Client.DecodeError err)
+
+                Ok result ->
+                    Ok result
+
+        _ ->
+            Err Client.NetworkError
+
+
 init :
     Decoder (Config f m msg)
     -> Value
@@ -176,6 +262,18 @@ init decoder flags url key =
             , mountedApp = Application.none
             , mountedAppFlags = Decode.decodeValue config.flagsDecoder flags
             , config = config
+            , authFormUrl =
+                { protocol = Http
+                , host = "localhost"
+                , port_ = Just 9080
+                , path = "/rpc/login"
+                , query = Nothing
+                , fragment = Nothing
+                }
+            , authFormJwtDecoder = Decode.field "token" Decode.string
+            , authFormJwtEncoder = Encode.dict identity Encode.string
+            , authFormField = authFormField
+            , authFormStatus = Ready
             , attemptedPath = urlToPath url
             }
     in
@@ -248,93 +346,56 @@ update msg model =
             )
 
         AuthFieldsChanged innerMsg ->
-            case client.authScheme of
-                Client.FormAuth data ->
-                    ( { model
-                        | client =
-                            { client
-                                | authScheme =
-                                    Client.FormAuth
-                                        { data
-                                            | form = Field.update innerMsg data.form
-                                            , status = Client.Active
-                                        }
-                            }
-                      }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
+            ( { model
+                | authFormField = Field.update innerMsg model.authFormField
+                , authFormStatus = Active
+              }
+            , Cmd.none
+            )
 
         AuthFormSubmitted ->
-            case client.authScheme of
-                Client.FormAuth data ->
-                    ( model
-                    , Task.attempt GotToken (Client.requestToken data)
-                    )
+            ( { model | authFormStatus = Submitting }
+            , requestToken model
+            )
 
-                _ ->
-                    ( model, Cmd.none )
+        GotToken (Ok tokenStr) ->
+            let
+                updatedClient =
+                    { client | authScheme = Client.Jwt (PG.jwt tokenStr) }
 
-        GotToken (Ok session) ->
-            case client.authScheme of
-                Client.FormAuth data ->
-                    let
-                        updatedClient =
-                            { client
-                                | authScheme =
-                                    Client.FormAuth
-                                        { data
-                                            | form = Client.form
-                                            , status = Client.Success session
-                                        }
-                            }
+                ( route, cmd ) =
+                    case model.route of
+                        RouteLoadingSchema func ->
+                            if Client.schemaIsLoaded updatedClient then
+                                func
+                                    { client = updatedClient
+                                    , key = model.key
+                                    , config = model.config
+                                    }
 
-                        ( route, cmd ) =
-                            case model.route of
-                                RouteLoadingSchema func ->
-                                    if Client.schemaIsLoaded updatedClient then
-                                        func
-                                            { client = updatedClient
-                                            , key = model.key
-                                            , config = model.config
-                                            }
+                            else
+                                ( model.route
+                                , Task.attempt SchemaFetched
+                                    (Client.fetchSchema model.config updatedClient)
+                                )
 
-                                    else
-                                        ( model.route
-                                        , Task.attempt SchemaFetched
-                                            (Client.fetchSchema model.config updatedClient)
-                                        )
-
-                                _ ->
-                                    ( model.route, Cmd.none )
-                    in
-                    ( { model | client = updatedClient, route = route }
-                    , Cmd.batch
-                        [ loginCmd model updatedClient
-                        , cmd
-                        ]
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
+                        _ ->
+                            ( model.route, Cmd.none )
+            in
+            ( { model
+                | client = updatedClient
+                , route = route
+              }
+            , Cmd.batch
+                [ loginCmd model updatedClient
+                , cmd
+                ]
+            )
 
         GotToken (Err error) ->
-            case client.authScheme of
-                Client.FormAuth data ->
-                    ( { model
-                        | client =
-                            { client
-                                | authScheme =
-                                    Client.FormAuth { data | status = Client.Failure error }
-                            }
-                      }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
+            ( { model | authFormStatus = Failure error }
+            , Cmd.none
+            )
 
         SchemaFetched (Ok schema) ->
             let
@@ -548,94 +609,73 @@ view model =
                 ]
 
             Nothing ->
-                [ Html.div
-                    []
-                    [ Html.div
-                        [ Attrs.class "main-container" ]
-                        [ sideMenu model
-                        , Html.div
-                            [ Attrs.class "main-area" ]
-                            [ Notification.view model.notification
-                                |> Html.map NotificationChanged
-                            , mainContent model
+                case model.client.authScheme of
+                    Client.Unset ->
+                        [ viewAuthForm model ]
+
+                    _ ->
+                        [ Html.div
+                            []
+                            [ Html.div
+                                [ Attrs.class "main-container" ]
+                                [ sideMenu model
+                                , Html.div
+                                    [ Attrs.class "main-area" ]
+                                    [ Notification.view model.notification
+                                        |> Html.map NotificationChanged
+                                    , mainContent model
+                                    ]
+                                ]
                             ]
                         ]
-                    , viewAuthForm model.client
-                    ]
-                ]
     }
 
 
-viewAuthForm : Client -> Html (Msg f m msg)
-viewAuthForm { authScheme } =
-    viewAuthScheme authScheme
-
-
-viewAuthScheme : Client.AuthScheme -> Html (Msg f m msg)
-viewAuthScheme authScheme =
-    case authScheme of
-        Client.FormAuth data ->
-            viewFormAuth data
-
-        Client.Unset ->
-            Html.div
-                [ Attrs.class "overlay overlay-waiting" ]
-                [ Html.i [ Attrs.class "gg-spinner-alt" ] []
+viewAuthForm : Model f m msg -> Html (Msg f m msg)
+viewAuthForm model =
+    Html.div
+        [ Attrs.class "auth-modal overlay" ]
+        [ Html.div
+            [ Attrs.class "auth-form" ]
+            [ errorMessage model.authFormStatus
+            , Html.form
+                [ Attrs.class "auth-form"
+                , Events.onSubmit AuthFormSubmitted
                 ]
-
-        Client.Jwt _ ->
-            Html.text ""
-
-
-viewFormAuth : Client.AuthForm -> Html (Msg f m msg)
-viewFormAuth data =
-    if requiresAuthentication data.status then
-        Html.div
-            [ Attrs.class "auth-modal overlay" ]
-            [ Html.div
-                [ Attrs.class "auth-form" ]
-                [ errorMessage data.status
-                , Html.form
-                    [ Attrs.class "auth-form"
-                    , Events.onSubmit AuthFormSubmitted
+                [ Field.toHtml AuthFieldsChanged model.authFormField
+                , Html.button
+                    [ Attrs.disabled
+                        (Parse.parse Parse.json model.authFormField
+                            |> Result.map (\_ -> False)
+                            |> Result.withDefault True
+                        )
                     ]
-                    [ Field.toHtml AuthFieldsChanged data.form
-                    , Html.button
-                        [ Attrs.disabled
-                            (Parse.parse Parse.json data.form
-                                |> Result.map (\_ -> False)
-                                |> Result.withDefault True
-                            )
-                        ]
-                        [ Html.text "Login" ]
-                    ]
+                    [ Html.text "Login" ]
                 ]
             ]
-
-    else
-        Html.text ""
+        ]
 
 
-requiresAuthentication : Client.AuthFormStatus -> Bool
+requiresAuthentication : AuthFormStatus -> Bool
 requiresAuthentication status =
     case status of
-        Client.Ready ->
+        Ready ->
             True
 
-        Client.Active ->
+        Active ->
             True
 
-        Client.Failure _ ->
+        Submitting ->
             True
 
-        Client.Success _ ->
-            False
+        Failure _ ->
+            True
 
 
-errorMessage : Client.AuthFormStatus -> Html (Msg f m msg)
+errorMessage : AuthFormStatus -> Html (Msg f m msg)
 errorMessage status =
     case status of
-        Client.Failure error ->
+        Failure error ->
             case error of
                 Client.Forbidden ->
                     errorWrapper
