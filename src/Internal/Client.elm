@@ -1,27 +1,28 @@
 module Internal.Client exposing
-    ( Client, Msg, Session(..), AuthScheme
+    ( Client, Session(..), AuthScheme(..), AuthError(..)
     , init
     , toJwtString, getTable
-    , isAuthenticated, schemaIsLoaded, isAuthSuccessMsg
+    , isAuthenticated, schemaIsLoaded
     , updateJwt, clearJwt, logout, authFailed
     , authSchemeConfig, basic, jwt, unset, authUrl, authUrlDecoder, encoder, decoder
-    , update
     , task, authHeader, endpoint, fetchSchema
     , listableColumns, listingSelects, selects
-    , viewAuthForm
+    , AuthForm, AuthFormStatus(..)
+    , requestToken, form
     )
 
 {-|
 
-@docs Client, Msg, Session, AuthScheme
+@docs Client, Session, AuthScheme, AuthError
 @docs init
 @docs toJwtString, getTable
-@docs isAuthenticated, schemaIsLoaded, isAuthSuccessMsg
+@docs isAuthenticated, schemaIsLoaded
 @docs updateJwt, clearJwt, logout, authFailed
 @docs authSchemeConfig, basic, jwt, unset, authUrl, authUrlDecoder, encoder, decoder
-@docs update, viewAuthForm
 @docs task, authHeader, endpoint, fetchSchema
 @docs listableColumns, listingSelects, selects
+@docs AuthForm, AuthFormStatus
+@docs requestToken, form
 
 -}
 
@@ -29,9 +30,6 @@ import Dict exposing (Dict)
 import Dict.Extra as Dict
 import FormToolkit.Field as Field
 import FormToolkit.Parse as Parse
-import Html exposing (Html)
-import Html.Attributes as Attrs
-import Html.Events as Events
 import Http exposing (header)
 import Internal.Http
     exposing
@@ -102,14 +100,6 @@ type alias Client =
     , authScheme : AuthScheme
     , schema : Schema
     }
-
-
-type Msg
-    = FieldsChanged (Field.Msg Never)
-    | Submitted
-    | GotToken (Result AuthError Session)
-    | SchemaFetched (Result Error Schema)
-
 
 
 -- AUTH CONFIG
@@ -249,16 +239,6 @@ authSchemeIsAuthenticated authScheme =
     toJwt authScheme |> Maybe.map (always True) |> Maybe.withDefault False
 
 
-isAuthSuccessMsg : Msg -> Bool
-isAuthSuccessMsg msg =
-    case msg of
-        GotToken (Ok _) ->
-            True
-
-        _ ->
-            False
-
-
 authFailed : Client -> Client
 authFailed client =
     { client | authScheme = failAuthScheme client.authScheme }
@@ -362,82 +342,7 @@ logout client =
 
 
 
--- UPDATE
-
-
-update : Msg -> Client -> ( Client, Cmd Msg )
-update msg client =
-    case msg of
-        FieldsChanged innerMsg ->
-            case client.authScheme of
-                FormAuth data ->
-                    ( { client
-                        | authScheme =
-                            FormAuth
-                                { data
-                                    | form = Field.update innerMsg data.form
-                                    , status = Active
-                                }
-                      }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( client, Cmd.none )
-
-        Submitted ->
-            case client.authScheme of
-                FormAuth data ->
-                    ( client
-                    , Task.attempt GotToken (requestToken data)
-                    )
-
-                _ ->
-                    ( client, Cmd.none )
-
-        GotToken (Ok session) ->
-            case client.authScheme of
-                FormAuth data ->
-                    ( { client
-                        | authScheme =
-                            FormAuth
-                                { data
-                                    | form = form
-                                    , status = Success session
-                                }
-                      }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( client, Cmd.none )
-
-        GotToken (Err error) ->
-            case client.authScheme of
-                FormAuth data ->
-                    ( { client
-                        | authScheme = FormAuth { data | status = Failure error }
-                      }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( client, Cmd.none )
-
-        SchemaFetched (Ok schema) ->
-            ( { client | schema = schema }
-            , Cmd.none
-            )
-
-        SchemaFetched (Err err) ->
-            case err of
-                AuthError ->
-                    ( { client | authScheme = failAuthScheme client.authScheme }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( client, Cmd.none )
+-- REQUEST TOKEN
 
 
 requestToken : AuthForm -> Task AuthError Session
@@ -481,7 +386,7 @@ handleAuthResponse aDecoder response =
 fetchSchema :
     { a | tables : List String, tableAliases : Dict String String }
     -> Client
-    -> Cmd Msg
+    -> Task Error Schema
 fetchSchema config client =
     task
         { client = client
@@ -494,125 +399,6 @@ fetchSchema config client =
                 (handleJsonResponse (Schema.decoder config))
         , timeout = Nothing
         }
-        |> Task.attempt SchemaFetched
-
-
-
--- VIEW
-
-
-viewAuthForm : Client -> Html Msg
-viewAuthForm { authScheme } =
-    viewAuthScheme authScheme
-
-
-viewAuthScheme : AuthScheme -> Html Msg
-viewAuthScheme authScheme =
-    case authScheme of
-        FormAuth data ->
-            viewFormAuth data
-
-        Unset ->
-            Html.div
-                [ Attrs.class "overlay overlay-waiting" ]
-                [ Html.i [ Attrs.class "gg-spinner-alt" ] []
-                ]
-
-        Jwt _ ->
-            Html.text ""
-
-
-viewFormAuth : AuthForm -> Html Msg
-viewFormAuth data =
-    if requiresAuthentication data.status then
-        Html.div
-            [ Attrs.class "auth-modal overlay" ]
-            [ Html.div
-                [ Attrs.class "auth-form" ]
-                [ errorMessage data.status
-                , Html.form
-                    [ Attrs.class "auth-form"
-                    , Events.onSubmit Submitted
-                    ]
-                    [ Field.toHtml FieldsChanged data.form
-                    , Html.button
-                        [ Attrs.disabled
-                            (Parse.parse Parse.json data.form
-                                |> Result.map (\_ -> False)
-                                |> Result.withDefault True
-                            )
-                        ]
-                        [ Html.text "Login" ]
-                    ]
-                ]
-            ]
-
-    else
-        Html.text ""
-
-
-requiresAuthentication : AuthFormStatus -> Bool
-requiresAuthentication status =
-    case status of
-        Ready ->
-            True
-
-        Active ->
-            True
-
-        Failure _ ->
-            True
-
-        Success _ ->
-            False
-
-
-errorMessage : AuthFormStatus -> Html Msg
-errorMessage status =
-    case status of
-        Failure error ->
-            case error of
-                Forbidden ->
-                    errorWrapper
-                        [ Html.text """You may have entered the wrong password,
-                          please try again."""
-                        ]
-
-                Unauthorized ->
-                    errorWrapper
-                        [ Html.text
-                            "Please sign in to continue."
-                        ]
-
-                ServerError statusCode ->
-                    errorWrapper
-                        [ Html.text "The server responded with an error: "
-                        , Html.pre [] [ Html.text (String.fromInt statusCode) ]
-                        ]
-
-                DecodeError err ->
-                    errorWrapper
-                        [ Html.text "There was an issue parsing the server response: "
-                        , Html.pre [] [ Html.text (Decode.errorToString err) ]
-                        ]
-
-                NetworkError ->
-                    errorWrapper
-                        [ Html.text """There was an issue reaching the server,
-                          please try again later."""
-                        ]
-
-        _ ->
-            Html.div
-                [ Attrs.class "form-error-message"
-                , Attrs.style "visibility" "hidden"
-                ]
-                []
-
-
-errorWrapper : List (Html Msg) -> Html Msg
-errorWrapper =
-    Html.div [ Attrs.class "form-error-message" ]
 
 
 

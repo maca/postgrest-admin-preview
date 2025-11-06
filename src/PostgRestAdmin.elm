@@ -17,6 +17,8 @@ module PostgRestAdmin exposing
 import Browser
 import Browser.Navigation as Nav
 import Dict
+import FormToolkit.Field as Field
+import FormToolkit.Parse as Parse
 import Html exposing (Html)
 import Html.Attributes as Attrs
 import Html.Events as Events
@@ -31,8 +33,10 @@ import Internal.Notification as Notification exposing (Notification)
 import Internal.PageDetail as PageDetail exposing (PageDetail)
 import Internal.PageForm as PageForm exposing (PageForm)
 import Internal.PageListing as PageListing exposing (PageListing)
+import Internal.Schema exposing (Schema)
 import Json.Decode as Decode exposing (Decoder, Value)
 import Json.Encode exposing (Value)
+import Postgrest.Client as PG
 import PostgRestAdmin.Client exposing (Client)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
 import String.Extra as String
@@ -85,7 +89,10 @@ type alias Model f m msg =
 
 type Msg f m msg
     = ApplicationInit ( Application.Params f m msg, msg )
-    | ClientChanged Client.Msg
+    | AuthFieldsChanged (Field.Msg Never)
+    | AuthFormSubmitted
+    | GotToken (Result Client.AuthError Client.Session)
+    | SchemaFetched (Result Error Schema)
     | PageListingChanged PageListing.Msg
     | PageDetailChanged PageDetail.Msg
     | PageFormChanged PageForm.Msg
@@ -202,6 +209,10 @@ init decoder flags url key =
 
 update : Msg f m msg -> Model f m msg -> ( Model f m msg, Cmd (Msg f m msg) )
 update msg model =
+    let
+        client =
+            model.client
+    in
     case msg of
         ApplicationInit ( params, childMsg ) ->
             let
@@ -239,51 +250,125 @@ update msg model =
                 ]
             )
 
-        ClientChanged childMsg ->
+        AuthFieldsChanged innerMsg ->
+            case client.authScheme of
+                Client.FormAuth data ->
+                    ( { model
+                        | client =
+                            { client
+                                | authScheme =
+                                    Client.FormAuth
+                                        { data
+                                            | form = Field.update innerMsg data.form
+                                            , status = Client.Active
+                                        }
+                            }
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        AuthFormSubmitted ->
+            case client.authScheme of
+                Client.FormAuth data ->
+                    ( model
+                    , Task.attempt GotToken (Client.requestToken data)
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        GotToken (Ok session) ->
+            case client.authScheme of
+                Client.FormAuth data ->
+                    let
+                        updatedClient =
+                            { client
+                                | authScheme =
+                                    Client.FormAuth
+                                        { data
+                                            | form = Client.form
+                                            , status = Client.Success session
+                                        }
+                            }
+
+                        ( route, cmd ) =
+                            case model.route of
+                                RouteLoadingSchema func ->
+                                    if Client.schemaIsLoaded updatedClient then
+                                        func
+                                            { client = updatedClient
+                                            , key = model.key
+                                            , config = model.config
+                                            }
+
+                                    else
+                                        ( model.route
+                                        , Task.attempt SchemaFetched
+                                            (Client.fetchSchema model.config updatedClient)
+                                        )
+
+                                _ ->
+                                    ( model.route, Cmd.none )
+                    in
+                    ( { model | client = updatedClient, route = route }
+                    , Cmd.batch
+                        [ loginCmd model updatedClient
+                        , cmd
+                        ]
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        GotToken (Err error) ->
+            case client.authScheme of
+                Client.FormAuth data ->
+                    ( { model
+                        | client =
+                            { client
+                                | authScheme =
+                                    Client.FormAuth { data | status = Client.Failure error }
+                            }
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        SchemaFetched (Ok schema) ->
             let
-                ( client, clientCmd ) =
-                    Client.update childMsg model.client
+                updatedClient =
+                    { client | schema = schema }
 
                 ( route, cmd ) =
                     case model.route of
                         RouteLoadingSchema func ->
-                            if Client.schemaIsLoaded client then
-                                func
-                                    { client = client
-                                    , key = model.key
-                                    , config = model.config
-                                    }
-
-                            else
-                                ( model.route
-                                , Cmd.map ClientChanged
-                                    (Client.fetchSchema model.config
-                                        client
-                                    )
-                                )
+                            func
+                                { client = updatedClient
+                                , key = model.key
+                                , config = model.config
+                                }
 
                         _ ->
                             ( model.route, Cmd.none )
             in
-            if Client.isAuthSuccessMsg childMsg then
-                ( { model | client = client, route = route }
-                , Cmd.batch
-                    [ Cmd.map ClientChanged clientCmd
-                    , loginCmd model client
-                    , cmd
-                    ]
-                )
+            ( { model | client = updatedClient, route = route }
+            , cmd
+            )
 
-            else if Client.isAuthenticated client then
-                ( { model | client = client, route = route }
-                , Cmd.batch [ Cmd.map ClientChanged clientCmd, cmd ]
-                )
+        SchemaFetched (Err err) ->
+            case err of
+                AuthError ->
+                    ( { model | client = Client.authFailed model.client }
+                    , Cmd.none
+                    )
 
-            else
-                ( { model | client = client, route = route }
-                , model.config.onAuthFailed model.attemptedPath
-                    |> Cmd.map (always NoOp)
-                )
+                _ ->
+                    ( model, Cmd.none )
 
         PageListingChanged childMsg ->
             case model.route of
@@ -478,10 +563,124 @@ view model =
                             , mainContent model
                             ]
                         ]
-                    , Html.map ClientChanged (Client.viewAuthForm model.client)
+                    , viewAuthForm model.client
                     ]
                 ]
     }
+
+
+viewAuthForm : Client -> Html (Msg f m msg)
+viewAuthForm { authScheme } =
+    viewAuthScheme authScheme
+
+
+viewAuthScheme : Client.AuthScheme -> Html (Msg f m msg)
+viewAuthScheme authScheme =
+    case authScheme of
+        Client.FormAuth data ->
+            viewFormAuth data
+
+        Client.Unset ->
+            Html.div
+                [ Attrs.class "overlay overlay-waiting" ]
+                [ Html.i [ Attrs.class "gg-spinner-alt" ] []
+                ]
+
+        Client.Jwt _ ->
+            Html.text ""
+
+
+viewFormAuth : Client.AuthForm -> Html (Msg f m msg)
+viewFormAuth data =
+    if requiresAuthentication data.status then
+        Html.div
+            [ Attrs.class "auth-modal overlay" ]
+            [ Html.div
+                [ Attrs.class "auth-form" ]
+                [ errorMessage data.status
+                , Html.form
+                    [ Attrs.class "auth-form"
+                    , Events.onSubmit AuthFormSubmitted
+                    ]
+                    [ Field.toHtml AuthFieldsChanged data.form
+                    , Html.button
+                        [ Attrs.disabled
+                            (Parse.parse Parse.json data.form
+                                |> Result.map (\_ -> False)
+                                |> Result.withDefault True
+                            )
+                        ]
+                        [ Html.text "Login" ]
+                    ]
+                ]
+            ]
+
+    else
+        Html.text ""
+
+
+requiresAuthentication : Client.AuthFormStatus -> Bool
+requiresAuthentication status =
+    case status of
+        Client.Ready ->
+            True
+
+        Client.Active ->
+            True
+
+        Client.Failure _ ->
+            True
+
+        Client.Success _ ->
+            False
+
+
+errorMessage : Client.AuthFormStatus -> Html (Msg f m msg)
+errorMessage status =
+    case status of
+        Client.Failure error ->
+            case error of
+                Client.Forbidden ->
+                    errorWrapper
+                        [ Html.text """You may have entered the wrong password,
+                          please try again."""
+                        ]
+
+                Client.Unauthorized ->
+                    errorWrapper
+                        [ Html.text
+                            "Please sign in to continue."
+                        ]
+
+                Client.ServerError statusCode ->
+                    errorWrapper
+                        [ Html.text "The server responded with an error: "
+                        , Html.pre [] [ Html.text (String.fromInt statusCode) ]
+                        ]
+
+                Client.DecodeError err ->
+                    errorWrapper
+                        [ Html.text "There was an issue parsing the server response: "
+                        , Html.pre [] [ Html.text (Decode.errorToString err) ]
+                        ]
+
+                Client.NetworkError ->
+                    errorWrapper
+                        [ Html.text """There was an issue reaching the server,
+                          please try again later."""
+                        ]
+
+        _ ->
+            Html.div
+                [ Attrs.class "form-error-message"
+                , Attrs.style "visibility" "hidden"
+                ]
+                []
+
+
+errorWrapper : List (Html (Msg f m msg)) -> Html (Msg f m msg)
+errorWrapper =
+    Html.div [ Attrs.class "form-error-message" ]
 
 
 sideMenu : Model f m msg -> Html (Msg f m msg)
@@ -605,7 +804,7 @@ parseRoute url model =
 
     else
         ( RouteLoadingSchema (routeCons url)
-        , Cmd.map ClientChanged
+        , Task.attempt SchemaFetched
             (Client.fetchSchema model.config model.client)
         )
 
