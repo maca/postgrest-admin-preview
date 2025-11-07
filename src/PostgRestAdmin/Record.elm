@@ -120,9 +120,6 @@ value fieldName { fields } =
                     PText (Just val) ->
                         Just (RString val)
 
-                    PEnum (Just val) _ ->
-                        Just (RString val)
-
                     PBool (Just val) ->
                         Just (RBool val)
 

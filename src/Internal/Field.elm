@@ -123,9 +123,6 @@ valueToHtml value =
         PString maybe ->
             maybeToHtml identity maybe
 
-        PEnum maybe _ ->
-            maybeToHtml String.humanize maybe
-
         PBool maybe ->
             maybeToHtml
                 (\bool ->

@@ -29,6 +29,7 @@ import Internal.Schema
         , Reference
         , Schema
         , Table
+        , valueDecoder
         )
 import Internal.Value as Value exposing (Value(..))
 import Json.Decode as Decode exposing (Decoder, string)
@@ -197,6 +198,9 @@ fieldDecoder name column fields =
                 , error = Nothing
                 }
                 fields
+
+        columnDecoder =
+            valueDecoder column.columnType
     in
     case column.constraint of
         ForeignKey params ->
@@ -205,12 +209,12 @@ fieldDecoder name column fields =
                     insert (ForeignKey { params | label = referenceLabel })
                 )
                 (referenceLabelDecoder params)
-                (Decode.field name column.decoder)
+                (Decode.field name columnDecoder)
 
         _ ->
             Decode.map
                 (insert column.constraint)
-                (Decode.field name column.decoder)
+                (Decode.field name columnDecoder)
 
 
 referenceLabelDecoder : ForeignKeyParams -> Decoder (Maybe String)

@@ -41,7 +41,7 @@ import Internal.Filter.Operand as Operand exposing (Operand)
 import Internal.Filter.Operation as Operation exposing (Operation(..))
 import Internal.Filter.Parser as FilterParser
 import Internal.Schema exposing (Column, Table)
-import Internal.Value exposing (Value(..))
+import Internal.Value as Value exposing (Value(..))
 import Parser
     exposing
         ( (|.)
@@ -95,9 +95,17 @@ operation (Filter _ op) =
 
 fromColumn : String -> Column -> Maybe Filter
 fromColumn colName col =
+    let
+        enumChoices =
+            col.options |> List.filterMap Value.toString
+    in
     case .value col of
         PString _ ->
-            Just (text colName equals "")
+            if not (List.isEmpty enumChoices) then
+                Just (oneOf colName enumChoices Set.empty)
+
+            else
+                Just (text colName equals "")
 
         PText _ ->
             Just (text colName equals "")
@@ -116,9 +124,6 @@ fromColumn colName col =
 
         PDate _ ->
             Just (date colName inDate "")
-
-        PEnum _ choices ->
-            Just (oneOf colName choices Set.empty)
 
         PJson _ ->
             Just (text colName equals "")
@@ -439,45 +444,63 @@ combineHelp (Filter name op) ((Filter name_ op_) as f_) =
 
 filterCons : Table -> (OperandConst -> Operation) -> String -> Maybe Filter
 filterCons table operationCons name =
-    case Dict.get name table.columns |> Maybe.map .value of
-        Just (PString _) ->
-            Just <| Filter name <| operationCons Operand.text
+    case Dict.get name table.columns of
+        Just column ->
+            let
+                enumChoices =
+                    column.options |> List.filterMap Value.toString
+            in
+            case column.value of
+                PString _ ->
+                    if not (List.isEmpty enumChoices) then
+                        IsNull (Just <| NoneOf <| Operand.enum enumChoices Set.empty)
+                            |> (Just << Filter name)
 
-        Just (PText _) ->
-            Just <| Filter name <| operationCons Operand.text
+                    else
+                        Just <| Filter name <| operationCons Operand.text
 
-        Just (PInt _) ->
-            Just <| Filter name <| operationCons Operand.int
+                PText _ ->
+                    Just <| Filter name <| operationCons Operand.text
 
-        Just (PFloat _) ->
-            Just <| Filter name <| operationCons Operand.float
+                PInt _ ->
+                    Just <| Filter name <| operationCons Operand.int
 
-        Just (PBool _) ->
-            Just <| Filter name <| operationCons Operand.text
+                PFloat _ ->
+                    Just <| Filter name <| operationCons Operand.float
 
-        Just (PTime _) ->
-            Just <| Filter name <| operationCons Operand.time
+                PBool _ ->
+                    Just <| Filter name <| operationCons Operand.text
 
-        Just (PDate _) ->
-            Just <| Filter name <| operationCons Operand.date
+                PTime _ ->
+                    Just <| Filter name <| operationCons Operand.time
 
-        Just (PEnum _ choices) ->
-            IsNull (Just <| NoneOf <| Operand.enum choices Set.empty)
-                |> (Just << Filter name)
+                PDate _ ->
+                    Just <| Filter name <| operationCons Operand.date
 
-        _ ->
+                _ ->
+                    Nothing
+
+        Nothing ->
             Nothing
 
 
 enumCons : Table -> (List String -> Operation) -> String -> Maybe Filter
 enumCons table operationCons name =
-    case Dict.get name table.columns |> Maybe.map .value of
-        Just (PEnum _ choices) ->
-            if operationCons choices == IsNull Nothing then
-                Just <| Filter name <| OneOf <| Operand.enum choices Set.empty
+    case Dict.get name table.columns of
+        Just column ->
+            let
+                choices =
+                    column.options |> List.filterMap Value.toString
+            in
+            if not (List.isEmpty choices) then
+                if operationCons choices == IsNull Nothing then
+                    Just <| Filter name <| OneOf <| Operand.enum choices Set.empty
+
+                else
+                    Just <| Filter name <| operationCons choices
 
             else
-                Just <| Filter name <| operationCons choices
+                Nothing
 
-        _ ->
+        Nothing ->
             Nothing

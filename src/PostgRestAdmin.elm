@@ -97,12 +97,12 @@ type alias Model f m msg =
     , mountedApp : Application.Application f m msg
     , mountedAppFlags : Result Decode.Error f
     , config : Config f m msg
+    , attemptedPath : String
     , authFormUrl : Url
     , authFormJwtDecoder : Decoder String
     , authFormJwtEncoder : Dict String String -> Encode.Value
     , authFormField : Field.Field Never
     , authFormStatus : AuthFormStatus
-    , attemptedPath : String
     }
 
 
@@ -262,6 +262,7 @@ init decoder flags url key =
             , mountedApp = Application.none
             , mountedAppFlags = Decode.decodeValue config.flagsDecoder flags
             , config = config
+            , attemptedPath = urlToPath url
             , authFormUrl =
                 { protocol = Http
                 , host = "localhost"
@@ -274,7 +275,6 @@ init decoder flags url key =
             , authFormJwtEncoder = Encode.dict identity Encode.string
             , authFormField = authFormField
             , authFormStatus = Ready
-            , attemptedPath = urlToPath url
             }
     in
     case Decode.decodeValue decoder flags of
@@ -308,8 +308,8 @@ update msg model =
         client =
             model.client
     in
-    case msg of
-        ApplicationInit ( params, childMsg ) ->
+    case ( msg, model.route ) of
+        ( ApplicationInit ( params, childMsg ), _ ) ->
             let
                 ( app, initCmd ) =
                     case model.mountedApp of
@@ -345,7 +345,7 @@ update msg model =
                 ]
             )
 
-        AuthFieldsChanged innerMsg ->
+        ( AuthFieldsChanged innerMsg, _ ) ->
             ( { model
                 | authFormField = Field.update innerMsg model.authFormField
                 , authFormStatus = Active
@@ -353,121 +353,116 @@ update msg model =
             , Cmd.none
             )
 
-        AuthFormSubmitted ->
+        ( AuthFormSubmitted, _ ) ->
             ( { model | authFormStatus = Submitting }
             , requestToken model
             )
 
-        GotToken (Ok tokenStr) ->
+        ( GotToken (Ok tokenStr), RouteLoadingSchema func ) ->
             let
                 updatedClient =
                     { client | authScheme = Client.Jwt (PG.jwt tokenStr) }
 
                 ( route, cmd ) =
-                    case model.route of
-                        RouteLoadingSchema func ->
-                            if Client.schemaIsLoaded updatedClient then
-                                func
-                                    { client = updatedClient
-                                    , key = model.key
-                                    , config = model.config
-                                    }
+                    if Client.schemaIsLoaded updatedClient then
+                        func
+                            { client = updatedClient
+                            , key = model.key
+                            , config = model.config
+                            }
 
-                            else
-                                ( model.route
-                                , Task.attempt SchemaFetched
-                                    (Client.fetchSchema model.config updatedClient)
-                                )
-
-                        _ ->
-                            ( model.route, Cmd.none )
+                    else
+                        ( model.route
+                        , Task.attempt SchemaFetched
+                            (Client.fetchSchema model.config updatedClient)
+                        )
             in
             ( { model
                 | client = updatedClient
                 , route = route
               }
-            , Cmd.batch
-                [ loginCmd model updatedClient
-                , cmd
-                ]
+            , Cmd.batch [ loginCmd model updatedClient, cmd ]
             )
 
-        GotToken (Err error) ->
+        ( GotToken (Ok tokenStr), _ ) ->
+            let
+                updatedClient =
+                    { client | authScheme = Client.Jwt (PG.jwt tokenStr) }
+            in
+            ( { model | client = updatedClient }
+            , loginCmd model updatedClient
+            )
+
+        ( GotToken (Err error), _ ) ->
             ( { model | authFormStatus = Failure error }
             , Cmd.none
             )
 
-        SchemaFetched (Ok schema) ->
+        ( SchemaFetched (Ok schema), RouteLoadingSchema func ) ->
             let
                 updatedClient =
                     { client | schema = schema }
 
                 ( route, cmd ) =
-                    case model.route of
-                        RouteLoadingSchema func ->
-                            func
-                                { client = updatedClient
-                                , key = model.key
-                                , config = model.config
-                                }
-
-                        _ ->
-                            ( model.route, Cmd.none )
+                    func
+                        { client = updatedClient
+                        , key = model.key
+                        , config = model.config
+                        }
             in
             ( { model | client = updatedClient, route = route }
             , cmd
             )
 
-        SchemaFetched (Err err) ->
-            case err of
-                AuthError ->
-                    ( { model | client = Client.authFailed model.client }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        PageListingChanged childMsg ->
-            case model.route of
-                RouteListing listing ->
-                    let
-                        ( route, appCmd ) =
-                            PageListing.update childMsg listing
-                                |> Tuple.mapFirst RouteListing
-                    in
-                    ( { model | route = route }
-                    , mapAppCmd PageListingChanged appCmd
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        PageDetailChanged childMsg ->
-            case model.route of
-                RouteDetail prevDetail ->
-                    let
-                        ( detail, cmd ) =
-                            PageDetail.update childMsg prevDetail
-                    in
-                    ( { model | route = RouteDetail detail }
-                    , mapAppCmd PageDetailChanged cmd
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        RequestPerformed mapper (Ok passedMsg) ->
-            ( model
-            , Task.attempt mapper (Task.succeed passedMsg)
+        ( SchemaFetched (Ok schema), _ ) ->
+            ( { model | client = { client | schema = schema } }
+            , Cmd.none
             )
 
-        RequestPerformed _ (Err AuthError) ->
+        ( SchemaFetched (Err AuthError), _ ) ->
             ( { model | client = Client.authFailed model.client }
             , Cmd.none
             )
 
-        RequestPerformed mapper (Err err) ->
+        ( SchemaFetched (Err _), _ ) ->
+            ( model, Cmd.none )
+
+        ( PageListingChanged childMsg, RouteListing listing ) ->
+            let
+                ( route, appCmd ) =
+                    PageListing.update childMsg listing
+                        |> Tuple.mapFirst RouteListing
+            in
+            ( { model | route = route }
+            , mapAppCmd PageListingChanged appCmd
+            )
+
+        ( PageListingChanged _, _ ) ->
+            ( model, Cmd.none )
+
+        ( PageDetailChanged childMsg, RouteDetail prevDetail ) ->
+            let
+                ( detail, cmd ) =
+                    PageDetail.update childMsg prevDetail
+            in
+            ( { model | route = RouteDetail detail }
+            , mapAppCmd PageDetailChanged cmd
+            )
+
+        ( PageDetailChanged _, _ ) ->
+            ( model, Cmd.none )
+
+        ( RequestPerformed mapper (Ok passedMsg), _ ) ->
+            ( model
+            , Task.attempt mapper (Task.succeed passedMsg)
+            )
+
+        ( RequestPerformed _ (Err AuthError), _ ) ->
+            ( { model | client = Client.authFailed model.client }
+            , Cmd.none
+            )
+
+        ( RequestPerformed mapper (Err err), _ ) ->
             ( model
             , Cmd.batch
                 [ Task.attempt mapper (Task.fail err)
@@ -476,21 +471,19 @@ update msg model =
                 ]
             )
 
-        PageFormChanged childMsg ->
-            case model.route of
-                RouteForm prevForm ->
-                    let
-                        ( form, cmd ) =
-                            PageForm.update childMsg prevForm
-                    in
-                    ( { model | route = RouteForm form }
-                    , mapAppCmd PageFormChanged cmd
-                    )
+        ( PageFormChanged childMsg, RouteForm prevForm ) ->
+            let
+                ( form, cmd ) =
+                    PageForm.update childMsg prevForm
+            in
+            ( { model | route = RouteForm form }
+            , mapAppCmd PageFormChanged cmd
+            )
 
-                _ ->
-                    ( model, Cmd.none )
+        ( PageFormChanged _, _ ) ->
+            ( model, Cmd.none )
 
-        PageApplicationChanged childMsg ->
+        ( PageApplicationChanged childMsg, _ ) ->
             let
                 ( app, cmd ) =
                     Application.update childMsg model.mountedApp
@@ -499,7 +492,7 @@ update msg model =
             , mapAppCmd PageApplicationChanged cmd
             )
 
-        NotificationChanged childMsg ->
+        ( NotificationChanged childMsg, _ ) ->
             let
                 ( notification, cmd ) =
                     Notification.update childMsg
@@ -508,21 +501,19 @@ update msg model =
             , Cmd.map NotificationChanged cmd
             )
 
-        LinkClicked urlRequest ->
-            case urlRequest of
-                Browser.Internal url ->
-                    ( model
-                    , Cmd.batch
-                        [ Nav.pushUrl model.key (Url.toString url)
-                        , Notification.dismiss
-                            |> Task.perform NotificationChanged
-                        ]
-                    )
+        ( LinkClicked (Browser.Internal url), _ ) ->
+            ( model
+            , Cmd.batch
+                [ Nav.pushUrl model.key (Url.toString url)
+                , Notification.dismiss
+                    |> Task.perform NotificationChanged
+                ]
+            )
 
-                Browser.External href ->
-                    ( model, Nav.load href )
+        ( LinkClicked (Browser.External href), _ ) ->
+            ( model, Nav.load href )
 
-        UrlChanged url ->
+        ( UrlChanged url, _ ) ->
             let
                 ( route, cmd ) =
                     parseRoute url model
@@ -531,19 +522,17 @@ update msg model =
             , cmd
             )
 
-        LoggedIn params ->
-            ( { model
-                | client = Client.updateJwt params.accessToken model.client
-              }
+        ( LoggedIn params, _ ) ->
+            ( { model | client = Client.updateJwt params.accessToken model.client }
             , Nav.pushUrl model.key params.path
             )
 
-        LoggedOut ->
+        ( LoggedOut, _ ) ->
             ( { model | client = Client.logout model.client }
             , Cmd.map (always NoOp) (model.config.onLogout ())
             )
 
-        NoOp ->
+        ( NoOp, _ ) ->
             ( model, Cmd.none )
 
 

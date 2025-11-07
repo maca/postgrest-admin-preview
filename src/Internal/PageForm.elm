@@ -9,6 +9,7 @@ module Internal.PageForm exposing
 
 import Browser.Navigation as Nav
 import Dict exposing (Dict)
+import FormToolkit.Field as Field2
 import Html exposing (Html, a, button, fieldset, h2, section, text)
 import Html.Attributes exposing (autocomplete, class, disabled, href, novalidate)
 import Html.Events exposing (onSubmit)
@@ -16,7 +17,8 @@ import Internal.Cmd as AppCmd
 import Internal.Field as Field
 import Internal.Http exposing (Error)
 import Internal.Input as Input exposing (Input)
-import Internal.Schema exposing (Constraint(..), Table)
+import Internal.Schema exposing (ColumnType(..), Constraint(..), Table)
+import Internal.Value exposing (Value(..))
 import PostgRestAdmin.Client as Client exposing (Client)
 import PostgRestAdmin.MountPath exposing (MountPath, breadcrumbs, path)
 import PostgRestAdmin.Notification as Notification
@@ -62,6 +64,9 @@ init :
     -> ( PageForm, AppCmd.Cmd Msg )
 init { client, mountPath, fieldNames, id, table, parent } key =
     let
+        _ =
+            Debug.log "table" table
+
         parentParams =
             Maybe.andThen
                 (\params ->
@@ -269,9 +274,25 @@ recordToInputs : Record -> Inputs
 recordToInputs record =
     record.fields
         |> Dict.map
-            (\_ input ->
-                Input.fromField input
+            (\name field ->
+                case Dict.get name record.table.columns of
+                    Just column ->
+                        Input.fromFieldAndColumn field column
+
+                    Nothing ->
+                        Input.fromFieldAndColumn field
+                            { constraint = NoConstraint
+                            , required = False
+                            , value = PString Nothing
+                            , columnType = String
+                            , options = []
+                            }
             )
+
+
+recordToForm : Record -> Field2.Field ()
+recordToForm record =
+    Debug.todo "crash"
 
 
 changed : PageForm -> Bool

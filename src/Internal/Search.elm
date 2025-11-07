@@ -210,43 +210,47 @@ viewFilter table idx filter =
                 ]
     in
     case Dict.get name table.columns of
-        Just { required, value } ->
+        Just column ->
             let
                 op =
                     Filter.operation filter
+
+                hasEnumOptions =
+                    not (List.isEmpty column.options)
             in
-            case value of
+            case column.value of
                 PString _ ->
-                    textFilterInputs required name idx op
-                        |> inputs "text"
+                    if hasEnumOptions then
+                        enumInputs column.required name idx op
+                            |> inputs "enum"
+
+                    else
+                        textFilterInputs column.required name idx op
+                            |> inputs "text"
 
                 PText _ ->
-                    textFilterInputs required name idx op
+                    textFilterInputs column.required name idx op
                         |> inputs "text"
 
                 PInt _ ->
-                    intFilterInputs required name idx op
+                    intFilterInputs column.required name idx op
                         |> inputs "number"
 
                 PFloat _ ->
-                    floatFilterInputs required name idx op
+                    floatFilterInputs column.required name idx op
                         |> inputs "date"
 
                 PBool _ ->
-                    boolFilterInputs required name idx op
+                    boolFilterInputs column.required name idx op
                         |> inputs "bool"
 
                 PTime _ ->
-                    timeFilterInputs required name idx op
+                    timeFilterInputs column.required name idx op
                         |> inputs "time"
 
                 PDate _ ->
-                    dateFilterInputs required name idx op
+                    dateFilterInputs column.required name idx op
                         |> inputs "time"
-
-                PEnum _ _ ->
-                    enumInputs required name idx op
-                        |> inputs "enum"
 
                 _ ->
                     Html.text ""

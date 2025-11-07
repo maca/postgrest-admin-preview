@@ -1,7 +1,7 @@
 module Internal.Input exposing
     ( Input(..)
     , Msg
-    , fromField
+    , fromFieldAndColumn
     , toField
     , toHtml
     , update
@@ -29,7 +29,7 @@ import Internal.Cmd as AppCmd
 import Internal.Field as Field exposing (Field)
 import Internal.Http exposing (Error)
 import Internal.Record as Record exposing (Record)
-import Internal.Schema exposing (Constraint(..), ForeignKeyParams)
+import Internal.Schema exposing (Column, Constraint(..), ForeignKeyParams)
 import Internal.Value as Value exposing (Value(..))
 import Json.Decode as Decode
 import Maybe.Extra as Maybe
@@ -212,11 +212,11 @@ toField input =
             field
 
 
-fromField : Field -> Input
-fromField field =
+fromFieldAndColumn : Field -> Column -> Input
+fromFieldAndColumn field column =
     case field.constraint of
         PrimaryKey ->
-            fromFieldWithValue field
+            fromFieldWithValue field column
 
         ForeignKey { label } ->
             Association field
@@ -226,20 +226,26 @@ fromField field =
                 }
 
         NoConstraint ->
-            fromFieldWithValue field
+            fromFieldWithValue field column
 
 
-fromFieldWithValue : Field -> Input
-fromFieldWithValue field =
+fromFieldWithValue : Field -> Column -> Input
+fromFieldWithValue field column =
+    let
+        options =
+            column.options
+                |> List.filterMap Value.toString
+    in
     case field.value of
         PString _ ->
-            Text field
+            if not (List.isEmpty options) then
+                Select field options
+
+            else
+                Text field
 
         PText _ ->
             TextArea field
-
-        PEnum _ opts ->
-            Select field opts
 
         PFloat _ ->
             Number field

@@ -1,5 +1,6 @@
 module Internal.Schema exposing
     ( Column
+    , ColumnType(..)
     , Constraint(..)
     , ForeignKeyParams
     , Reference
@@ -8,42 +9,50 @@ module Internal.Schema exposing
     , columnNames
     , decoder
     , tablePrimaryKeyName
+    , valueDecoder
     )
 
-import Basics.Extra exposing (flip)
 import Dict exposing (Dict)
 import Internal.Http exposing (Error(..), toError)
 import Internal.Value exposing (Value(..))
 import Json.Decode as Decode
-    exposing
-        ( Decoder
-        , andThen
-        , bool
-        , field
-        , float
-        , int
-        , list
-        , maybe
-        , string
-        )
 import Json.Encode as Encode
 import Regex exposing (Regex)
 import Set exposing (Set)
 import Time.Extra as Time
 
 
-type alias Column =
-    { constraint : Constraint
-    , required : Bool
-    , value : Value
-    , decoder : Decoder Value
-    }
+type ColumnType
+    = Integer
+    | Float
+    | String
+    | Text
+    | Boolean
+    | TimestampWithoutTimezome
+    | Timestamp
+    | TimeWithoutTimezone
+    | Time
+    | Date
+    | Uuid
+    | Json
+    | Object
+    | Array ColumnType
+    | Other String (Maybe String)
 
 
 type Constraint
     = NoConstraint
     | PrimaryKey
     | ForeignKey ForeignKeyParams
+
+
+type alias Column =
+    { constraint : Constraint
+    , required : Bool
+    , value : Value
+    , columnType : ColumnType
+    , options : List Value
+    }
 
 
 type alias ForeignKeyParams =
@@ -71,14 +80,6 @@ type alias Schema =
     Dict String Table
 
 
-type alias ColumnDefinition =
-    { type_ : String
-    , format : String
-    , description : Maybe String
-    , enum : List String
-    }
-
-
 columnNames : Table -> Set String
 columnNames { columns } =
     Set.fromList (Dict.keys columns)
@@ -86,7 +87,7 @@ columnNames { columns } =
 
 decoder :
     { a | tables : List String, tableAliases : Dict String String }
-    -> Decoder Schema
+    -> Decode.Decoder Schema
 decoder { tables, tableAliases } =
     columnNamesDecoder
         |> Decode.andThen
@@ -116,11 +117,11 @@ tablePrimaryKeyName { columns } =
         |> List.head
 
 
-columnNamesDecoder : Decoder (Dict String (List String))
+columnNamesDecoder : Decode.Decoder (Dict String (List String))
 columnNamesDecoder =
-    field "definitions"
+    Decode.field "definitions"
         (Decode.dict
-            (field "properties"
+            (Decode.field "properties"
                 (Decode.dict (Decode.succeed ()) |> Decode.map Dict.keys)
             )
         )
@@ -129,9 +130,9 @@ columnNamesDecoder =
 schemaDecoder :
     Dict String String
     -> Dict String (List String)
-    -> Decoder Schema
+    -> Decode.Decoder Schema
 schemaDecoder tableAliases colNames =
-    field "definitions" (Decode.keyValuePairs Decode.value)
+    Decode.field "definitions" (Decode.keyValuePairs Decode.value)
         |> Decode.andThen (decodeResults (tableDecoder tableAliases colNames))
 
 
@@ -139,12 +140,12 @@ tableDecoder :
     Dict String String
     -> Dict String (List String)
     -> String
-    -> Decoder Table
+    -> Decode.Decoder Table
 tableDecoder tableAliases colNames tableName =
     requiredColumnsDecoder
         |> Decode.andThen
             (\requiredColumns ->
-                field "properties" (Decode.keyValuePairs Decode.value)
+                Decode.field "properties" (Decode.keyValuePairs Decode.value)
                     |> Decode.andThen
                         (decodeResults
                             (columnDecoder tableAliases colNames requiredColumns)
@@ -153,101 +154,216 @@ tableDecoder tableAliases colNames tableName =
         |> Decode.map (\columns -> { columns = columns, name = tableName })
 
 
-requiredColumnsDecoder : Decoder (List String)
-requiredColumnsDecoder =
-    Decode.map (Maybe.withDefault [])
-        (Decode.maybe (field "required" (Decode.list Decode.string)))
-
-
 columnDecoder :
     Dict String String
     -> Dict String (List String)
     -> List String
     -> String
-    -> Decoder Column
+    -> Decode.Decoder Column
 columnDecoder tableAliases colNames requiredColumns columnName =
-    Decode.map4 ColumnDefinition
-        (Decode.map (Maybe.withDefault "string")
-            (maybe (field "type" string))
-        )
-        (field "format" string)
-        (maybe (field "description" string))
-        (Decode.oneOf [ field "enum" (list string), Decode.succeed [] ])
+    typeDecoder
         |> Decode.andThen
-            (\{ type_, format, description, enum } ->
-                let
-                    makeColumn valueDecoder val =
+            (\type_ ->
+                Decode.map3
+                    (\value options description ->
                         { constraint =
                             description
                                 |> Maybe.map
                                     (columnConstraint tableAliases colNames)
                                 |> Maybe.withDefault NoConstraint
                         , required = List.member columnName requiredColumns
-                        , decoder = valueDecoder
-                        , value = val
+                        , value = value
+                        , options = options
+                        , columnType = type_
                         }
-
-                    mapValue cons dec =
-                        let
-                            valueDecoder =
-                                Decode.map cons (Decode.maybe dec)
-                        in
-                        Decode.map (makeColumn valueDecoder)
-                            (Decode.oneOf
-                                [ field "default" valueDecoder
-                                , Decode.succeed (cons Nothing)
-                                ]
-                            )
-                in
-                case type_ of
-                    "number" ->
-                        mapValue PFloat Decode.float
-
-                    "integer" ->
-                        mapValue PInt int
-
-                    "string" ->
-                        if format == "timestamp without time zone" then
-                            mapValue PTime Time.decoder
-
-                        else if format == "date" then
-                            mapValue PDate Time.decoder
-
-                        else if format == "text" then
-                            mapValue PText string
-
-                        else if format == "json" then
-                            mapValue (PJson << Maybe.map (Encode.encode 4))
-                                Decode.value
-
-                        else if not (List.isEmpty enum) then
-                            mapValue (flip PEnum enum) string
-
-                        else
-                            mapValue PString string
-
-                    "boolean" ->
-                        mapValue PBool bool
-
-                    _ ->
-                        let
-                            valueDecoder =
-                                Decode.map Unknown Decode.value
-                        in
-                        Decode.map (makeColumn valueDecoder) valueDecoder
+                    )
+                    (Decode.oneOf
+                        [ Decode.field "default" (valueDecoder type_)
+                        , Decode.succeed (defaultValue type_)
+                        ]
+                    )
+                    (Decode.oneOf
+                        [ Decode.field "enum" (Decode.list (valueDecoder type_))
+                        , Decode.succeed []
+                        ]
+                    )
+                    (Decode.maybe (Decode.field "description" Decode.string))
             )
 
 
+requiredColumnsDecoder : Decode.Decoder (List String)
+requiredColumnsDecoder =
+    Decode.map (Maybe.withDefault [])
+        (Decode.maybe (Decode.field "required" (Decode.list Decode.string)))
+
+
+typeDecoder : Decode.Decoder ColumnType
+typeDecoder =
+    Decode.field "type" Decode.string
+        |> Decode.andThen
+            (\type_ ->
+                Decode.maybe (Decode.field "format" Decode.string)
+                    |> Decode.map (columnType type_)
+            )
+
+
+columnType : String -> Maybe String -> ColumnType
+columnType type_ format =
+    case ( type_, format ) of
+        ( _, Just "array" ) ->
+            Array (columnType type_ Nothing)
+
+        ( "integer", _ ) ->
+            Integer
+
+        ( "number", _ ) ->
+            Float
+
+        ( "string", Just "timestamp without time zone" ) ->
+            TimestampWithoutTimezome
+
+        ( "string", Just "timestamp with time zone" ) ->
+            Timestamp
+
+        ( "string", Just "times without time zone" ) ->
+            TimeWithoutTimezone
+
+        ( "string", Just "times with time zone" ) ->
+            Time
+
+        ( "string", Just "date" ) ->
+            Date
+
+        ( "string", Just "uuid" ) ->
+            Uuid
+
+        ( "string", Just "json" ) ->
+            Json
+
+        ( "string", Just "text" ) ->
+            Text
+
+        ( "string", _ ) ->
+            String
+
+        ( "boolean", _ ) ->
+            Boolean
+
+        ( "object", _ ) ->
+            Object
+
+        _ ->
+            Other type_ format
+
+
+valueDecoder : ColumnType -> Decode.Decoder Value
+valueDecoder type_ =
+    case type_ of
+        Integer ->
+            Decode.map PInt (Decode.maybe Decode.int)
+
+        Float ->
+            Decode.map PFloat (Decode.maybe Decode.float)
+
+        String ->
+            Decode.map PString (Decode.maybe Decode.string)
+
+        Text ->
+            Decode.map PText (Decode.maybe Decode.string)
+
+        Boolean ->
+            Decode.map PBool (Decode.maybe Decode.bool)
+
+        TimestampWithoutTimezome ->
+            Decode.map PTime (Decode.maybe Time.decoder)
+
+        Timestamp ->
+            Decode.map PTime (Decode.maybe Time.decoder)
+
+        TimeWithoutTimezone ->
+            Decode.map PTime (Decode.maybe Time.decoder)
+
+        Time ->
+            Decode.map PTime (Decode.maybe Time.decoder)
+
+        Date ->
+            Decode.map PDate (Decode.maybe Time.decoder)
+
+        Uuid ->
+            Decode.map PString (Decode.maybe Decode.string)
+
+        Json ->
+            Decode.map (PJson << Maybe.map (Encode.encode 4)) (Decode.maybe Decode.value)
+
+        Object ->
+            Decode.map Unknown Decode.value
+
+        Array _ ->
+            Decode.map Unknown Decode.value
+
+        Other _ _ ->
+            Decode.map Unknown Decode.value
+
+
+defaultValue : ColumnType -> Value
+defaultValue type_ =
+    case type_ of
+        Integer ->
+            PInt Nothing
+
+        Float ->
+            PFloat Nothing
+
+        String ->
+            PString Nothing
+
+        Text ->
+            PText Nothing
+
+        Boolean ->
+            PBool Nothing
+
+        TimestampWithoutTimezome ->
+            PTime Nothing
+
+        Timestamp ->
+            PTime Nothing
+
+        TimeWithoutTimezone ->
+            PTime Nothing
+
+        Time ->
+            PTime Nothing
+
+        Date ->
+            PDate Nothing
+
+        Uuid ->
+            PString Nothing
+
+        Json ->
+            PJson Nothing
+
+        Object ->
+            Unknown Encode.null
+
+        Array _ ->
+            Unknown Encode.null
+
+        Other _ _ ->
+            Unknown Encode.null
+
+
 decodeResults :
-    (String -> Decoder value)
+    (String -> Decode.Decoder value)
     -> List ( String, Decode.Value )
-    -> Decoder (Dict String value)
-decodeResults valueDecoder values =
+    -> Decode.Decoder (Dict String value)
+decodeResults valDecoder values =
     let
         results =
             List.map
                 (\( name, value ) ->
-                    Decode.decodeValue (valueDecoder name) value
+                    Decode.decodeValue (valDecoder name) value
                         |> Result.map (Tuple.pair name)
                 )
                 values

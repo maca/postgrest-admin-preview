@@ -19,7 +19,6 @@ type Value
     | PInt (Maybe Int)
     | PString (Maybe String)
     | PText (Maybe String)
-    | PEnum (Maybe String) (List String)
     | PBool (Maybe Bool)
     | PTime (Maybe Time.Posix)
     | PDate (Maybe Time.Posix)
@@ -38,9 +37,6 @@ encode value =
             encodeWith Encode.string maybe
 
         PText maybe ->
-            encodeWith Encode.string maybe
-
-        PEnum maybe _ ->
             encodeWith Encode.string maybe
 
         PFloat maybe ->
@@ -77,9 +73,6 @@ isNothing value =
         PText (Just _) ->
             False
 
-        PEnum (Just _) _ ->
-            False
-
         PFloat (Just _) ->
             False
 
@@ -107,9 +100,6 @@ updateWithString string value =
 
         PText _ ->
             PText (String.nonBlank string)
-
-        PEnum _ opts ->
-            PEnum (String.nonBlank string) opts
 
         PFloat _ ->
             PFloat (String.toFloat string)
@@ -166,9 +156,6 @@ toString value =
             maybe
 
         PText maybe ->
-            maybe
-
-        PEnum maybe _ ->
             maybe
 
         PFloat maybe ->
