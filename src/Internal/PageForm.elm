@@ -10,28 +10,32 @@ module Internal.PageForm exposing
 import Browser.Navigation as Nav
 import Dict exposing (Dict)
 import FormToolkit.Field as Field2
-import Html exposing (Html, a, button, fieldset, h2, section, text)
-import Html.Attributes exposing (autocomplete, class, disabled, href, novalidate)
-import Html.Events exposing (onSubmit)
+import Html exposing (Html)
+import Html.Attributes as Attrs
+import Html.Events as Events
+import Http
 import Internal.Cmd as AppCmd
 import Internal.Field as Field
 import Internal.Http exposing (Error)
 import Internal.Input as Input exposing (Input)
 import Internal.Schema exposing (ColumnType(..), Constraint(..), Table)
-import Internal.Value exposing (Value(..))
+import Internal.Value as Value exposing (Value(..))
+import Json.Decode as Decode
 import PostgRestAdmin.Client as Client exposing (Client)
 import PostgRestAdmin.MountPath exposing (MountPath, breadcrumbs, path)
 import PostgRestAdmin.Notification as Notification
 import PostgRestAdmin.Record as Record exposing (Record)
+import String.Extra as String
 import Url.Builder as Url
 
 
 type Msg
     = LoggedIn Client
-    | Fetched (Result Error Record)
-    | ParentFetched (Result Error Record)
-    | Saved (Result Error Record)
+    | Fetched (Result Http.Error Decode.Value)
+    | ParentFetched (Result Http.Error Decode.Value)
+    | Saved (Result Error Client.Response)
     | InputChanged Input.Msg
+    | FormChanged (Field2.Msg ())
     | Submitted
 
 
@@ -39,17 +43,18 @@ type alias Inputs =
     Dict String Input
 
 
-type PageForm
-    = PageForm
-        { client : Client
-        , mountPath : MountPath
-        , key : Nav.Key
-        , inputs : Inputs
-        , fieldNames : List String
-        , table : Table
-        , id : Maybe String
-        , parent : Maybe Record
-        }
+type alias PageForm =
+    { client : Client
+    , mountPath : MountPath
+    , key : Nav.Key
+    , inputs : Inputs
+    , fieldNames : List String
+    , table : Table
+    , id : Maybe String
+    , parent : Maybe Record
+    , form : Field2.Field ()
+    , persisted : Bool
+    }
 
 
 init :
@@ -64,9 +69,6 @@ init :
     -> ( PageForm, AppCmd.Cmd Msg )
 init { client, mountPath, fieldNames, id, table, parent } key =
     let
-        _ =
-            Debug.log "table" table
-
         parentParams =
             Maybe.andThen
                 (\params ->
@@ -76,26 +78,27 @@ init { client, mountPath, fieldNames, id, table, parent } key =
                 parent
 
         pageForm =
-            PageForm
-                { client = client
-                , mountPath = mountPath
-                , key = key
-                , inputs =
-                    Maybe.map (always Dict.empty) id
-                        |> Maybe.withDefault
-                            (recordToInputs (Record.fromTable table))
-                , fieldNames = fieldNames
-                , table = table
-                , id = id
-                , parent = Nothing
-                }
+            { client = client
+            , mountPath = mountPath
+            , key = key
+            , inputs =
+                Maybe.map (always Dict.empty) id
+                    |> Maybe.withDefault
+                        (recordToInputs (Record.fromTable table))
+            , fieldNames = fieldNames
+            , table = table
+            , id = id
+            , parent = Nothing
+            , form = buildForm table
+            , persisted = False
+            }
     in
     ( pageForm
     , AppCmd.batch
         [ fetchRecord pageForm
         , case parentParams of
             Just ( parentTable, params ) ->
-                Client.fetchRecord
+                Client.fetchRecord2
                     { client = client
                     , table = parentTable
                     , id = params.id
@@ -109,10 +112,10 @@ init { client, mountPath, fieldNames, id, table, parent } key =
 
 
 fetchRecord : PageForm -> AppCmd.Cmd Msg
-fetchRecord (PageForm { id, client, table }) =
+fetchRecord { id, client, table } =
     case id of
         Just recordId ->
-            Client.fetchRecord
+            Client.fetchRecord2
                 { client = client
                 , table = table
                 , id = recordId
@@ -133,75 +136,82 @@ onLogin =
 
 
 update : Msg -> PageForm -> ( PageForm, AppCmd.Cmd Msg )
-update msg (PageForm params) =
+update msg model =
     case msg of
         LoggedIn client ->
-            let
-                pageForm =
-                    PageForm { params | client = client }
-            in
-            ( pageForm
-            , if Dict.isEmpty params.inputs then
-                fetchRecord pageForm
+            ( { model | client = client }
+            , if Dict.isEmpty model.inputs then
+                fetchRecord { model | client = client }
 
               else
                 AppCmd.none
             )
 
         Fetched (Ok record) ->
-            ( PageForm { params | inputs = recordToInputs record }
+            ( model
             , AppCmd.none
             )
 
         Fetched (Err err) ->
-            ( PageForm params
-            , Notification.error (Internal.Http.errorToString err)
+            ( model
+            , Debug.todo "crash"
+              -- , Notification.error (Internal.Http.errorToString err)
             )
 
         ParentFetched (Ok parent) ->
-            ( PageForm { params | parent = Just parent }, AppCmd.none )
+            -- ( { model | parent = Just parent }, AppCmd.none )
+            ( model, AppCmd.none )
 
         ParentFetched (Err err) ->
-            ( PageForm params
-            , Notification.error (Internal.Http.errorToString err)
+            ( model
+            , Debug.todo "crash"
+              -- , Notification.error (Http.errorToString err)
             )
 
         Saved (Ok record) ->
-            ( PageForm params
-            , AppCmd.batch
-                [ Url.absolute
-                    [ params.table.name
-                    , Record.id record |> Maybe.withDefault ""
-                    ]
-                    []
-                    |> Nav.pushUrl params.key
-                    |> AppCmd.wrap
-                , Notification.confirm "The record was saved"
-                ]
+            ( model
+            , AppCmd.none
+              -- , AppCmd.batch
+              --     [ Url.absolute
+              --         [ model.table.name
+              --         , Record.id record |> Maybe.withDefault ""
+              --         ]
+              --         []
+              --         |> Nav.pushUrl model.key
+              --         |> AppCmd.wrap
+              --     , Notification.confirm "The record was saved"
+              --     ]
             )
 
         Saved (Err err) ->
-            ( PageForm params
-            , Notification.error (Internal.Http.errorToString err)
+            ( model
+            , Debug.todo "crash"
+              -- , Notification.error (Http.errorToString err)
             )
 
         InputChanged inputMsg ->
             let
                 ( inputs, cmd ) =
-                    Input.update params.client inputMsg params.inputs
+                    Input.update model.client inputMsg model.inputs
             in
-            ( PageForm { params | inputs = inputs }
+            ( { model | inputs = inputs }
             , AppCmd.batch [ AppCmd.map InputChanged cmd, Notification.dismiss ]
             )
 
+        FormChanged innerMsg ->
+            ( { model | form = Field2.update innerMsg model.form }
+            , Notification.dismiss
+            )
+
         Submitted ->
-            ( PageForm params
-            , Client.saveRecord
-                { client = params.client
-                , record = toRecord (PageForm params)
-                , id = params.id
-                , expect = Saved
-                }
+            ( model
+            , AppCmd.none
+              -- , Client.saveRecord
+              --     { client = model.client
+              --     , record = toRecord model
+              --     , id = model.id
+              --     , expect = Saved
+              --     }
             )
 
 
@@ -210,7 +220,7 @@ update msg (PageForm params) =
 
 
 toRecord : PageForm -> Record
-toRecord (PageForm { table, inputs, parent, id }) =
+toRecord { table, inputs, parent, id } =
     { table = table
     , fields =
         Dict.map
@@ -247,17 +257,16 @@ toRecord (PageForm { table, inputs, parent, id }) =
 
 
 formInputs : PageForm -> List ( String, Input )
-formInputs (PageForm { inputs }) =
+formInputs { inputs } =
     Dict.toList inputs |> List.sortWith sortInputs
 
 
 filterInputs : PageForm -> PageForm
-filterInputs (PageForm params) =
-    PageForm
-        { params
-            | inputs =
-                Dict.filter (inputIsEditable params.fieldNames) params.inputs
-        }
+filterInputs params =
+    { params
+        | inputs =
+            Dict.filter (inputIsEditable params.fieldNames) params.inputs
+    }
 
 
 inputIsEditable : List String -> String -> Input -> Bool
@@ -290,19 +299,9 @@ recordToInputs record =
             )
 
 
-recordToForm : Record -> Field2.Field ()
-recordToForm record =
-    Debug.todo "crash"
-
-
 changed : PageForm -> Bool
-changed (PageForm { inputs }) =
+changed { inputs } =
     Dict.values inputs |> List.any (.changed << Input.toField)
-
-
-errors : PageForm -> Dict String (Maybe String)
-errors record =
-    toRecord record |> Record.errors
 
 
 hasErrors : PageForm -> Bool
@@ -310,20 +309,15 @@ hasErrors record =
     toRecord record |> Record.hasErrors
 
 
-toId : PageForm -> Maybe String
-toId (PageForm params) =
-    params.id
-
-
 
 -- VIEW
 
 
 view : PageForm -> Html Msg
-view ((PageForm { table, id, parent, mountPath }) as form) =
+view ({ table, id, parent, mountPath } as model) =
     let
         fields =
-            filterInputs form
+            filterInputs model
                 |> formInputs
                 |> List.map
                     (\( name, input ) ->
@@ -340,7 +334,7 @@ view ((PageForm { table, id, parent, mountPath }) as form) =
                                             params.tableName
                                                 == .name (Record.getTable record)
                                         then
-                                            text ""
+                                            Html.text ""
 
                                         else
                                             inputView
@@ -352,14 +346,14 @@ view ((PageForm { table, id, parent, mountPath }) as form) =
                                 inputView
                     )
     in
-    section
-        [ class "resource-form" ]
+    Html.section
+        [ Attrs.class "resource-form" ]
         [ breadcrumbs mountPath
             table.name
             (case id of
                 Just idStr ->
                     [ ( table.name, Nothing )
-                    , ( idStr, Record.label (toRecord form) )
+                    , ( idStr, Record.label (toRecord model) )
                     , ( "edit", Nothing )
                     ]
 
@@ -379,22 +373,23 @@ view ((PageForm { table, id, parent, mountPath }) as form) =
                             , ( "new", Nothing )
                             ]
             )
-        , h2
+        , Html.h2
             []
-            [ Record.label (toRecord form)
-                |> Maybe.map text
-                |> Maybe.withDefault (text "")
+            [ Record.label (toRecord model)
+                |> Maybe.map Html.text
+                |> Maybe.withDefault (Html.text "")
             ]
         , Html.form
-            [ autocomplete False
-            , onSubmit Submitted
-            , novalidate True
+            [ Attrs.autocomplete False
+            , Events.onSubmit Submitted
+            , Attrs.novalidate True
             ]
-            [ fieldset [] fields
-            , fieldset []
-                [ a
-                    [ class "button button-clear"
-                    , href
+            [ Html.fieldset [] fields
+            , Field2.toHtml FormChanged model.form
+            , Html.fieldset []
+                [ Html.a
+                    [ Attrs.class "button button-clear"
+                    , Attrs.href
                         (path mountPath <|
                             Url.absolute
                                 (List.filterMap identity
@@ -407,13 +402,111 @@ view ((PageForm { table, id, parent, mountPath }) as form) =
                                 []
                         )
                     ]
-                    [ text "Cancel" ]
-                , button
-                    [ disabled (not (changed form) || hasErrors form) ]
-                    [ text "Save" ]
+                    [ Html.text "Cancel" ]
+                , Html.button
+                    [ Attrs.disabled (not (changed model) || hasErrors model) ]
+                    [ Html.text "Save" ]
                 ]
             ]
         ]
+
+
+buildForm : Table -> Field2.Field ()
+buildForm table =
+    Field2.group []
+        (Dict.toList table.columns
+            |> List.sortWith sortColumns
+            |> List.map (\( name, column ) -> fieldFromColumn name column)
+        )
+
+
+fieldFromColumn : String -> Internal.Schema.Column -> Field2.Field ()
+fieldFromColumn name column =
+    let
+        baseAttrs =
+            List.filterMap identity
+                [ Just (Field2.name name)
+                , Just (Field2.label (String.humanize name))
+                , Just (Field2.required column.required)
+                , Maybe.map Field2.stringValue (Value.toString column.value)
+                ]
+
+        stringOptions =
+            column.options
+                |> List.filterMap Value.toString
+    in
+    case column.constraint of
+        PrimaryKey ->
+            Field2.text (baseAttrs ++ [ Field2.disabled True ])
+
+        ForeignKey _ ->
+            -- For now, treat foreign keys as text inputs
+            -- TODO: Implement autocomplete with association
+            Field2.text baseAttrs
+
+        NoConstraint ->
+            case column.columnType of
+                Internal.Schema.String ->
+                    if not (List.isEmpty stringOptions) then
+                        Field2.select (baseAttrs ++ [ Field2.stringOptions stringOptions ])
+
+                    else
+                        Field2.text baseAttrs
+
+                Internal.Schema.Text ->
+                    Field2.textarea (baseAttrs ++ [ Field2.autogrow True ])
+
+                Internal.Schema.Float ->
+                    Field2.float baseAttrs
+
+                Internal.Schema.Integer ->
+                    Field2.int baseAttrs
+
+                Internal.Schema.Boolean ->
+                    Field2.checkbox baseAttrs
+
+                Internal.Schema.TimestampWithoutTimezome ->
+                    Field2.datetime baseAttrs
+
+                Internal.Schema.Timestamp ->
+                    Field2.datetime baseAttrs
+
+                Internal.Schema.TimeWithoutTimezone ->
+                    Field2.datetime baseAttrs
+
+                Internal.Schema.Time ->
+                    Field2.datetime baseAttrs
+
+                Internal.Schema.Date ->
+                    Field2.date baseAttrs
+
+                Internal.Schema.Json ->
+                    Field2.textarea (baseAttrs ++ [ Field2.autogrow True ])
+
+                Internal.Schema.Uuid ->
+                    Field2.text baseAttrs
+
+                _ ->
+                    Field2.text (baseAttrs ++ [ Field2.disabled True ])
+
+
+sortColumns : ( String, Internal.Schema.Column ) -> ( String, Internal.Schema.Column ) -> Order
+sortColumns ( name, column ) ( name_, column_ ) =
+    case ( column.constraint, column_.constraint ) of
+        ( PrimaryKey, _ ) ->
+            LT
+
+        ( _, PrimaryKey ) ->
+            GT
+
+        ( ForeignKey _, _ ) ->
+            LT
+
+        ( _, ForeignKey _ ) ->
+            GT
+
+        _ ->
+            compare name name_
 
 
 

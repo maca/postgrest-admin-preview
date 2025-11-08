@@ -24,11 +24,10 @@ import Html.Attributes as Attrs
 import Html.Events as Events
 import Http
 import Internal.Application as Application exposing (Application(..))
-import Internal.Client as Client
 import Internal.Cmd as AppCmd
 import Internal.Config as Config exposing (Config)
 import Internal.Flag as Flag
-import Internal.Http exposing (Error(..), Response, errorToString)
+import Internal.Http
 import Internal.Notification as Notification exposing (Notification)
 import Internal.PageDetail as PageDetail exposing (PageDetail)
 import Internal.PageForm as PageForm exposing (PageForm)
@@ -36,7 +35,7 @@ import Internal.PageListing as PageListing exposing (PageListing)
 import Internal.Schema exposing (Schema)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
-import PostgRestAdmin.Client exposing (Client)
+import PostgRestAdmin.Client as Client exposing (Client, Error, Response, errorToString)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
 import Postgrest.Client as PG
 import String.Extra as String
@@ -232,7 +231,8 @@ handleAuthResponse aDecoder response =
             in
             case Decode.decodeString aDecoder body of
                 Err err ->
-                    Err (Client.DecodeError err)
+                    -- Decode error during auth - treat as server error
+                    Err (Client.ServerError 500)
 
                 Ok result ->
                     Ok result
@@ -293,7 +293,7 @@ init decoder flags url key =
                 model =
                     makeModel Config.default
             in
-            ( { model | error = Just (DecodeError error) }
+            ( { model | error = Just (Internal.Http.DecodeError error) }
             , Cmd.none
             )
 
@@ -419,7 +419,7 @@ update msg model =
             , Cmd.none
             )
 
-        ( SchemaFetched (Err AuthError), _ ) ->
+        ( SchemaFetched (Err Internal.Http.AuthError), _ ) ->
             ( { model | client = Client.authFailed model.client }
             , Cmd.none
             )
@@ -457,7 +457,7 @@ update msg model =
             , Task.attempt mapper (Task.succeed passedMsg)
             )
 
-        ( RequestPerformed _ (Err AuthError), _ ) ->
+        ( RequestPerformed _ (Err Internal.Http.AuthError), _ ) ->
             ( { model | client = Client.authFailed model.client }
             , Cmd.none
             )
@@ -661,11 +661,6 @@ errorMessage status =
                     Client.ServerError statusCode ->
                         [ Html.text "The server responded with an error: "
                         , Html.pre [] [ Html.text (String.fromInt statusCode) ]
-                        ]
-
-                    Client.DecodeError err ->
-                        [ Html.text "There was an issue parsing the server response: "
-                        , Html.pre [] [ Html.text (Decode.errorToString err) ]
                         ]
 
                     Client.NetworkError ->
@@ -1017,9 +1012,6 @@ mapAppCmd tagger appCmd =
 
         AppCmd.ChangeNotification cmd ->
             Cmd.map NotificationChanged cmd
-
-        AppCmd.Fetch mapper task ->
-            Task.attempt (RequestPerformed (mapper >> tagger)) task
 
 
 urlToPath : Url -> String

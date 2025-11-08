@@ -3,9 +3,8 @@ module Internal.Download exposing (Download, Format(..), fetch, init, save)
 import Bytes exposing (Bytes)
 import File.Download as Download
 import Http exposing (header)
-import Internal.Client exposing (endpoint)
-import Internal.Http exposing (Error(..), handleResponse)
-import PostgRestAdmin.Client as Client exposing (Client)
+import Internal.Http
+import PostgRestAdmin.Client as Client exposing (Client, Error, endpoint, handleResponse)
 import Task exposing (Task)
 
 
@@ -68,7 +67,7 @@ fetch client download =
                 |> Task.map (Complete (format download) (url download))
 
         Nothing ->
-            Task.fail AuthError
+            Task.fail Internal.Http.AuthError
 
 
 save : String -> Download -> Cmd msg

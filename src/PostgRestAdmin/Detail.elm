@@ -22,10 +22,10 @@ module PostgRestAdmin.Detail exposing
 
 import Browser.Navigation as Nav
 import Html exposing (Html)
+import Internal.Cmd as AppCmd
 import Internal.PageDetail as PageDetail exposing (PageDetail)
 import Internal.Schema exposing (Table)
 import PostgRestAdmin.Client exposing (Client)
-import PostgRestAdmin.Cmd as AppCmd
 import PostgRestAdmin.MountPath exposing (MountPath)
 import PostgRestAdmin.Record exposing (Record)
 

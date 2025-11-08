@@ -59,13 +59,12 @@ import Html.Events as Events
         )
 import Http
 import Inflect
-import Internal.Client exposing (endpoint, listableColumns, listingSelects)
 import Internal.Cmd as AppCmd
 import Internal.Download as Download exposing (Download, Format(..))
 import Internal.Field as Field
-import Internal.Http exposing (Error, errorToString, handleJsonResponse)
 import Internal.Record exposing (primaryKey, setValidation, updateWithString)
 import Internal.Schema as Schema exposing (Constraint(..), Table)
+import PostgRestAdmin.Client as Client exposing (Error, endpoint, errorToString, handleJsonResponse, listableColumns, listingSelects)
 import Internal.Search as Search exposing (Search)
 import Internal.Value as Value
 import Json.Decode as Decode
@@ -317,7 +316,7 @@ update msg listing =
             ( { listing | parent = Just parent }, AppCmd.none )
 
         ParentFetched (Err err) ->
-            ( listing, Notification.error (Internal.Http.errorToString err) )
+            ( listing, Notification.error (Client.errorToString err) )
 
         ApplyFilters ->
             ( listing, reload listing.table )
@@ -405,7 +404,7 @@ update msg listing =
             )
 
         Downloaded (Err err) ->
-            ( listing, Notification.error (Internal.Http.errorToString err) )
+            ( listing, Notification.error (Client.errorToString err) )
 
         CsvUploadRequested ->
             ( listing
@@ -500,7 +499,7 @@ update msg listing =
             )
 
         CsvUploadPosted (Err err) ->
-            ( listing, Notification.error (Internal.Http.errorToString err) )
+            ( listing, Notification.error (Client.errorToString err) )
 
         CsvUploadAccepted ->
             ( listing

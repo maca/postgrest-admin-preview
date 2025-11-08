@@ -27,13 +27,12 @@ import Html.Attributes
 import Html.Events exposing (onInput)
 import Internal.Cmd as AppCmd
 import Internal.Field as Field exposing (Field)
-import Internal.Http exposing (Error)
 import Internal.Record as Record exposing (Record)
 import Internal.Schema exposing (Column, Constraint(..), ForeignKeyParams)
 import Internal.Value as Value exposing (Value(..))
 import Json.Decode as Decode
 import Maybe.Extra as Maybe
-import PostgRestAdmin.Client as Client exposing (Client, Collection)
+import PostgRestAdmin.Client as Client exposing (Client, Collection, Error)
 import PostgRestAdmin.MountPath exposing (MountPath, path)
 import Postgrest.Client as PG
 import String.Extra as String

@@ -32,11 +32,10 @@ import Http exposing (header)
 import Internal.Cmd as AppCmd
 import Internal.Config exposing (DetailActions)
 import Internal.Field as Field exposing (Field)
-import Internal.Http exposing (Error)
 import Internal.Record as Record exposing (Record)
 import Internal.Schema exposing (Reference, Table)
 import Json.Decode as Decode
-import PostgRestAdmin.Client as Client exposing (Client, Collection)
+import PostgRestAdmin.Client as Client exposing (Client, Collection, Error)
 import PostgRestAdmin.MountPath exposing (MountPath, breadcrumbs, path)
 import PostgRestAdmin.Notification as Notification
 import String.Extra as String
@@ -149,7 +148,7 @@ update msg params =
 
         Fetched (Err err) ->
             ( params
-            , Notification.error (Internal.Http.errorToString err)
+            , Notification.error (Client.errorToString err)
             )
 
         Deleted (Ok _) ->
@@ -164,7 +163,7 @@ update msg params =
 
         Deleted (Err err) ->
             ( params
-            , Notification.error (Internal.Http.errorToString err)
+            , Notification.error (Client.errorToString err)
             )
 
         DeleteModalOpened ->

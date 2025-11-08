@@ -15,9 +15,8 @@ not a vanilla Elm Cmd.
 
 -}
 
-import Internal.Cmd as Internal
+import Internal.Cmd as AppCmd
 import Internal.Notification as Notification
-import PostgRestAdmin.Cmd as AppCmd
 import Task exposing (Task)
 
 
@@ -44,4 +43,4 @@ dismiss =
 
 performTask : Task Never Notification.Msg -> AppCmd.Cmd msg
 performTask =
-    Task.perform identity >> Internal.ChangeNotification
+    Task.perform identity >> AppCmd.ChangeNotification

@@ -42,7 +42,7 @@ to get a better understanding of JWT and roles in PostgREST.
 -}
 
 import Dict exposing (Dict)
-import Internal.Client as Client
+import PostgRestAdmin.Client as Client
 import Json.Decode exposing (Decoder)
 import Json.Encode exposing (Value)
 
@@ -107,4 +107,4 @@ encoder =
 -}
 decoder : Decoder String -> FormAuth -> FormAuth
 decoder =
-    Client.decoder
+    Client.jwtDecoder
