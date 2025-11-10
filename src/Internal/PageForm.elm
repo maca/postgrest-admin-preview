@@ -14,7 +14,6 @@ import FormToolkit.Parse as Parse
 import Html exposing (Html)
 import Html.Attributes as Attrs
 import Html.Events as Events
-import Http
 import Internal.Cmd as AppCmd
 import Internal.Input as Input exposing (Input)
 import Internal.Schema as Schema exposing (ColumnType(..), Constraint(..), Table)
@@ -340,7 +339,7 @@ fieldFromColumn : String -> Schema.Column -> Maybe (Field.Field String)
 fieldFromColumn name column =
     let
         attrs =
-            List.concatMap identity
+            List.concat
                 [ [ Field.name name
                   , Field.identifier name
                   , Field.label (String.humanize name)

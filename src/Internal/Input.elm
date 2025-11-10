@@ -230,13 +230,13 @@ fromFieldAndColumn field column =
 
 fromFieldWithValue : Field -> Column -> Input
 fromFieldWithValue field column =
-    let
-        options =
-            column.options
-                |> List.filterMap Value.toString
-    in
     case field.value of
         PString _ ->
+            let
+                options =
+                    column.options
+                        |> List.filterMap Value.toString
+            in
             if not (List.isEmpty options) then
                 Select field options
 

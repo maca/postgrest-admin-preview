@@ -1,20 +1,21 @@
 module PostgRestAdmin.Client exposing
-    ( Client
+    ( Client, init
     , Table, getTable, tableName
     , fetchRecord, fetchRecordList, saveRecord, deleteRecord, request, requestMany, Collection
     , Error(..), errorToString
-    , oneResolver, manyResolver, noneResolver
-    , task, decodeOne, decodeMany
-    , isAuthenticated, toJwtString, authHeader
-    , AuthScheme(..), Response(..), authFailed, authSchemeConfig, authUrl, authUrlDecoder, basic, encoder, endpoint, fetchSchema, init, jwt, jwtDecoder, listableColumns, listingSelects, logout, removeLeadingOrTrailingSlash, schemaIsLoaded, toError, unset, updateJwt
+    , AuthScheme(..), jwt, unset, toJwtString, authHeader, updateJwt, logout
+    , fetchSchema, schemaIsLoaded
+    , Response(..)
+    , endpoint, listableColumns, listingSelects
+    , authSchemeConfig, authUrl, authUrlDecoder, basic, encoder, jwtDecoder
     )
 
-{-|
+{-| PostgREST client for Elm applications.
 
 
 # Client
 
-@docs Client
+@docs Client, init
 
 
 # Table
@@ -36,21 +37,34 @@ but a [PostgRestAdmin.Cmd](PostgRestAdmin-Cmd).
 @docs Error, errorToString
 
 
+# Authentication
+
+@docs AuthScheme, jwt, unset, toJwtString, authHeader, updateJwt, logout
+
+
+# Schema
+
+@docs fetchSchema, schemaIsLoaded
+
+
 # Resolvers
 
-@docs oneResolver, manyResolver, noneResolver
+@docs Response
 
 
 # Tasks
 
-@docs task, decodeOne, decodeMany
+
+# Utilities
+
+@docs endpoint, listableColumns, listingSelects
 
 
-# Authentication
+# Advanced
 
-@docs isAuthenticated, toJwtString, authHeader
+Functions for advanced configuration and internal use.
 
-@docs saveRecord2
+@docs authSchemeConfig, authUrl, authUrlDecoder, basic, encoder, jwtDecoder, removeLeadingOrTrailingSlash
 
 -}
 
@@ -83,16 +97,28 @@ type Error
     | BadStatus Int
     | DecodeError Decode.Error
     | RequestError String
-    | ExpectedRecord
-    | ExpectedRecordList
     | Forbidden
     | Unauthorized
 
 
+type alias Count =
+    { from : Int
+    , to : Int
+    , total : Int
+    }
+
+
+{-| -}
+type alias Collection a =
+    { from : Int
+    , to : Int
+    , total : Int
+    , records : List a
+    }
+
+
 type Response
-    = One Decode.Value
-    | Many Count (List Decode.Value)
-    | None
+    = Many Count (List Decode.Value)
 
 
 type AuthScheme
@@ -119,34 +145,6 @@ type alias Client =
 -}
 type alias Table =
     Schema.Table
-
-
-type alias Count =
-    { from : Int
-    , to : Int
-    , total : Int
-    }
-
-
-{-| -}
-type alias Collection a =
-    { from : Int
-    , to : Int
-    , total : Int
-    , records : List a
-    }
-
-
-{-| Does the client has a valid JWT?
--}
-isAuthenticated : Client -> Bool
-isAuthenticated { authScheme } =
-    authSchemeIsAuthenticated authScheme
-
-
-authSchemeIsAuthenticated : AuthScheme -> Bool
-authSchemeIsAuthenticated authScheme =
-    toJwt authScheme |> Maybe.map (always True) |> Maybe.withDefault False
 
 
 {-| Obtain the JWT as a string.
@@ -229,12 +227,12 @@ authUrlDecoder _ authScheme =
 
 encoder : (Dict String String -> Encode.Value) -> Decoder AuthScheme -> Decoder AuthScheme
 encoder _ =
-    Decode.map identity
+    identity
 
 
 jwtDecoder : Decoder String -> Decoder AuthScheme -> Decoder AuthScheme
 jwtDecoder _ =
-    Decode.map identity
+    identity
 
 
 
@@ -270,21 +268,6 @@ logout client =
 clearAuthSchemeJwt : AuthScheme -> AuthScheme
 clearAuthSchemeJwt _ =
     Unset
-
-
-authFailed : Client -> Client
-authFailed client =
-    { client | authScheme = failAuthScheme client.authScheme }
-
-
-failAuthScheme : AuthScheme -> AuthScheme
-failAuthScheme authScheme =
-    case authScheme of
-        Jwt _ ->
-            Unset
-
-        Unset ->
-            Unset
 
 
 schemaIsLoaded : Client -> Bool
@@ -330,27 +313,11 @@ errorToString error =
         RequestError msg ->
             msg
 
-        ExpectedRecord ->
-            "Expected a record"
-
-        ExpectedRecordList ->
-            "Expected a list of records"
-
         Forbidden ->
             "Forbidden: you don't have permission to access this resource."
 
         Unauthorized ->
             "Unauthorized: please check your credentials."
-
-
-toError : Result x a -> Maybe x
-toError result =
-    case result of
-        Err err ->
-            Just err
-
-        _ ->
-            Nothing
 
 
 removeLeadingOrTrailingSlash : String -> String
@@ -398,8 +365,8 @@ jsonResolver decoder =
 {-| Fetches a record for a given table.
 Requires a decoder for the response and an `expect` function that returns a `Msg`.
 
-    import PostgRestAdmin.Cmd as AppCmd
     import Json.Decode as Decode
+    import PostgRestAdmin.Cmd as AppCmd
 
     fetchOne : (Result Error Decode.Value -> msg) -> String -> String -> Client -> AppCmd.Cmd Msg
     fetchOne tagger tableName recordId client =
@@ -581,7 +548,7 @@ deleteRecord { record, expect } client =
                         , headers = []
                         , path = path
                         , body = Http.emptyBody
-                        , resolver = noneResolver
+                        , resolver = Debug.todo "crash"
                         , timeout = Nothing
                         }
 
@@ -603,14 +570,19 @@ request :
     -> AppCmd.Cmd msg
 request { client, method, headers, path, body, decoder, expect } =
     AppCmd.wrap <|
-        Task.attempt (decodeOne decoder >> expect) <|
-            task
-                { client = client
-                , method = method
-                , headers = headers
-                , path = path
+        Task.attempt expect <|
+            Http.task
+                { method = method
+                , headers =
+                    List.concat
+                        [ authHeader client
+                            |> Maybe.map List.singleton
+                            |> Maybe.withDefault []
+                        , headers
+                        ]
+                , url = endpoint client path
                 , body = body
-                , resolver = oneResolver
+                , resolver = jsonResolver decoder
                 , timeout = Nothing
                 }
 
@@ -663,10 +635,9 @@ task { client, method, headers, path, body, resolver, timeout } =
                 , resolver = resolver
                 , timeout = timeout
                 }
-                |> Task.onError fail
 
         Nothing ->
-            fail Unauthorized
+            Task.fail Unauthorized
 
 
 endpoint : Client -> String -> String
@@ -683,52 +654,8 @@ endpoint { host } path =
         }
 
 
-fail : Error -> Task Error a
-fail err =
-    Task.fail err
-
-
 
 -- RESOLVE
-
-
-{-| -}
-oneResolver : Http.Resolver Error Response
-oneResolver =
-    Http.stringResolver <|
-        \response ->
-            case response of
-                Http.BadUrl_ url ->
-                    Err (BadUrl url)
-
-                Http.Timeout_ ->
-                    Err Timeout
-
-                Http.BadStatus_ { statusCode } _ ->
-                    case statusCode of
-                        401 ->
-                            Err Unauthorized
-
-                        403 ->
-                            Err Forbidden
-
-                        _ ->
-                            Err (BadStatus statusCode)
-
-                Http.NetworkError_ ->
-                    Err NetworkError
-
-                Http.GoodStatus_ _ body ->
-                    if String.isEmpty body then
-                        Ok (One Encode.null)
-
-                    else
-                        case Decode.decodeString Decode.value body of
-                            Err err ->
-                                Err (DecodeError err)
-
-                            Ok value ->
-                                Ok (One value)
 
 
 {-| -}
@@ -775,36 +702,6 @@ manyResolver =
 
                             Ok values ->
                                 Ok (Many count values)
-
-
-{-| -}
-noneResolver : Http.Resolver Error Response
-noneResolver =
-    Http.stringResolver <|
-        \response ->
-            case response of
-                Http.BadUrl_ url ->
-                    Err (BadUrl url)
-
-                Http.Timeout_ ->
-                    Err Timeout
-
-                Http.BadStatus_ { statusCode } _ ->
-                    case statusCode of
-                        401 ->
-                            Err Unauthorized
-
-                        403 ->
-                            Err Forbidden
-
-                        _ ->
-                            Err (BadStatus statusCode)
-
-                Http.NetworkError_ ->
-                    Err NetworkError
-
-                Http.GoodStatus_ _ _ ->
-                    Ok None
 
 
 
@@ -880,28 +777,6 @@ tablePrimaryKeyName table =
 
 
 {-| -}
-decodeOne : Decoder a -> Result Error Response -> Result Error a
-decodeOne decoder result =
-    result
-        |> Result.andThen
-            (\response ->
-                case response of
-                    One value ->
-                        let
-                            mapper =
-                                Decode.decodeValue decoder >> Result.mapError DecodeError
-                        in
-                        mapper value
-
-                    Many _ _ ->
-                        Err ExpectedRecord
-
-                    None ->
-                        Err ExpectedRecord
-            )
-
-
-{-| -}
 decodeMany :
     Decoder a
     -> Result Error Response
@@ -920,12 +795,6 @@ decodeMany decoder result =
                         Encode.list identity list
                             |> mapper
                             |> Result.map (Collection from to total)
-
-                    One _ ->
-                        Err ExpectedRecordList
-
-                    None ->
-                        Err ExpectedRecordList
             )
 
 

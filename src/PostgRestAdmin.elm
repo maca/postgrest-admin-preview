@@ -34,7 +34,7 @@ import Internal.PageListing as PageListing exposing (PageListing)
 import Internal.Schema exposing (Schema)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
-import PostgRestAdmin.Client as Client exposing (Client, Error, Response, errorToString)
+import PostgRestAdmin.Client as Client exposing (Client)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
 import Postgrest.Client as PG
 import String.Extra as String
@@ -114,11 +114,6 @@ type Msg f m msg
     | PageDetailChanged PageDetail.Msg
     | PageFormChanged PageForm.Msg
     | PageApplicationChanged msg
-    | RequestPerformed
-        (Result Error Response
-         -> Msg f m msg
-        )
-        (Result Error Response)
     | NotificationChanged Notification.Msg
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
@@ -451,25 +446,6 @@ update msg model =
 
         ( PageDetailChanged _, _ ) ->
             ( model, Cmd.none )
-
-        ( RequestPerformed mapper (Ok passedMsg), _ ) ->
-            ( model
-            , Task.attempt mapper (Task.succeed passedMsg)
-            )
-
-        ( RequestPerformed _ (Err Client.Unauthorized), _ ) ->
-            ( { model | client = Client.authFailed model.client }
-            , Cmd.none
-            )
-
-        ( RequestPerformed mapper (Err err), _ ) ->
-            ( model
-            , Cmd.batch
-                [ Task.attempt mapper (Task.fail err)
-                , Notification.error (errorToString err)
-                    |> Task.perform NotificationChanged
-                ]
-            )
 
         ( PageFormChanged childMsg, RouteForm prevForm ) ->
             let

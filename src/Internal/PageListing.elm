@@ -13,12 +13,11 @@ module Internal.PageListing exposing
     , view
     )
 
-import Browser.Dom as Dom exposing (Viewport, blur)
+import Browser.Dom as Dom exposing (Viewport)
 import Browser.Events exposing (onKeyDown)
 import Browser.Navigation as Nav
 import Csv exposing (Csv)
 import Dict
-import Dict.Extra as Dict
 import File exposing (File)
 import File.Select as Select
 import Html
@@ -64,7 +63,6 @@ import Internal.Download as Download exposing (Download, Format(..))
 import Internal.Field as Field
 import Internal.Record exposing (primaryKey, setValidation, updateWithString)
 import Internal.Schema as Schema exposing (Constraint(..), Table)
-import PostgRestAdmin.Client as Client exposing (Error, endpoint, errorToString, listableColumns, listingSelects)
 import Internal.Search as Search exposing (Search)
 import Internal.Value as Value
 import Json.Decode as Decode
@@ -72,7 +70,7 @@ import Json.Encode as Encode
 import List.Extra as List
 import List.Split as List
 import Markdown
-import PostgRestAdmin.Client as Client exposing (Client, Collection)
+import PostgRestAdmin.Client as Client exposing (Client, Collection, Error, endpoint, errorToString, listableColumns, listingSelects)
 import PostgRestAdmin.MountPath as MountPath
     exposing
         ( MountPath
@@ -754,8 +752,7 @@ processCsv { table, client } csv =
                     Http.task
                         { url =
                             endpoint client
-                                (Url.absolute
-                                    [ table.name ]
+                                (Url.absolute [ table.name ]
                                     (existenceQuery primaryKeyName chunk)
                                 )
                         , method = "GET"

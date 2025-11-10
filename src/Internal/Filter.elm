@@ -95,12 +95,12 @@ operation (Filter _ op) =
 
 fromColumn : String -> Column -> Maybe Filter
 fromColumn colName col =
-    let
-        enumChoices =
-            col.options |> List.filterMap Value.toString
-    in
     case .value col of
         PString _ ->
+            let
+                enumChoices =
+                    col.options |> List.filterMap Value.toString
+            in
             if not (List.isEmpty enumChoices) then
                 Just (oneOf colName enumChoices Set.empty)
 
@@ -446,12 +446,12 @@ filterCons : Table -> (OperandConst -> Operation) -> String -> Maybe Filter
 filterCons table operationCons name =
     case Dict.get name table.columns of
         Just column ->
-            let
-                enumChoices =
-                    column.options |> List.filterMap Value.toString
-            in
             case column.value of
                 PString _ ->
+                    let
+                        enumChoices =
+                            column.options |> List.filterMap Value.toString
+                    in
                     if not (List.isEmpty enumChoices) then
                         IsNull (Just <| NoneOf <| Operand.enum enumChoices Set.empty)
                             |> (Just << Filter name)

@@ -214,12 +214,13 @@ viewFilter table idx filter =
             let
                 op =
                     Filter.operation filter
-
-                hasEnumOptions =
-                    not (List.isEmpty column.options)
             in
             case column.value of
                 PString _ ->
+                    let
+                        hasEnumOptions =
+                            not (List.isEmpty column.options)
+                    in
                     if hasEnumOptions then
                         enumInputs column.required name idx op
                             |> inputs "enum"
