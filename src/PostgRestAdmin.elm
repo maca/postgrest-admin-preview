@@ -225,12 +225,8 @@ handleAuthResponse aDecoder response =
                 Err (Client.ServerError statusCode)
 
         Http.GoodStatus_ _ body ->
-            let
-                _ =
-                    Debug.log "body" body
-            in
             case Decode.decodeString aDecoder body of
-                Err err ->
+                Err _ ->
                     -- Decode error during auth - treat as server error
                     Err (Client.ServerError 500)
 
@@ -940,19 +936,16 @@ initFormHelp :
 initFormHelp { client, key, config } parent tableName id =
     case Client.getTable tableName client of
         Just table ->
-            let
-                params =
-                    { client = client
-                    , mountPath = config.mountPath
-                    , fieldNames =
-                        Dict.get tableName config.formFields
-                            |> Maybe.withDefault []
-                    , parent = parent
-                    , table = table
-                    , id = id
-                    }
-            in
-            PageForm.init params key
+            PageForm.init
+                { client = client
+                , navKey = key
+                , mountPath = config.mountPath
+
+                -- , fieldNames = Dict.get tableName config.formFields |> Maybe.withDefault []
+                , parent = parent
+                , table = table
+                , id = id
+                }
                 |> Tuple.mapFirst RouteForm
                 |> Tuple.mapSecond (mapAppCmd PageFormChanged)
 

@@ -8,7 +8,10 @@ module Internal.Schema exposing
     , Table
     , columnNames
     , decoder
+    , label
     , tablePrimaryKeyName
+    , tablePrimaryKeyValue
+    , tableUpdateDecoder
     , valueDecoder
     )
 
@@ -101,8 +104,8 @@ decoder { tables, tableAliases } =
             )
 
 
-tablePrimaryKeyName : Table -> Maybe String
-tablePrimaryKeyName { columns } =
+tablePrimaryKey : Table -> Maybe ( String, Column )
+tablePrimaryKey { columns } =
     columns
         |> Dict.filter
             (\_ { constraint } ->
@@ -113,8 +116,33 @@ tablePrimaryKeyName { columns } =
                     _ ->
                         False
             )
-        |> Dict.keys
+        |> Dict.toList
         |> List.head
+
+
+tablePrimaryKeyValue : Table -> Maybe ( String, Value )
+tablePrimaryKeyValue table =
+    tablePrimaryKey table |> Maybe.map (Tuple.mapSecond .value)
+
+
+tablePrimaryKeyName : Table -> Maybe String
+tablePrimaryKeyName table =
+    tablePrimaryKey table
+        |> Maybe.map Tuple.first
+
+
+labelHelp : Table -> String -> Maybe String
+labelHelp table fieldName =
+    if Dict.member fieldName table.columns then
+        Just fieldName
+
+    else
+        Nothing
+
+
+labelIdentifiers : List String
+labelIdentifiers =
+    [ "title", "name", "full name", "email", "first name", "last name" ]
 
 
 columnNamesDecoder : Decode.Decoder (Dict String (List String))
@@ -305,6 +333,22 @@ valueDecoder type_ =
             Decode.map Unknown Decode.value
 
 
+tableUpdateDecoder : Table -> Decode.Decoder Table
+tableUpdateDecoder table =
+    table.columns
+        |> Dict.toList
+        |> List.foldl
+            (\( columnName, column ) ->
+                Decode.map2
+                    (Dict.insert columnName)
+                    (Decode.field columnName (valueDecoder column.columnType)
+                        |> Decode.map (\val -> { column | value = val })
+                    )
+            )
+            (Decode.succeed Dict.empty)
+        |> Decode.map (\cols -> { table | columns = cols })
+
+
 defaultValue : ColumnType -> Value
 defaultValue type_ =
     case type_ of
@@ -426,6 +470,12 @@ extractForeignKey description =
     Regex.find foreignKeyRegex description
         |> List.concatMap .submatches
         |> List.filterMap identity
+
+
+label : Table -> Maybe String
+label table =
+    List.filterMap (labelHelp table) labelIdentifiers
+        |> List.head
 
 
 

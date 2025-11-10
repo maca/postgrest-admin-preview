@@ -6,7 +6,7 @@ module PostgRestAdmin.Client exposing
     , oneResolver, manyResolver, noneResolver
     , task, decodeOne, decodeMany
     , isAuthenticated, toJwtString, authHeader
-    , AuthError(..), AuthScheme(..), Response(..), authFailed, authSchemeConfig, authUrl, authUrlDecoder, basic, encoder, endpoint, fetchRecord2, fetchSchema, handleJsonResponse, handleResponse, init, jwt, jwtDecoder, listableColumns, listingSelects, logout, removeLeadingOrTrailingSlash, schemaIsLoaded, toError, unset, updateJwt
+    , AuthError(..), AuthScheme(..), Response(..), authFailed, authSchemeConfig, authUrl, authUrlDecoder, basic, encoder, endpoint, fetchRecord2, fetchSchema, handleJsonResponse, handleResponse, httpErrorToString, init, jwt, jwtDecoder, listableColumns, listingSelects, logout, removeLeadingOrTrailingSlash, schemaIsLoaded, toError, unset, updateJwt
     )
 
 {-|
@@ -49,6 +49,8 @@ but a [PostgRestAdmin.Cmd](PostgRestAdmin-Cmd).
 # Authentication
 
 @docs isAuthenticated, toJwtString, authHeader
+
+@docs saveRecord2
 
 -}
 
@@ -312,21 +314,7 @@ errorToString : Error -> String
 errorToString error =
     case error of
         Internal.Http.HttpError httpError ->
-            case httpError of
-                Http.BadUrl msg ->
-                    "Invalid URL:" ++ msg
-
-                Http.Timeout ->
-                    "The requested timed out. Please try again."
-
-                Http.NetworkError ->
-                    "Network Error: do you have an internet connection?"
-
-                Http.BadStatus status ->
-                    "Bad status: " ++ String.fromInt status
-
-                Http.BadBody msg ->
-                    "Response error: " ++ msg
+            httpErrorToString httpError
 
         Internal.Http.DecodeError err ->
             Decode.errorToString err
@@ -342,6 +330,25 @@ errorToString error =
 
         Internal.Http.AuthError ->
             "There was an error authorising your credentials."
+
+
+httpErrorToString : Http.Error -> String
+httpErrorToString httpError =
+    case httpError of
+        Http.BadUrl msg ->
+            "Invalid URL:" ++ msg
+
+        Http.Timeout ->
+            "The requested timed out. Please try again."
+
+        Http.NetworkError ->
+            "Network Error: do you have an internet connection?"
+
+        Http.BadStatus status ->
+            "Bad status: " ++ String.fromInt status
+
+        Http.BadBody msg ->
+            "Response error: " ++ msg
 
 
 handleJsonResponse : Decoder a -> Http.Response String -> Result Error a
@@ -457,41 +464,65 @@ fetchRecord { client, table, expect, id } =
             AppCmd.wrap (Task.attempt mapper missingPrimaryKey)
 
 
+jsonResolver : Decode.Decoder a -> Http.Resolver Http.Error a
+jsonResolver decoder =
+    Http.stringResolver
+        (\response ->
+            case response of
+                Http.BadUrl_ url ->
+                    Err (Http.BadUrl url)
+
+                Http.Timeout_ ->
+                    Err Http.Timeout
+
+                Http.NetworkError_ ->
+                    Err Http.NetworkError
+
+                Http.BadStatus_ metadata _ ->
+                    -- TODO: Show server error response
+                    Err (Http.BadStatus metadata.statusCode)
+
+                Http.GoodStatus_ _ body ->
+                    Decode.decodeString decoder body
+                        |> Result.mapError (Decode.errorToString >> Http.BadBody)
+        )
+
+
 fetchRecord2 :
     { client : Client
     , table : Table
-    , expect : Result Http.Error Decode.Value -> msg
     , id : String
+    , decoder : Decode.Decoder a
+    , expect : Result Http.Error a -> msg
     }
     -> AppCmd.Cmd msg
-fetchRecord2 { client, table, expect, id } =
-    case tablePrimaryKeyName table of
-        Just primaryKeyName ->
-            let
-                queryStr =
-                    PG.toQueryString
-                        [ PG.select (selects table)
-                        , PG.eq (PG.string id) |> PG.param primaryKeyName
-                        , PG.limit 1
+fetchRecord2 { client, table, id, expect, decoder } =
+    let
+        queryStr =
+            PG.toQueryString
+                (List.filterMap identity
+                    [ Just (PG.select (selects table))
+                    , tablePrimaryKeyName table
+                        |> Maybe.map
+                            (\key -> PG.eq (PG.string id) |> PG.param key)
+                    , Just (PG.limit 1)
+                    ]
+                )
+    in
+    AppCmd.wrap <|
+        Task.attempt expect <|
+            Http.task
+                { method = "GET"
+                , headers =
+                    List.filterMap identity
+                        [ authHeader client
+                        , Just (Http.header "Accept" "application/vnd.pgrst.object+json")
                         ]
-            in
-            AppCmd.wrap <|
-                Http.request
-                    { method = "GET"
-                    , headers =
-                        List.filterMap identity
-                            [ authHeader client
-                            , Just (Http.header "Accept" "application/vnd.pgrst.object+json")
-                            ]
-                    , url = endpoint client ("/" ++ tableName table ++ "?" ++ queryStr)
-                    , body = Http.emptyBody
-                    , expect = Http.expectJson expect (Decode.index 0 Decode.value)
-                    , timeout = Nothing
-                    , tracker = Nothing
-                    }
-
-        Nothing ->
-            Debug.todo "crash"
+                , url = endpoint client ("/" ++ tableName table ++ "?" ++ queryStr)
+                , body = Http.emptyBody
+                , resolver = jsonResolver decoder
+                , timeout = Nothing
+                }
 
 
 
@@ -543,77 +574,47 @@ fetchRecordList { client, table, queryString, expect } =
                 }
 
 
-{-| Saves a record.
-`expect` param requires a function that returns a `Msg`.
-
-You can use [expectRecord](#expectRecord) to interpret the result as a
-[Record](PostgRestAdmin-Record).
-
-    import PostgRestAdmin.Cmd as AppCmd
-
-    save : (Result Error () -> Msg) -> Record -> Maybe String -> Client -> AppCmd.Cmd Msg
-    save tagger record id client =
-        saveRecord
-            { client = client
-            , record = record
-            , id = id
-            , expect = tagger
-            }
-
--}
 saveRecord :
     { client : Client
-    , record : Record
+    , body : Encode.Value
+    , table : Table
     , id : Maybe String
-    , expect : Result Error Record -> msg
+    , decoder : Decode.Decoder a
+    , expect : Result Http.Error a -> msg
     }
     -> AppCmd.Cmd msg
-saveRecord { client, record, id, expect } =
+saveRecord { client, body, table, decoder, id, expect } =
     let
-        table =
-            Record.getTable record
-
-        mapper =
-            decodeOne (Record.decoder table) >> expect
-
         queryString =
-            PG.toQueryString [ PG.select (selects record.table) ]
+            PG.toQueryString [ PG.select (selects table) ]
 
-        params =
-            { client = client
-            , method = "PATCH"
-            , headers =
-                [ Http.header "Prefer" "return=representation"
-                , Http.header "Accept" "application/vnd.pgrst.object+json"
-                ]
-            , path = "/" ++ Record.tableName record
-            , body = Http.jsonBody (Record.encode record)
-            , resolver = oneResolver
-            , timeout = Nothing
-            }
+        ( path, method ) =
+            case id of
+                Just recordId ->
+                    ( "/" ++ table.name ++ "?id=eq." ++ recordId ++ "&" ++ queryString
+                    , "PATCH"
+                    )
+
+                Nothing ->
+                    ( "/" ++ table.name ++ "?" ++ queryString
+                    , "POST"
+                    )
     in
-    case id of
-        Just recordId ->
-            AppCmd.wrap <|
-                Task.attempt mapper <|
-                    task
-                        { params
-                            | path =
-                                params.path
-                                    ++ "?id=eq."
-                                    ++ recordId
-                                    ++ "&"
-                                    ++ queryString
-                        }
-
-        Nothing ->
-            AppCmd.wrap <|
-                Task.attempt mapper <|
-                    task
-                        { params
-                            | method = "POST"
-                            , path = params.path ++ "?" ++ queryString
-                        }
+    AppCmd.wrap <|
+        Task.attempt expect <|
+            Http.task
+                { method = method
+                , headers =
+                    List.filterMap identity
+                        [ authHeader client
+                        , Just (Http.header "Prefer" "return=representation")
+                        , Just (Http.header "Accept" "application/vnd.pgrst.object+json")
+                        ]
+                , url = endpoint client path
+                , body = Http.jsonBody body
+                , resolver = jsonResolver decoder
+                , timeout = Nothing
+                }
 
 
 {-| Deletes a record.
