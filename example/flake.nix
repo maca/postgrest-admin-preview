@@ -16,6 +16,41 @@
           ps.pgjwt
         ]);
 
+        # Fetch Pagila sample database SQL files from GitHub
+        pagilaSchema = pkgs.fetchurl {
+          url = "https://raw.githubusercontent.com/devrimgunduz/pagila/master/pagila-schema.sql";
+          sha256 = "sha256-jONY5MgBQIe4UpZpSgiTiHvXpBkOPOQH8nIbhrmOVwc=";
+        };
+
+        pagilaData = pkgs.fetchurl {
+          url = "https://raw.githubusercontent.com/devrimgunduz/pagila/master/pagila-data.sql";
+          sha256 = "sha256-iAWA+yzU2qqZ8pDO0mSYjN1lezFYvmPNKBRm95b22/I=";
+        };
+
+        # Helper script to load all SQL files
+        load-sql = pkgs.writeShellScriptBin "load-sql" ''
+          export PGDATA=$PWD/database/pgdata
+          export PGHOST=$PWD/database/pgdata
+          export PGDATABASE=example
+
+          echo "Loading Pagila schema from ${pagilaSchema}..."
+          ${postgresql}/bin/psql --host="$PGHOST" -d example -f "${pagilaSchema}"
+
+          echo "Loading Pagila data from ${pagilaData}..."
+          ${postgresql}/bin/psql --host="$PGHOST" -d example -f "${pagilaData}"
+
+          echo "Loading database schema from database/schema.sql..."
+          ${postgresql}/bin/psql --host="$PGHOST" -d example -f "$PWD/database/schema.sql"
+
+          echo "Loading sample data from database/data.sql..."
+          ${postgresql}/bin/psql --host="$PGHOST" -d example -f "$PWD/database/data.sql"
+
+          echo "Loading permissions from database/permissions.sql..."
+          ${postgresql}/bin/psql --host="$PGHOST" -d example -f "$PWD/database/permissions.sql"
+
+          echo "Database loaded successfully (Pagila + custom schema + permissions)"
+        '';
+
         setup = pkgs.writeShellScriptBin "setup" ''
           echo "Setting up database..."
 
@@ -60,20 +95,8 @@
             echo "Database 'example' already exists"
           fi
 
-          # Load schema
-          echo "Loading database schema from database/schema.sql..."
-          ${postgresql}/bin/psql \
-            --host="$PGHOST" \
-            -d example \
-            -f "$PWD/database/schema.sql"
-
-          # Load data
-          echo "Loading sample data from database/data.sql..."
-          ${postgresql}/bin/psql \
-            --host="$PGHOST" \
-            -d example \
-            -f "$PWD/database/data.sql"
-          echo "Database loaded successfully"
+          # Load all SQL files (Pagila + custom schema)
+          load-sql
 
           # Stop PostgreSQL if we started it
           if [ "$STARTED_POSTGRES" = true ]; then
@@ -207,13 +230,8 @@
             STARTED_POSTGRES=true
           fi
 
-          echo "Loading database schema from database/schema.sql..."
-          ${postgresql}/bin/psql --host="$PGHOST" -d example -f "$PWD/database/schema.sql"
-
-          echo "Loading sample data from database/data.sql..."
-          ${postgresql}/bin/psql --host="$PGHOST" -d example -f "$PWD/database/data.sql"
-
-          echo "Database loaded successfully"
+          # Load all SQL files (Pagila + custom schema)
+          load-sql
 
           # Stop PostgreSQL if we started it
           if [ "$STARTED_POSTGRES" = true ]; then
@@ -362,6 +380,7 @@
             run
             run-postgres
             run-postgrest
+            load-sql
             load-dump
             database
             stop
@@ -379,15 +398,16 @@
             echo "PostgREST Admin Preview - Example Environment"
             echo "PostgreSQL data dir: $PGDATA"
             echo ""
+            echo ""
             echo "Available commands:"
             echo "  setup           - Initialize database and load dump (run this first)"
             echo "  run [port]      - Start all services, default port 9000"
             echo "  run-postgres    - Start PostgreSQL service only"
             echo "  run-postgrest   - Start PostgREST service only"
+            echo "  load-dump       - Reload schema into database"
+            echo "  database        - Open database shell (psql)"
             echo "  stop            - Stop all services"
             echo "  clean           - Remove database and start fresh"
-            echo "  database        - Open database shell (psql)"
-            echo "  load-dump       - Reload dump.sql into database"
           '';
         };
       });

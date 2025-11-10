@@ -48,28 +48,6 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
--- Create a simple products table
-CREATE TABLE IF NOT EXISTS products (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT,
-    price NUMERIC(10, 2) NOT NULL,
-    in_stock BOOLEAN DEFAULT true,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Grant permissions to web_anon role (read-only)
-GRANT SELECT ON products TO web_anon;
-GRANT USAGE, SELECT ON SEQUENCE products_id_seq TO web_anon;
-
--- Grant permissions to web_user role (read and write)
-GRANT SELECT, INSERT, UPDATE, DELETE ON products TO web_user;
-GRANT USAGE, SELECT ON SEQUENCE products_id_seq TO web_user;
-
-
-
-
-
 -- Login function that validates credentials and returns a JWT
 -- Usage: POST to /rpc/login with body: {"email": "user@example.com", "password": "password"}
 CREATE OR REPLACE FUNCTION login(email text, password text)
@@ -115,10 +93,3 @@ BEGIN
   );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
-
-
-
-
--- Grant execute permission to web_anon so unauthenticated users can login
-GRANT EXECUTE ON FUNCTION login(text, text) TO web_anon;
