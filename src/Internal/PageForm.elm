@@ -413,24 +413,6 @@ fieldFromColumn name column =
                 )
 
 
-
--- UTILS
--- filterInputs : PageForm -> PageForm
--- filterInputs params =
---     { params
---         | inputs =
---             Dict.filter (inputIsEditable params.fieldNames) params.inputs
---     }
--- inputIsEditable : List String -> String -> Input -> Bool
--- inputIsEditable fieldNames name input =
---     let
---         field =
---             Input.toField input
---     in
---     (List.isEmpty fieldNames && not (Field.isPrimaryKey field))
---         || List.member name fieldNames
-
-
 sortColumns : ( String, Schema.Column ) -> ( String, Schema.Column ) -> Order
 sortColumns ( name, column ) ( name_, column_ ) =
     case ( column.constraint, column_.constraint ) of

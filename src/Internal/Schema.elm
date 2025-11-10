@@ -16,7 +16,6 @@ module Internal.Schema exposing
     )
 
 import Dict exposing (Dict)
-import Internal.Http exposing (Error(..), toError)
 import Internal.Value exposing (Value(..))
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -91,16 +90,91 @@ columnNames { columns } =
 decoder :
     { a | tables : List String, tableAliases : Dict String String }
     -> Decode.Decoder Schema
-decoder { tables, tableAliases } =
-    columnNamesDecoder
+decoder ({ tableAliases } as params) =
+    let
+        columnDecoder definitions requiredCols tableName columnName =
+            Decode.at [ "definitions", tableName, "properties", columnName ]
+                (Decode.field "type" Decode.string
+                    |> Decode.andThen
+                        (\type_ ->
+                            Decode.maybe (Decode.field "format" Decode.string)
+                                |> Decode.map (columnType type_)
+                        )
+                    |> Decode.andThen
+                        (\type_ ->
+                            Decode.map3
+                                (\value options description ->
+                                    ( columnName
+                                    , { constraint =
+                                            description
+                                                |> Maybe.map
+                                                    (columnConstraint tableAliases
+                                                        (definitions
+                                                            |> Dict.map (always .properties)
+                                                        )
+                                                    )
+                                                |> Maybe.withDefault NoConstraint
+                                      , required = List.member columnName requiredCols
+                                      , value = value
+                                      , options = options
+                                      , columnType = type_
+                                      }
+                                    )
+                                )
+                                (Decode.oneOf
+                                    [ Decode.field "default" (valueDecoder type_)
+                                    , Decode.succeed (defaultValue type_)
+                                    ]
+                                )
+                                (Decode.oneOf
+                                    [ Decode.field "enum" (Decode.list (valueDecoder type_))
+                                    , Decode.succeed []
+                                    ]
+                                )
+                                (Decode.maybe (Decode.field "description" Decode.string))
+                        )
+                )
+    in
+    Decode.field "definitions"
+        (Decode.dict
+            (Decode.map2 (\p r -> { properties = p, requiredCols = r })
+                (Decode.field "properties"
+                    (Decode.dict (Decode.succeed ()) |> Decode.map Dict.keys)
+                )
+                (Decode.oneOf
+                    [ Decode.field "required" (Decode.list Decode.string)
+                    , Decode.succeed []
+                    ]
+                )
+            )
+            |> Decode.map
+                (Dict.filter
+                    (\k _ -> List.isEmpty params.tables || List.member k params.tables)
+                )
+        )
         |> Decode.andThen
-            (case tables of
-                [] ->
-                    schemaDecoder tableAliases
-
-                _ ->
-                    Dict.filter (\k _ -> List.member k tables)
-                        >> schemaDecoder tableAliases
+            (\definitions ->
+                Dict.toList definitions
+                    |> List.foldl
+                        (\( tableName, { properties, requiredCols } ) ->
+                            Decode.map2 (::)
+                                ((properties
+                                    |> List.foldl
+                                        (\columnName ->
+                                            Decode.map2 (::)
+                                                (columnDecoder definitions requiredCols tableName columnName)
+                                        )
+                                        (Decode.succeed [])
+                                 )
+                                    |> Decode.map
+                                        (Dict.fromList
+                                            >> Table tableName
+                                            >> Tuple.pair tableName
+                                        )
+                                )
+                        )
+                        (Decode.succeed [])
+                    |> Decode.map Dict.fromList
             )
 
 
@@ -143,96 +217,6 @@ labelHelp table fieldName =
 labelIdentifiers : List String
 labelIdentifiers =
     [ "title", "name", "full name", "email", "first name", "last name" ]
-
-
-columnNamesDecoder : Decode.Decoder (Dict String (List String))
-columnNamesDecoder =
-    Decode.field "definitions"
-        (Decode.dict
-            (Decode.field "properties"
-                (Decode.dict (Decode.succeed ()) |> Decode.map Dict.keys)
-            )
-        )
-
-
-schemaDecoder :
-    Dict String String
-    -> Dict String (List String)
-    -> Decode.Decoder Schema
-schemaDecoder tableAliases colNames =
-    Decode.field "definitions" (Decode.keyValuePairs Decode.value)
-        |> Decode.andThen (decodeResults (tableDecoder tableAliases colNames))
-
-
-tableDecoder :
-    Dict String String
-    -> Dict String (List String)
-    -> String
-    -> Decode.Decoder Table
-tableDecoder tableAliases colNames tableName =
-    requiredColumnsDecoder
-        |> Decode.andThen
-            (\requiredColumns ->
-                Decode.field "properties" (Decode.keyValuePairs Decode.value)
-                    |> Decode.andThen
-                        (decodeResults
-                            (columnDecoder tableAliases colNames requiredColumns)
-                        )
-            )
-        |> Decode.map (\columns -> { columns = columns, name = tableName })
-
-
-columnDecoder :
-    Dict String String
-    -> Dict String (List String)
-    -> List String
-    -> String
-    -> Decode.Decoder Column
-columnDecoder tableAliases colNames requiredColumns columnName =
-    typeDecoder
-        |> Decode.andThen
-            (\type_ ->
-                Decode.map3
-                    (\value options description ->
-                        { constraint =
-                            description
-                                |> Maybe.map
-                                    (columnConstraint tableAliases colNames)
-                                |> Maybe.withDefault NoConstraint
-                        , required = List.member columnName requiredColumns
-                        , value = value
-                        , options = options
-                        , columnType = type_
-                        }
-                    )
-                    (Decode.oneOf
-                        [ Decode.field "default" (valueDecoder type_)
-                        , Decode.succeed (defaultValue type_)
-                        ]
-                    )
-                    (Decode.oneOf
-                        [ Decode.field "enum" (Decode.list (valueDecoder type_))
-                        , Decode.succeed []
-                        ]
-                    )
-                    (Decode.maybe (Decode.field "description" Decode.string))
-            )
-
-
-requiredColumnsDecoder : Decode.Decoder (List String)
-requiredColumnsDecoder =
-    Decode.map (Maybe.withDefault [])
-        (Decode.maybe (Decode.field "required" (Decode.list Decode.string)))
-
-
-typeDecoder : Decode.Decoder ColumnType
-typeDecoder =
-    Decode.field "type" Decode.string
-        |> Decode.andThen
-            (\type_ ->
-                Decode.maybe (Decode.field "format" Decode.string)
-                    |> Decode.map (columnType type_)
-            )
 
 
 columnType : String -> Maybe String -> ColumnType
@@ -398,37 +382,7 @@ defaultValue type_ =
             Unknown Encode.null
 
 
-decodeResults :
-    (String -> Decode.Decoder value)
-    -> List ( String, Decode.Value )
-    -> Decode.Decoder (Dict String value)
-decodeResults valDecoder values =
-    let
-        results =
-            List.map
-                (\( name, value ) ->
-                    Decode.decodeValue (valDecoder name) value
-                        |> Result.map (Tuple.pair name)
-                )
-                values
-    in
-    case List.filterMap toError results of
-        err :: _ ->
-            Decode.fail (Decode.errorToString err)
-
-        [] ->
-            results
-                |> List.filterMap
-                    (Result.map Just >> Result.withDefault Nothing)
-                |> Dict.fromList
-                |> Decode.succeed
-
-
-columnConstraint :
-    Dict String String
-    -> Dict String (List String)
-    -> String
-    -> Constraint
+columnConstraint : Dict String String -> Dict String (List String) -> String -> Constraint
 columnConstraint tableAliases colNames description =
     case extractForeignKey description of
         [ tableName, primaryKeyName ] ->

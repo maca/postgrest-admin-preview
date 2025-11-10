@@ -27,7 +27,6 @@ import Internal.Application as Application exposing (Application(..))
 import Internal.Cmd as AppCmd
 import Internal.Config as Config exposing (Config)
 import Internal.Flag as Flag
-import Internal.Http
 import Internal.Notification as Notification exposing (Notification)
 import Internal.PageDetail as PageDetail exposing (PageDetail)
 import Internal.PageForm as PageForm exposing (PageForm)
@@ -90,7 +89,7 @@ type alias Model f m msg =
     { route : Route f m msg
     , key : Nav.Key
     , notification : Notification
-    , error : Maybe Error
+    , error : Maybe String
     , client : Client
     , onLogin : Maybe String -> Cmd (Msg f m msg)
     , mountedApp : Application.Application f m msg
@@ -110,7 +109,7 @@ type Msg f m msg
     | AuthFieldsChanged (Field.Msg Never)
     | AuthFormSubmitted
     | GotToken (Result Client.AuthError String)
-    | SchemaFetched (Result Error Schema)
+    | SchemaFetched (Result Http.Error Schema)
     | PageListingChanged PageListing.Msg
     | PageDetailChanged PageDetail.Msg
     | PageFormChanged PageForm.Msg
@@ -289,7 +288,7 @@ init decoder flags url key =
                 model =
                     makeModel Config.default
             in
-            ( { model | error = Just (Internal.Http.DecodeError error) }
+            ( { model | error = Just (Decode.errorToString error) }
             , Cmd.none
             )
 
@@ -415,13 +414,15 @@ update msg model =
             , Cmd.none
             )
 
-        ( SchemaFetched (Err Internal.Http.AuthError), _ ) ->
-            ( { model | client = Client.authFailed model.client }
-            , Cmd.none
+        -- ( SchemaFetched (Err Internal.Http.AuthError), _ ) ->
+        --     ( { model | client = Client.authFailed model.client }
+        --     , Cmd.none
+        --     )
+        ( SchemaFetched (Err err), _ ) ->
+            ( model
+            , Notification.error (Client.httpErrorToString err)
+                |> Task.perform NotificationChanged
             )
-
-        ( SchemaFetched (Err _), _ ) ->
-            ( model, Cmd.none )
 
         ( PageListingChanged childMsg, RouteListing listing ) ->
             let
@@ -453,7 +454,7 @@ update msg model =
             , Task.attempt mapper (Task.succeed passedMsg)
             )
 
-        ( RequestPerformed _ (Err Internal.Http.AuthError), _ ) ->
+        ( RequestPerformed _ (Err Client.AuthError), _ ) ->
             ( { model | client = Client.authFailed model.client }
             , Cmd.none
             )
@@ -590,7 +591,7 @@ view model =
                 [ Html.h1 [] [ Html.text "Init failed" ]
                 , Html.pre
                     [ Attrs.class "parse-errors" ]
-                    [ Html.text (errorToString error) ]
+                    [ Html.text error ]
                 ]
 
             Nothing ->

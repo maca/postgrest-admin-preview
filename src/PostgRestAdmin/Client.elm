@@ -2,7 +2,7 @@ module PostgRestAdmin.Client exposing
     ( Client
     , Table, getTable, tableName
     , fetchRecord, fetchRecordList, saveRecord, deleteRecord, request, requestMany, Collection
-    , Error, errorToString
+    , Error(..), errorToString
     , oneResolver, manyResolver, noneResolver
     , task, decodeOne, decodeMany
     , isAuthenticated, toJwtString, authHeader
@@ -59,7 +59,6 @@ import Dict.Extra as Dict
 import Http
 import Internal.Cmd as AppCmd
 import Internal.Field as Field
-import Internal.Http
 import Internal.Schema as Schema exposing (Column, Constraint(..), Table)
 import Internal.Value exposing (Value(..))
 import Json.Decode as Decode exposing (Decoder)
@@ -67,6 +66,7 @@ import Json.Encode as Encode
 import Parser exposing ((|.), (|=), Parser)
 import PostgRestAdmin.Record as Record exposing (Record)
 import Postgrest.Client as PG exposing (Selectable)
+import Regex
 import String.Extra as String
 import Task exposing (Task)
 import Url exposing (Url)
@@ -76,8 +76,13 @@ import Url exposing (Url)
 -- TYPES
 
 
-type alias Error =
-    Internal.Http.Error
+type Error
+    = HttpError Http.Error
+    | DecodeError Decode.Error
+    | RequestError String
+    | ExpectedRecord
+    | ExpectedRecordList
+    | AuthError
 
 
 type Response
@@ -293,17 +298,14 @@ schemaIsLoaded { schema } =
 fetchSchema :
     { a | tables : List String, tableAliases : Dict String String }
     -> Client
-    -> Task Error Schema.Schema
+    -> Task Http.Error Schema.Schema
 fetchSchema config client =
-    task
-        { client = client
-        , method = "GET"
-        , headers = []
-        , path = "/"
+    Http.task
+        { method = "GET"
+        , headers = List.filterMap identity [ authHeader client ]
+        , url = endpoint client "/"
         , body = Http.emptyBody
-        , resolver =
-            Http.stringResolver
-                (handleJsonResponse (Schema.decoder config))
+        , resolver = jsonResolver (Schema.decoder config)
         , timeout = Nothing
         }
 
@@ -313,22 +315,22 @@ fetchSchema config client =
 errorToString : Error -> String
 errorToString error =
     case error of
-        Internal.Http.HttpError httpError ->
+        HttpError httpError ->
             httpErrorToString httpError
 
-        Internal.Http.DecodeError err ->
+        DecodeError err ->
             Decode.errorToString err
 
-        Internal.Http.RequestError msg ->
+        RequestError msg ->
             msg
 
-        Internal.Http.ExpectedRecord ->
+        ExpectedRecord ->
             "Expected a record"
 
-        Internal.Http.ExpectedRecordList ->
+        ExpectedRecordList ->
             "Expected a list of records"
 
-        Internal.Http.AuthError ->
+        AuthError ->
             "There was an error authorising your credentials."
 
 
@@ -357,7 +359,7 @@ handleJsonResponse decoder =
         (\_ body ->
             case Decode.decodeString decoder body of
                 Err err ->
-                    Err (Internal.Http.DecodeError err)
+                    Err (DecodeError err)
 
                 Ok result ->
                     Ok result
@@ -371,34 +373,41 @@ handleResponse :
 handleResponse toResult response =
     case response of
         Http.BadUrl_ url ->
-            Err (Internal.Http.HttpError (Http.BadUrl url))
+            Err (HttpError (Http.BadUrl url))
 
         Http.Timeout_ ->
-            Err (Internal.Http.HttpError Http.Timeout)
+            Err (HttpError Http.Timeout)
 
         Http.BadStatus_ { statusCode } _ ->
             case statusCode of
                 401 ->
-                    Err Internal.Http.AuthError
+                    Err AuthError
 
                 _ ->
-                    Err (Internal.Http.HttpError (Http.BadStatus statusCode))
+                    Err (HttpError (Http.BadStatus statusCode))
 
         Http.NetworkError_ ->
-            Err (Internal.Http.HttpError Http.NetworkError)
+            Err (HttpError Http.NetworkError)
 
         Http.GoodStatus_ { headers } body ->
             toResult headers body
 
 
 toError : Result x a -> Maybe x
-toError =
-    Internal.Http.toError
+toError result =
+    case result of
+        Err err ->
+            Just err
+
+        _ ->
+            Nothing
 
 
 removeLeadingOrTrailingSlash : String -> String
 removeLeadingOrTrailingSlash =
-    Internal.Http.removeLeadingOrTrailingSlash
+    Regex.replace
+        (Maybe.withDefault Regex.never (Regex.fromString "^/|/$"))
+        (always "")
 
 
 
@@ -737,7 +746,7 @@ task { client, method, headers, path, body, resolver, timeout } =
                 |> Task.onError fail
 
         Nothing ->
-            fail Internal.Http.AuthError
+            fail AuthError
 
 
 endpoint : Client -> String -> String
@@ -757,8 +766,8 @@ endpoint { host } path =
 fail : Error -> Task Error a
 fail err =
     case err of
-        Internal.Http.AuthError ->
-            Task.fail Internal.Http.AuthError
+        AuthError ->
+            Task.fail AuthError
 
         _ ->
             Task.fail err
@@ -780,7 +789,7 @@ oneResolver =
                 else
                     case Decode.decodeString Decode.value body of
                         Err err ->
-                            Err (Internal.Http.DecodeError err)
+                            Err (DecodeError err)
 
                         Ok value ->
                             Ok (One value)
@@ -806,7 +815,7 @@ manyResolver =
                 else
                     case Decode.decodeString (Decode.list Decode.value) body of
                         Err err ->
-                            Err (Internal.Http.DecodeError err)
+                            Err (DecodeError err)
 
                         Ok values ->
                             Ok (Many count values)
@@ -825,7 +834,7 @@ noneResolver =
 
 missingPrimaryKey : Task Error a
 missingPrimaryKey =
-    Task.fail (Internal.Http.RequestError "I cound't figure the primary key")
+    Task.fail (RequestError "I cound't figure the primary key")
 
 
 selects : Table -> List Selectable
@@ -901,15 +910,15 @@ decodeOne decoder result =
                     One value ->
                         let
                             mapper =
-                                Decode.decodeValue decoder >> Result.mapError Internal.Http.DecodeError
+                                Decode.decodeValue decoder >> Result.mapError DecodeError
                         in
                         mapper value
 
                     Many _ _ ->
-                        Err Internal.Http.ExpectedRecord
+                        Err ExpectedRecord
 
                     None ->
-                        Err Internal.Http.ExpectedRecord
+                        Err ExpectedRecord
             )
 
 
@@ -927,17 +936,17 @@ decodeMany decoder result =
                         let
                             mapper =
                                 Decode.decodeValue (Decode.list decoder)
-                                    >> Result.mapError Internal.Http.DecodeError
+                                    >> Result.mapError DecodeError
                         in
                         Encode.list identity list
                             |> mapper
                             |> Result.map (Collection from to total)
 
                     One _ ->
-                        Err Internal.Http.ExpectedRecordList
+                        Err ExpectedRecordList
 
                     None ->
-                        Err Internal.Http.ExpectedRecordList
+                        Err ExpectedRecordList
             )
 
 

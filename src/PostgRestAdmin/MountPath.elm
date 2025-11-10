@@ -16,7 +16,7 @@ module PostgRestAdmin.MountPath exposing
 
 import Html exposing (Html, a, h1, span, text)
 import Html.Attributes exposing (class, classList, href, style)
-import Internal.Http exposing (removeLeadingOrTrailingSlash)
+import Regex
 import String.Extra as String
 import Url.Builder as Url
 
@@ -135,3 +135,10 @@ breadcrumbsHelp mountPath tableName acc components =
 
         [] ->
             acc
+
+
+removeLeadingOrTrailingSlash : String -> String
+removeLeadingOrTrailingSlash =
+    Regex.replace
+        (Maybe.withDefault Regex.never (Regex.fromString "^/|/$"))
+        (always "")
