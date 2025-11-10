@@ -545,12 +545,7 @@ fetchRecords client name { tableName, labelColumnName } userInput =
                     PG.toQueryString
                         [ PG.select selects, PG.or queries, PG.limit 40 ]
             in
-            Client.fetchRecordList
-                { client = client
-                , table = table
-                , queryString = queryString
-                , expect = ListingFetched name
-                }
+            Debug.todo "crash"
 
         Nothing ->
             AppCmd.none

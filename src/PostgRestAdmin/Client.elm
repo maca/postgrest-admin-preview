@@ -459,11 +459,14 @@ fetchRecordList { client, table, queryString, expect } =
     in
     AppCmd.wrap <|
         Task.attempt (decodeMany (Record.decoder table) >> expect) <|
-            task
-                { client = client
-                , method = "GET"
-                , headers = [ Http.header "Prefer" "count=planned" ]
-                , path = "/" ++ tableName table ++ "?" ++ selectString ++ "&" ++ queryString
+            Http.task
+                { method = "GET"
+                , headers =
+                    List.filterMap identity
+                        [ authHeader client
+                        , Just (Http.header "Prefer" "count=planned")
+                        ]
+                , url = endpoint client ("/" ++ tableName table ++ "?" ++ selectString ++ "&" ++ queryString)
                 , body = Http.emptyBody
                 , resolver = manyResolver
                 , timeout = Nothing
@@ -542,13 +545,12 @@ deleteRecord { record, expect } client =
         Just path ->
             AppCmd.wrap <|
                 Task.attempt mapper <|
-                    task
-                        { client = client
-                        , method = "DELETE"
-                        , headers = []
-                        , path = path
+                    Http.task
+                        { method = "DELETE"
+                        , headers = List.filterMap identity [ authHeader client ]
+                        , url = endpoint client path
                         , body = Http.emptyBody
-                        , resolver = Debug.todo "crash"
+                        , resolver = jsonResolver (Decode.succeed ())
                         , timeout = Nothing
                         }
 
@@ -601,43 +603,14 @@ requestMany :
 requestMany { client, method, headers, path, decoder, body, expect } =
     AppCmd.wrap <|
         Task.attempt (decodeMany decoder >> expect) <|
-            task
-                { client = client
-                , method = method
-                , headers = headers
-                , path = path
+            Http.task
+                { method = method
+                , headers = List.filterMap identity (authHeader client :: List.map Just headers)
+                , url = endpoint client path
                 , body = body
                 , resolver = manyResolver
                 , timeout = Nothing
                 }
-
-
-{-| Task to perform a request to a PostgREST instance resource.
--}
-task :
-    { client : Client
-    , method : String
-    , headers : List Http.Header
-    , path : String
-    , body : Http.Body
-    , resolver : Http.Resolver Error body
-    , timeout : Maybe Float
-    }
-    -> Task Error body
-task { client, method, headers, path, body, resolver, timeout } =
-    case authHeader client of
-        Just auth ->
-            Http.task
-                { method = method
-                , headers = auth :: headers
-                , url = endpoint client path
-                , body = body
-                , resolver = resolver
-                , timeout = timeout
-                }
-
-        Nothing ->
-            Task.fail Unauthorized
 
 
 endpoint : Client -> String -> String
