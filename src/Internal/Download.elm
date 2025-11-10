@@ -3,7 +3,7 @@ module Internal.Download exposing (Download, Format(..), fetch, init, save)
 import Bytes exposing (Bytes)
 import File.Download as Download
 import Http exposing (header)
-import PostgRestAdmin.Client as Client exposing (Client, Error, endpoint, handleResponse)
+import PostgRestAdmin.Client as Client exposing (Client, Error, endpoint)
 import Task exposing (Task)
 
 
@@ -60,13 +60,38 @@ fetch client download =
                 , url = endpoint client (url download)
                 , body = Http.emptyBody
                 , resolver =
-                    Http.bytesResolver (handleResponse (\_ body -> Ok body))
+                    Http.bytesResolver
+                        (\response ->
+                            case response of
+                                Http.BadUrl_ urlStr ->
+                                    Err (Client.BadUrl urlStr)
+
+                                Http.Timeout_ ->
+                                    Err Client.Timeout
+
+                                Http.BadStatus_ { statusCode } _ ->
+                                    case statusCode of
+                                        401 ->
+                                            Err Client.Unauthorized
+
+                                        403 ->
+                                            Err Client.Forbidden
+
+                                        _ ->
+                                            Err (Client.BadStatus statusCode)
+
+                                Http.NetworkError_ ->
+                                    Err Client.NetworkError
+
+                                Http.GoodStatus_ _ body ->
+                                    Ok body
+                        )
                 , timeout = Nothing
                 }
                 |> Task.map (Complete (format download) (url download))
 
         Nothing ->
-            Task.fail Client.AuthError
+            Task.fail Client.Unauthorized
 
 
 save : String -> Download -> Cmd msg

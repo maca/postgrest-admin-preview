@@ -30,9 +30,9 @@ import Url.Builder as Url
 
 type Msg
     = LoggedIn Client
-    | Fetched (Result Http.Error Decode.Value)
-    | ParentFetched (Result Http.Error Table)
-    | Saved (Result Http.Error ( Decode.Value, Table ))
+    | Fetched (Result Client.Error Decode.Value)
+    | ParentFetched (Result Client.Error Table)
+    | Saved (Result Client.Error ( Decode.Value, Table ))
     | FormChanged (Field.Msg String)
     | Submitted
 
@@ -93,12 +93,12 @@ init { client, navKey, mountPath, id, table, parent } =
         [ fetchRecord pageForm
         , case parentParams of
             Just ( parentTable, params ) ->
-                Client.fetchRecord2
+                Client.fetchRecord
                     { client = client
                     , table = parentTable
                     , id = params.id
                     , expect = ParentFetched
-                    , decoder = Schema.tableUpdateDecoder table
+                    , decoder = tableUpdateDecoder table
                     }
 
             Nothing ->
@@ -111,7 +111,7 @@ fetchRecord : PageForm -> AppCmd.Cmd Msg
 fetchRecord { id, client, table } =
     case id of
         Just recordId ->
-            Client.fetchRecord2
+            Client.fetchRecord
                 { client = client
                 , table = table
                 , id = recordId
@@ -155,7 +155,7 @@ update msg model =
 
         Fetched (Err err) ->
             ( model
-            , Notification.error (Client.httpErrorToString err)
+            , Notification.error (Client.errorToString err)
             )
 
         ParentFetched (Ok parent) ->
@@ -163,7 +163,7 @@ update msg model =
 
         ParentFetched (Err err) ->
             ( model
-            , Notification.error (Client.httpErrorToString err)
+            , Notification.error (Client.errorToString err)
             )
 
         Saved (Ok ( response, table )) ->
@@ -188,7 +188,7 @@ update msg model =
 
         Saved (Err err) ->
             ( model
-            , Notification.error (Client.httpErrorToString err)
+            , Notification.error (Client.errorToString err)
             )
 
         FormChanged innerMsg ->
@@ -209,7 +209,7 @@ update msg model =
                         , decoder =
                             Decode.map2 Tuple.pair
                                 Decode.value
-                                (Schema.tableUpdateDecoder model.table)
+                                (tableUpdateDecoder model.table)
                         }
 
                 Err _ ->
@@ -430,3 +430,19 @@ sortColumns ( name, column ) ( name_, column_ ) =
 
         _ ->
             compare name name_
+
+
+tableUpdateDecoder : Table -> Decode.Decoder Table
+tableUpdateDecoder table =
+    table.columns
+        |> Dict.toList
+        |> List.foldl
+            (\( columnName, column ) ->
+                Decode.map2
+                    (Dict.insert columnName)
+                    (Decode.field columnName (Schema.valueDecoder column.columnType)
+                        |> Decode.map (\val -> { column | value = val })
+                    )
+            )
+            (Decode.succeed Dict.empty)
+        |> Decode.map (\cols -> { table | columns = cols })

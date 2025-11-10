@@ -1,19 +1,18 @@
 module Internal.Schema exposing
-    ( Column
-    , ColumnType(..)
-    , Constraint(..)
-    , ForeignKeyParams
-    , Reference
-    , Schema
-    , Table
-    , columnNames
-    , decoder
-    , label
-    , tablePrimaryKeyName
-    , tablePrimaryKeyValue
-    , tableUpdateDecoder
-    , valueDecoder
+    ( Schema, Column, ColumnType(..)
+    , Constraint(..), ForeignKeyParams, Reference
+    , Table, columnNames, label, tablePrimaryKeyName, tablePrimaryKeyValue
+    , decoder, valueDecoder
     )
+
+{-|
+
+@docs Schema, Column, ColumnType
+@docs Constraint, ForeignKeyParams, Reference
+@docs Table, columnNames, label, tablePrimaryKeyName, tablePrimaryKeyValue
+@docs decoder, valueDecoder
+
+-}
 
 import Dict exposing (Dict)
 import Internal.Value exposing (Value(..))
@@ -315,22 +314,6 @@ valueDecoder type_ =
 
         Other _ _ ->
             Decode.map Unknown Decode.value
-
-
-tableUpdateDecoder : Table -> Decode.Decoder Table
-tableUpdateDecoder table =
-    table.columns
-        |> Dict.toList
-        |> List.foldl
-            (\( columnName, column ) ->
-                Decode.map2
-                    (Dict.insert columnName)
-                    (Decode.field columnName (valueDecoder column.columnType)
-                        |> Decode.map (\val -> { column | value = val })
-                    )
-            )
-            (Decode.succeed Dict.empty)
-        |> Decode.map (\cols -> { table | columns = cols })
 
 
 defaultValue : ColumnType -> Value

@@ -51,7 +51,7 @@ type AuthFormStatus
     = Ready
     | Active
     | Submitting
-    | Failure Client.AuthError
+    | Failure Client.Error
 
 
 
@@ -108,8 +108,8 @@ type Msg f m msg
     = ApplicationInit ( Application.Params f m msg, msg )
     | AuthFieldsChanged (Field.Msg Never)
     | AuthFormSubmitted
-    | GotToken (Result Client.AuthError String)
-    | SchemaFetched (Result Http.Error Schema)
+    | GotToken (Result Client.Error String)
+    | SchemaFetched (Result Client.Error Schema)
     | PageListingChanged PageListing.Msg
     | PageDetailChanged PageDetail.Msg
     | PageFormChanged PageForm.Msg
@@ -213,21 +213,24 @@ requestToken model =
         )
 
 
-handleAuthResponse : Decoder a -> Http.Response String -> Result Client.AuthError a
+handleAuthResponse : Decoder a -> Http.Response String -> Result Client.Error a
 handleAuthResponse aDecoder response =
     case response of
         Http.BadStatus_ { statusCode } _ ->
-            if statusCode == 401 || statusCode == 403 then
+            if statusCode == 401 then
+                Err Client.Unauthorized
+
+            else if statusCode == 403 then
                 Err Client.Forbidden
 
             else
-                Err (Client.ServerError statusCode)
+                Err (Client.BadStatus statusCode)
 
         Http.GoodStatus_ _ body ->
             case Decode.decodeString aDecoder body of
-                Err _ ->
-                    -- Decode error during auth - treat as server error
-                    Err (Client.ServerError 500)
+                Err err ->
+                    -- Decode error during auth
+                    Err (Client.DecodeError err)
 
                 Ok result ->
                     Ok result
@@ -420,7 +423,7 @@ update msg model =
         --     )
         ( SchemaFetched (Err err), _ ) ->
             ( model
-            , Notification.error (Client.httpErrorToString err)
+            , Notification.error (Client.errorToString err)
                 |> Task.perform NotificationChanged
             )
 
@@ -454,7 +457,7 @@ update msg model =
             , Task.attempt mapper (Task.succeed passedMsg)
             )
 
-        ( RequestPerformed _ (Err Client.AuthError), _ ) ->
+        ( RequestPerformed _ (Err Client.Unauthorized), _ ) ->
             ( { model | client = Client.authFailed model.client }
             , Cmd.none
             )
@@ -655,13 +658,16 @@ errorMessage status =
                     Client.Unauthorized ->
                         [ Html.text "Please sign in to continue." ]
 
-                    Client.ServerError statusCode ->
+                    Client.BadStatus statusCode ->
                         [ Html.text "The server responded with an error: "
                         , Html.pre [] [ Html.text (String.fromInt statusCode) ]
                         ]
 
                     Client.NetworkError ->
                         [ Html.text """There was an issue reaching the server, please try again later.""" ]
+
+                    _ ->
+                        [ Html.text (Client.errorToString error) ]
                 )
 
         _ ->

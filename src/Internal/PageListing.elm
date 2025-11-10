@@ -64,7 +64,7 @@ import Internal.Download as Download exposing (Download, Format(..))
 import Internal.Field as Field
 import Internal.Record exposing (primaryKey, setValidation, updateWithString)
 import Internal.Schema as Schema exposing (Constraint(..), Table)
-import PostgRestAdmin.Client as Client exposing (Error, endpoint, errorToString, handleJsonResponse, listableColumns, listingSelects)
+import PostgRestAdmin.Client as Client exposing (Error, endpoint, errorToString, listableColumns, listingSelects)
 import Internal.Search as Search exposing (Search)
 import Internal.Value as Value
 import Json.Decode as Decode
@@ -209,6 +209,7 @@ init { client, mountPath, table, parent } url key =
                     { client = client
                     , table = parentTable
                     , id = id
+                    , decoder = Record.decoder parentTable
                     , expect = ParentFetched
                     }
 
@@ -762,10 +763,33 @@ processCsv { table, client } csv =
                         , body = Http.emptyBody
                         , resolver =
                             Http.stringResolver
-                                (handleJsonResponse
-                                    (Decode.list
-                                        (Record.decoder table)
-                                    )
+                                (\response ->
+                                    case response of
+                                        Http.BadUrl_ url ->
+                                            Err (Client.BadUrl url)
+
+                                        Http.Timeout_ ->
+                                            Err Client.Timeout
+
+                                        Http.BadStatus_ { statusCode } _ ->
+                                            case statusCode of
+                                                401 ->
+                                                    Err Client.Unauthorized
+
+                                                403 ->
+                                                    Err Client.Forbidden
+
+                                                _ ->
+                                                    Err (Client.BadStatus statusCode)
+
+                                        Http.NetworkError_ ->
+                                            Err Client.NetworkError
+
+                                        Http.GoodStatus_ _ body ->
+                                            Decode.decodeString
+                                                (Decode.list (Record.decoder table))
+                                                body
+                                                |> Result.mapError Client.DecodeError
                                 )
                         , timeout = Nothing
                         }

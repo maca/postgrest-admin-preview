@@ -99,6 +99,7 @@ fetch { client, table, id } =
         { client = client
         , table = table
         , id = id
+        , decoder = Record.decoder table
         , expect = Fetched
         }
 

@@ -6,7 +6,7 @@ module PostgRestAdmin.Client exposing
     , oneResolver, manyResolver, noneResolver
     , task, decodeOne, decodeMany
     , isAuthenticated, toJwtString, authHeader
-    , AuthError(..), AuthScheme(..), Response(..), authFailed, authSchemeConfig, authUrl, authUrlDecoder, basic, encoder, endpoint, fetchRecord2, fetchSchema, handleJsonResponse, handleResponse, httpErrorToString, init, jwt, jwtDecoder, listableColumns, listingSelects, logout, removeLeadingOrTrailingSlash, schemaIsLoaded, toError, unset, updateJwt
+    , AuthScheme(..), Response(..), authFailed, authSchemeConfig, authUrl, authUrlDecoder, basic, encoder, endpoint, fetchSchema, init, jwt, jwtDecoder, listableColumns, listingSelects, logout, removeLeadingOrTrailingSlash, schemaIsLoaded, toError, unset, updateJwt
     )
 
 {-|
@@ -77,12 +77,16 @@ import Url exposing (Url)
 
 
 type Error
-    = HttpError Http.Error
+    = BadUrl String
+    | Timeout
+    | NetworkError
+    | BadStatus Int
     | DecodeError Decode.Error
     | RequestError String
     | ExpectedRecord
     | ExpectedRecordList
-    | AuthError
+    | Forbidden
+    | Unauthorized
 
 
 type Response
@@ -94,13 +98,6 @@ type Response
 type AuthScheme
     = Jwt PG.JWT
     | Unset
-
-
-type AuthError
-    = Forbidden
-    | Unauthorized
-    | ServerError Int
-    | NetworkError
 
 
 {-| Represents a client for a PostgREST instance, including authentication
@@ -298,7 +295,7 @@ schemaIsLoaded { schema } =
 fetchSchema :
     { a | tables : List String, tableAliases : Dict String String }
     -> Client
-    -> Task Http.Error Schema.Schema
+    -> Task Error Schema.Schema
 fetchSchema config client =
     Http.task
         { method = "GET"
@@ -315,8 +312,17 @@ fetchSchema config client =
 errorToString : Error -> String
 errorToString error =
     case error of
-        HttpError httpError ->
-            httpErrorToString httpError
+        BadUrl msg ->
+            "Invalid URL:" ++ msg
+
+        Timeout ->
+            "The requested timed out. Please try again."
+
+        NetworkError ->
+            "Network Error: do you have an internet connection?"
+
+        BadStatus status ->
+            "Bad status: " ++ String.fromInt status
 
         DecodeError err ->
             Decode.errorToString err
@@ -330,67 +336,11 @@ errorToString error =
         ExpectedRecordList ->
             "Expected a list of records"
 
-        AuthError ->
-            "There was an error authorising your credentials."
+        Forbidden ->
+            "Forbidden: you don't have permission to access this resource."
 
-
-httpErrorToString : Http.Error -> String
-httpErrorToString httpError =
-    case httpError of
-        Http.BadUrl msg ->
-            "Invalid URL:" ++ msg
-
-        Http.Timeout ->
-            "The requested timed out. Please try again."
-
-        Http.NetworkError ->
-            "Network Error: do you have an internet connection?"
-
-        Http.BadStatus status ->
-            "Bad status: " ++ String.fromInt status
-
-        Http.BadBody msg ->
-            "Response error: " ++ msg
-
-
-handleJsonResponse : Decoder a -> Http.Response String -> Result Error a
-handleJsonResponse decoder =
-    handleResponse
-        (\_ body ->
-            case Decode.decodeString decoder body of
-                Err err ->
-                    Err (DecodeError err)
-
-                Ok result ->
-                    Ok result
-        )
-
-
-handleResponse :
-    (Dict String String -> body -> Result Error a)
-    -> Http.Response body
-    -> Result Error a
-handleResponse toResult response =
-    case response of
-        Http.BadUrl_ url ->
-            Err (HttpError (Http.BadUrl url))
-
-        Http.Timeout_ ->
-            Err (HttpError Http.Timeout)
-
-        Http.BadStatus_ { statusCode } _ ->
-            case statusCode of
-                401 ->
-                    Err AuthError
-
-                _ ->
-                    Err (HttpError (Http.BadStatus statusCode))
-
-        Http.NetworkError_ ->
-            Err (HttpError Http.NetworkError)
-
-        Http.GoodStatus_ { headers } body ->
-            toResult headers body
+        Unauthorized ->
+            "Unauthorized: please check your credentials."
 
 
 toError : Result x a -> Maybe x
@@ -414,19 +364,52 @@ removeLeadingOrTrailingSlash =
 -- VIEW
 
 
+jsonResolver : Decode.Decoder a -> Http.Resolver Error a
+jsonResolver decoder =
+    Http.stringResolver
+        (\response ->
+            case response of
+                Http.BadUrl_ url ->
+                    Err (BadUrl url)
+
+                Http.Timeout_ ->
+                    Err Timeout
+
+                Http.NetworkError_ ->
+                    Err NetworkError
+
+                Http.BadStatus_ { statusCode } _ ->
+                    case statusCode of
+                        401 ->
+                            Err Unauthorized
+
+                        403 ->
+                            Err Forbidden
+
+                        _ ->
+                            Err (BadStatus statusCode)
+
+                Http.GoodStatus_ _ body ->
+                    Decode.decodeString decoder body
+                        |> Result.mapError DecodeError
+        )
+
+
 {-| Fetches a record for a given table.
-`expect` param requires a function that returns a `Msg`.
+Requires a decoder for the response and an `expect` function that returns a `Msg`.
 
     import PostgRestAdmin.Cmd as AppCmd
+    import Json.Decode as Decode
 
-    fetchOne : (Result Error Record -> msg) -> String -> Client -> AppCmd.Cmd Msg
-    fetchOne tagger tableName client =
+    fetchOne : (Result Error Decode.Value -> msg) -> String -> String -> Client -> AppCmd.Cmd Msg
+    fetchOne tagger tableName recordId client =
         case getTable tableName client of
             Just table ->
                 fetchRecord
                     { client = client
                     , table = table
-                    , params = []
+                    , id = recordId
+                    , decoder = Decode.value
                     , expect = tagger
                     }
 
@@ -438,74 +421,11 @@ fetchRecord :
     { client : Client
     , table : Table
     , id : String
-    , expect : Result Error Record -> msg
-    }
-    -> AppCmd.Cmd msg
-fetchRecord { client, table, expect, id } =
-    let
-        mapper =
-            decodeOne (Record.decoder table) >> expect
-    in
-    case tablePrimaryKeyName table of
-        Just primaryKeyName ->
-            let
-                queryString =
-                    PG.toQueryString
-                        [ PG.select (selects table)
-                        , PG.eq (PG.string id) |> PG.param primaryKeyName
-                        , PG.limit 1
-                        ]
-            in
-            AppCmd.wrap <|
-                Task.attempt mapper <|
-                    task
-                        { client = client
-                        , method = "GET"
-                        , headers =
-                            [ Http.header "Accept" "application/vnd.pgrst.object+json" ]
-                        , path = "/" ++ tableName table ++ "?" ++ queryString
-                        , body = Http.emptyBody
-                        , resolver = oneResolver
-                        , timeout = Nothing
-                        }
-
-        Nothing ->
-            AppCmd.wrap (Task.attempt mapper missingPrimaryKey)
-
-
-jsonResolver : Decode.Decoder a -> Http.Resolver Http.Error a
-jsonResolver decoder =
-    Http.stringResolver
-        (\response ->
-            case response of
-                Http.BadUrl_ url ->
-                    Err (Http.BadUrl url)
-
-                Http.Timeout_ ->
-                    Err Http.Timeout
-
-                Http.NetworkError_ ->
-                    Err Http.NetworkError
-
-                Http.BadStatus_ metadata _ ->
-                    -- TODO: Show server error response
-                    Err (Http.BadStatus metadata.statusCode)
-
-                Http.GoodStatus_ _ body ->
-                    Decode.decodeString decoder body
-                        |> Result.mapError (Decode.errorToString >> Http.BadBody)
-        )
-
-
-fetchRecord2 :
-    { client : Client
-    , table : Table
-    , id : String
     , decoder : Decode.Decoder a
-    , expect : Result Http.Error a -> msg
+    , expect : Result Error a -> msg
     }
     -> AppCmd.Cmd msg
-fetchRecord2 { client, table, id, expect, decoder } =
+fetchRecord { client, table, id, expect, decoder } =
     let
         queryStr =
             PG.toQueryString
@@ -589,7 +509,7 @@ saveRecord :
     , table : Table
     , id : Maybe String
     , decoder : Decode.Decoder a
-    , expect : Result Http.Error a -> msg
+    , expect : Result Error a -> msg
     }
     -> AppCmd.Cmd msg
 saveRecord { client, body, table, decoder, id, expect } =
@@ -746,7 +666,7 @@ task { client, method, headers, path, body, resolver, timeout } =
                 |> Task.onError fail
 
         Nothing ->
-            fail AuthError
+            fail Unauthorized
 
 
 endpoint : Client -> String -> String
@@ -765,12 +685,7 @@ endpoint { host } path =
 
 fail : Error -> Task Error a
 fail err =
-    case err of
-        AuthError ->
-            Task.fail AuthError
-
-        _ ->
-            Task.fail err
+    Task.fail err
 
 
 
@@ -781,51 +696,115 @@ fail err =
 oneResolver : Http.Resolver Error Response
 oneResolver =
     Http.stringResolver <|
-        handleResponse
-            (\_ body ->
-                if String.isEmpty body then
-                    Ok (One Encode.null)
+        \response ->
+            case response of
+                Http.BadUrl_ url ->
+                    Err (BadUrl url)
 
-                else
-                    case Decode.decodeString Decode.value body of
-                        Err err ->
-                            Err (DecodeError err)
+                Http.Timeout_ ->
+                    Err Timeout
 
-                        Ok value ->
-                            Ok (One value)
-            )
+                Http.BadStatus_ { statusCode } _ ->
+                    case statusCode of
+                        401 ->
+                            Err Unauthorized
+
+                        403 ->
+                            Err Forbidden
+
+                        _ ->
+                            Err (BadStatus statusCode)
+
+                Http.NetworkError_ ->
+                    Err NetworkError
+
+                Http.GoodStatus_ _ body ->
+                    if String.isEmpty body then
+                        Ok (One Encode.null)
+
+                    else
+                        case Decode.decodeString Decode.value body of
+                            Err err ->
+                                Err (DecodeError err)
+
+                            Ok value ->
+                                Ok (One value)
 
 
 {-| -}
 manyResolver : Http.Resolver Error Response
 manyResolver =
     Http.stringResolver <|
-        handleResponse
-            (\headers body ->
-                let
-                    count =
-                        Dict.get "content-range" headers
-                            |> Maybe.andThen
-                                (Parser.run countParser >> Result.toMaybe)
-                            |> Maybe.withDefault (Count 0 0 1)
-                in
-                if String.isEmpty body then
-                    Ok (Many count [])
+        \response ->
+            case response of
+                Http.BadUrl_ url ->
+                    Err (BadUrl url)
 
-                else
-                    case Decode.decodeString (Decode.list Decode.value) body of
-                        Err err ->
-                            Err (DecodeError err)
+                Http.Timeout_ ->
+                    Err Timeout
 
-                        Ok values ->
-                            Ok (Many count values)
-            )
+                Http.BadStatus_ { statusCode } _ ->
+                    case statusCode of
+                        401 ->
+                            Err Unauthorized
+
+                        403 ->
+                            Err Forbidden
+
+                        _ ->
+                            Err (BadStatus statusCode)
+
+                Http.NetworkError_ ->
+                    Err NetworkError
+
+                Http.GoodStatus_ { headers } body ->
+                    let
+                        count =
+                            Dict.get "content-range" headers
+                                |> Maybe.andThen
+                                    (Parser.run countParser >> Result.toMaybe)
+                                |> Maybe.withDefault (Count 0 0 1)
+                    in
+                    if String.isEmpty body then
+                        Ok (Many count [])
+
+                    else
+                        case Decode.decodeString (Decode.list Decode.value) body of
+                            Err err ->
+                                Err (DecodeError err)
+
+                            Ok values ->
+                                Ok (Many count values)
 
 
 {-| -}
 noneResolver : Http.Resolver Error Response
 noneResolver =
-    Http.stringResolver (handleResponse (\_ _ -> Ok None))
+    Http.stringResolver <|
+        \response ->
+            case response of
+                Http.BadUrl_ url ->
+                    Err (BadUrl url)
+
+                Http.Timeout_ ->
+                    Err Timeout
+
+                Http.BadStatus_ { statusCode } _ ->
+                    case statusCode of
+                        401 ->
+                            Err Unauthorized
+
+                        403 ->
+                            Err Forbidden
+
+                        _ ->
+                            Err (BadStatus statusCode)
+
+                Http.NetworkError_ ->
+                    Err NetworkError
+
+                Http.GoodStatus_ _ _ ->
+                    Ok None
 
 
 
