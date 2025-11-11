@@ -5,9 +5,7 @@ module Internal.PageListing exposing
     , descendingBy
     , hideSearch
     , init
-    , isSearchVisible
     , onLogin
-    , showSearch
     , subscriptions
     , update
     , view
@@ -231,11 +229,6 @@ onLogin =
 isSearchVisible : PageListing -> Bool
 isSearchVisible { searchOpen, search } =
     searchOpen || Search.isBlank search
-
-
-showSearch : PageListing -> PageListing
-showSearch listing =
-    { listing | searchOpen = True }
 
 
 hideSearch : PageListing -> PageListing

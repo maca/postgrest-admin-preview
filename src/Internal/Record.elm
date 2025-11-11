@@ -11,7 +11,6 @@ module Internal.Record exposing
     , label
     , location
     , primaryKey
-    , primaryKeyName
     , referencedBy
     , setValidation
     , tableName
@@ -19,7 +18,6 @@ module Internal.Record exposing
     )
 
 import Dict exposing (Dict)
-import Dict.Extra
 import Internal.Field as Field exposing (Field)
 import Internal.Schema
     exposing
@@ -146,12 +144,6 @@ encode record =
     record.fields
         |> Dict.filter (\_ { changed } -> changed)
         |> Encode.dict identity (.value >> Value.encode)
-
-
-primaryKeyName : Record -> Maybe String
-primaryKeyName record =
-    Dict.Extra.find (\_ column -> Field.isPrimaryKey column) record.fields
-        |> Maybe.map Tuple.first
 
 
 decoder : Table -> Decoder Record
