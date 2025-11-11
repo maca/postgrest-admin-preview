@@ -1,7 +1,7 @@
 module Internal.Schema exposing
     ( Schema, Column, ColumnType(..)
     , Constraint(..), ForeignKeyParams, Reference
-    , Table, columnNames, label
+    , Table, label
     , tablePrimaryKey, tablePrimaryKeyName, tablePrimaryKeyValue
     , decoder, valueDecoder
     )
@@ -79,13 +79,24 @@ type alias Reference =
     }
 
 
+type alias Record =
+    Dict String Value
+
+
 type alias Schema =
     Dict String Table
 
 
-columnNames : Table -> Set String
-columnNames { columns } =
-    Set.fromList (Dict.keys columns)
+recordDecoder : Table -> Decode.Decoder Record
+recordDecoder table =
+    table.columns
+        |> Dict.foldl
+            (\name col ->
+                Decode.map2
+                    (Dict.insert name)
+                    (Decode.field name (valueDecoder col.columnType))
+            )
+            (Decode.succeed Dict.empty)
 
 
 decoder :
@@ -204,20 +215,6 @@ tablePrimaryKeyName : Table -> Maybe String
 tablePrimaryKeyName table =
     tablePrimaryKey table
         |> Maybe.map Tuple.first
-
-
-labelHelp : Table -> String -> Maybe String
-labelHelp table fieldName =
-    if Dict.member fieldName table.columns then
-        Just fieldName
-
-    else
-        Nothing
-
-
-labelIdentifiers : List String
-labelIdentifiers =
-    [ "title", "name", "full name", "email", "first name", "last name" ]
 
 
 columnType : String -> Maybe String -> ColumnType
@@ -381,7 +378,9 @@ columnConstraint tableAliases colNames description =
                 , primaryKeyName = primaryKeyName
                 , labelColumnName =
                     Dict.get table colNames
+                        |> Debug.log table
                         |> Maybe.andThen findLabelColum
+                        |> Debug.log (table ++ "label")
                 , label = Nothing
                 }
 
@@ -413,12 +412,16 @@ extractForeignKey description =
 
 label : Table -> Maybe String
 label table =
-    List.filterMap (labelHelp table) labelIdentifiers
+    List.filterMap
+        (\fieldName ->
+            if Dict.member fieldName table.columns then
+                Just fieldName
+
+            else
+                Nothing
+        )
+        identifiers
         |> List.head
-
-
-
--- To refactor
 
 
 findLabelColum : List String -> Maybe String
@@ -427,6 +430,10 @@ findLabelColum requiredCols =
         |> List.head
 
 
+
+-- To refactor
+
+
 identifiers : List String
 identifiers =
-    [ "title", "name", "full name", "email", "first name", "last name" ]
+    [ "title", "name", "full name", "email", "first name", "last name", "city" ]

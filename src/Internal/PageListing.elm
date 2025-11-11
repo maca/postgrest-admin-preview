@@ -462,7 +462,7 @@ update msg listing =
                             Set.fromList csv.headers
 
                         columnNames =
-                            Schema.columnNames listing.table
+                            Set.fromList (Dict.keys listing.table.columns)
 
                         missing =
                             Set.diff columnNames headers
@@ -1495,24 +1495,9 @@ listableColumns table =
 listingSelects : Table -> List PG.Selectable
 listingSelects table =
     Dict.values table.columns
-        |> List.filterMap associationJoin
+        |> List.filterMap Client.associationJoin
         |> (++)
             (listableColumns table
                 |> Dict.keys
                 |> List.map PG.attribute
             )
-
-
-associationJoin : Column -> Maybe PG.Selectable
-associationJoin { constraint } =
-    case constraint of
-        ForeignKey foreignKey ->
-            foreignKey.labelColumnName
-                |> Maybe.map
-                    (\n ->
-                        PG.resource foreignKey.tableName
-                            (PG.attributes [ n, "id" ])
-                    )
-
-        _ ->
-            Nothing

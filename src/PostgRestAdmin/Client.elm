@@ -6,7 +6,7 @@ module PostgRestAdmin.Client exposing
     , fetchSchema, schemaIsLoaded
     , endpoint
     , authSchemeConfig, authUrl, authUrlDecoder, basic, encoder, jwtDecoder
-    , bytesRequest, task
+    , associationJoin, bytesRequest, task
     )
 
 {-| PostgREST client for Elm applications.
@@ -73,7 +73,6 @@ import Internal.Value exposing (Value(..))
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 import Parser exposing ((|.), (|=), Parser)
-import PostgRestAdmin.Record as Record exposing (Record)
 import Postgrest.Client as PG exposing (Selectable)
 import Regex
 import String.Extra as String
@@ -248,7 +247,7 @@ fetchSchema config client =
         , headers = List.filterMap identity [ authHeader client ]
         , url = endpoint client "/"
         , body = Http.emptyBody
-        , resolver = oneResolver (Schema.decoder config)
+        , resolver = jsonResolver (Schema.decoder config)
         , timeout = Nothing
         }
 
@@ -297,8 +296,8 @@ removeLeadingOrTrailingSlash =
 -- VIEW
 
 
-oneResolver : Decode.Decoder a -> Http.Resolver Error a
-oneResolver decoder =
+jsonResolver : Decode.Decoder a -> Http.Resolver Error a
+jsonResolver decoder =
     Http.stringResolver
         (resolve
             (\_ body ->
@@ -327,11 +326,6 @@ countResolver decoder =
                         Err (BadHeader "content-range")
             )
         )
-
-
-bytesResolver : Http.Resolver Error Bytes
-bytesResolver =
-    Http.bytesResolver (resolve (\_ body -> Ok body))
 
 
 resolve : (Http.Metadata -> body -> Result Error value) -> Http.Response body -> Result Error value
@@ -416,13 +410,9 @@ fetchRecord { client, table, id, expect, decoder } =
                         ]
                 , url = endpoint client ("/" ++ table.name ++ "?" ++ queryStr)
                 , body = Http.emptyBody
-                , resolver = oneResolver decoder
+                , resolver = jsonResolver decoder
                 , timeout = Nothing
                 }
-
-
-
--- Internal.Fetch expect missingPrimaryKey
 
 
 saveRecord :
@@ -463,7 +453,7 @@ saveRecord { client, body, table, decoder, id, expect } =
                         ]
                 , url = endpoint client path
                 , body = Http.jsonBody body
-                , resolver = oneResolver decoder
+                , resolver = jsonResolver decoder
                 , timeout = Nothing
                 }
 
@@ -471,43 +461,52 @@ saveRecord { client, body, table, decoder, id, expect } =
 {-| Deletes a record.
 `expect` param requires a function that returns a `Msg`.
 
+    import Dict
     import PostgRestAdmin.Cmd as AppCmd
 
-    delete : (Result Error Record -> Msg) -> Record -> Client -> AppCmd.Cmd Msg
-    delete tagger record client =
-        deleteRecord
-            { client = client
-            , record = record
-            , expect = tagger
-            }
+    delete : (Result Error () -> Msg) -> String -> String -> Client -> AppCmd.Cmd Msg
+    delete tagger tableName recordId client =
+        case Dict.get tableName client.schema of
+            Just table ->
+                deleteRecord
+                    { client = client
+                    , table = table
+                    , id = recordId
+                    , expect = tagger
+                    }
+
+            Nothing ->
+                AppCmd.none
 
 -}
 deleteRecord :
-    { record : Record
+    { client : Client
+    , table : Table
+    , id : String
     , expect : Result Error () -> msg
     }
-    -> Client
     -> AppCmd.Cmd msg
-deleteRecord { record, expect } client =
+deleteRecord { client, table, id, expect } =
     let
-        mapper =
-            Result.map (always ()) >> expect
+        queryStr =
+            PG.toQueryString
+                (List.filterMap identity
+                    [ tablePrimaryKeyName table
+                        |> Maybe.map
+                            (\key -> PG.eq (PG.string id) |> PG.param key)
+                    ]
+                )
     in
-    case Record.location record of
-        Just path ->
-            AppCmd.wrap <|
-                Task.attempt mapper <|
-                    Http.task
-                        { method = "DELETE"
-                        , headers = List.filterMap identity [ authHeader client ]
-                        , url = endpoint client path
-                        , body = Http.emptyBody
-                        , resolver = oneResolver (Decode.succeed ())
-                        , timeout = Nothing
-                        }
-
-        Nothing ->
-            AppCmd.wrap (Task.attempt mapper missingPrimaryKey)
+    AppCmd.wrap <|
+        Task.attempt expect <|
+            task
+                { client = client
+                , method = "DELETE"
+                , headers = []
+                , path = "/" ++ table.name ++ "?" ++ queryStr
+                , body = Http.emptyBody
+                , decoder = Decode.succeed ()
+                }
 
 
 {-| Perform a request
@@ -550,7 +549,7 @@ task { client, method, headers, path, body, decoder } =
                 ]
         , url = endpoint client path
         , body = body
-        , resolver = oneResolver decoder
+        , resolver = jsonResolver decoder
         , timeout = Nothing
         }
 
@@ -652,11 +651,6 @@ endpoint { host } path =
 -- UTILS
 
 
-missingPrimaryKey : Task Error a
-missingPrimaryKey =
-    Task.fail (RequestError "I cound't figure the primary key")
-
-
 selects : Table -> List Selectable
 selects table =
     Dict.values table.columns
@@ -667,12 +661,12 @@ selects table =
 associationJoin : Column -> Maybe Selectable
 associationJoin { constraint } =
     case constraint of
-        ForeignKey foreignKey ->
-            foreignKey.labelColumnName
+        ForeignKey fk ->
+            fk.labelColumnName
                 |> Maybe.map
                     (\n ->
-                        PG.resource foreignKey.tableName
-                            (PG.attributes [ n, "id" ])
+                        PG.resource fk.tableName
+                            (PG.attributes [ n, fk.primaryKeyName ])
                     )
 
         _ ->

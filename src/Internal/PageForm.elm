@@ -1,11 +1,4 @@
-module Internal.PageForm exposing
-    ( Msg
-    , PageForm
-    , init
-    , onLogin
-    , update
-    , view
-    )
+module Internal.PageForm exposing (Msg, PageForm, init, update, view)
 
 import Browser.Navigation as Nav
 import Dict
@@ -20,6 +13,7 @@ import Internal.Cmd as AppCmd
 import Internal.Schema as Schema exposing (ColumnType(..), Constraint(..), Table)
 import Internal.Value as Value exposing (Value(..))
 import Json.Decode as Decode
+import Json.Encode as Encode
 import PostgRestAdmin.Client as Client exposing (Client)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
 import PostgRestAdmin.Notification as Notification
@@ -30,8 +24,7 @@ import Url.Builder as Url
 
 
 type Msg
-    = LoggedIn Client
-    | Fetched (Result Client.Error Decode.Value)
+    = Fetched (Result Client.Error Decode.Value)
     | ParentFetched (Result Client.Error Table)
     | Saved (Result Client.Error String)
     | FormChanged (Field.Msg String)
@@ -40,11 +33,11 @@ type Msg
 
 type alias PageForm =
     { client : Client
+    , table : Table
     , mountPath : MountPath
     , key : Nav.Key
-    , table : Table
     , id : Maybe String
-    , parent : Maybe Table
+    , parent : Maybe { tableName : String, id : String }
     , form : Field.Field String
     , persisted : Bool
     }
@@ -54,12 +47,12 @@ init :
     { client : Client
     , navKey : Nav.Key
     , mountPath : MountPath
-    , id : Maybe String
     , table : Table
+    , id : Maybe String
     , parent : Maybe { tableName : String, id : String }
     }
     -> ( PageForm, AppCmd.Cmd Msg )
-init { client, navKey, mountPath, id, table, parent } =
+init { client, navKey, mountPath, table, id, parent } =
     let
         parentParams =
             Maybe.andThen
@@ -68,21 +61,20 @@ init { client, navKey, mountPath, id, table, parent } =
                         |> Maybe.map (\parentTable -> ( parentTable, params ))
                 )
                 parent
-
-        pageForm =
-            { client = client
-            , mountPath = mountPath
-            , key = navKey
-            , table = table
-            , id = id
-            , parent = Nothing
-            , form = buildForm table
-            , persisted = False
-            }
     in
-    ( pageForm
+    ( { client = client
+      , table = table
+      , mountPath = mountPath
+      , key = navKey
+      , id = id
+      , parent = Nothing
+      , form = buildForm table
+      , persisted = False
+      }
     , AppCmd.batch
-        [ case Maybe.map2 Tuple.pair (Schema.tablePrimaryKeyName table) id of
+        [ case
+            Maybe.map2 Tuple.pair (Schema.tablePrimaryKeyName table) id
+          of
             Just ( primaryKeyName, recordId ) ->
                 let
                     selectedCols =
@@ -122,11 +114,6 @@ init { client, navKey, mountPath, id, table, parent } =
     )
 
 
-onLogin : Client -> Msg
-onLogin =
-    LoggedIn
-
-
 
 -- Update
 
@@ -134,12 +121,11 @@ onLogin =
 update : Msg -> PageForm -> ( PageForm, AppCmd.Cmd Msg )
 update msg model =
     case msg of
-        LoggedIn client ->
-            ( { model | client = client }
-            , Debug.todo "crash"
-            )
-
         Fetched (Ok response) ->
+            let
+                _ =
+                    Encode.encode 0 response |> Debug.log "response"
+            in
             case Field.updateValuesFromJson response model.form of
                 Ok form ->
                     ( { model | form = form }
@@ -148,7 +134,10 @@ update msg model =
 
                 Err err ->
                     ( model
-                    , Notification.error (FormToolkit.Error.toEnglish err)
+                    , Notification.error
+                        (FormToolkit.Error.toEnglish err
+                            |> Debug.log "error"
+                        )
                     )
 
         Fetched (Err err) ->
@@ -157,8 +146,9 @@ update msg model =
             )
 
         ParentFetched (Ok parent) ->
-            ( { model | parent = Just parent }, AppCmd.none )
+            Debug.todo "crash"
 
+        -- ( model, AppCmd.none )
         ParentFetched (Err err) ->
             ( model
             , Notification.error (Client.errorToString err)
@@ -213,28 +203,11 @@ update msg model =
 
 
 
--- recordToInputs : Record -> Inputs
--- recordToInputs record =
---     record.fields
---         |> Dict.map
---             (\name field ->
---                 case Dict.get name record.table.columns of
---                     Just column ->
---                         Input.fromFieldAndColumn field column
---                     Nothing ->
---                         Input.fromFieldAndColumn field
---                             { constraint = NoConstraint
---                             , required = False
---                             , value = PString Nothing
---                             , columnType = String
---                             , options = []
---                             }
---             )
 -- VIEW
 
 
 view : PageForm -> Html Msg
-view ({ table, id, parent, mountPath } as model) =
+view ({ table, id, mountPath } as model) =
     Html.section
         [ Attrs.class "resource-form" ]
         [ MountPath.breadcrumbs mountPath
@@ -247,12 +220,17 @@ view ({ table, id, parent, mountPath } as model) =
                     ]
 
                 Nothing ->
-                    case parent of
-                        Just parentTable ->
-                            [ ( parentTable.name, Nothing )
-                            , ( Schema.tablePrimaryKeyValue parentTable
-                                    |> Maybe.andThen (Tuple.second >> Value.toString)
-                                    |> Maybe.withDefault ""
+                    case
+                        model.parent
+                            |> Maybe.andThen
+                                (\parent ->
+                                    Dict.get parent.tableName model.client.schema
+                                        |> Maybe.map (Tuple.pair parent)
+                                )
+                    of
+                        Just ( parent, parentTable ) ->
+                            [ ( parent.tableName, Nothing )
+                            , ( parent.id
                               , Schema.label parentTable
                               )
                             , ( table.name, Nothing )
@@ -292,12 +270,8 @@ view ({ table, id, parent, mountPath } as model) =
                         (path mountPath <|
                             Url.absolute
                                 (List.filterMap identity
-                                    [ Maybe.map .name parent
-                                    , Maybe.andThen
-                                        (Schema.tablePrimaryKeyValue
-                                            >> Maybe.andThen (Tuple.second >> Value.toString)
-                                        )
-                                        parent
+                                    [ Maybe.map .tableName model.parent
+                                    , Maybe.map .id model.parent
                                     , Just table.name
                                     , id
                                     ]
@@ -415,19 +389,3 @@ sortColumns ( name, column ) ( name_, column_ ) =
 
         _ ->
             compare name name_
-
-
-tableUpdateDecoder : Table -> Decode.Decoder Table
-tableUpdateDecoder table =
-    table.columns
-        |> Dict.toList
-        |> List.foldl
-            (\( columnName, column ) ->
-                Decode.map2
-                    (Dict.insert columnName)
-                    (Decode.field columnName (Schema.valueDecoder column.columnType)
-                        |> Decode.map (\val -> { column | value = val })
-                    )
-            )
-            (Decode.succeed Dict.empty)
-        |> Decode.map (\cols -> { table | columns = cols })

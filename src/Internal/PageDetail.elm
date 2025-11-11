@@ -9,25 +9,9 @@ module Internal.PageDetail exposing
 
 import Browser.Navigation as Nav
 import Dict exposing (Dict)
-import Html
-    exposing
-        ( Html
-        , a
-        , article
-        , aside
-        , button
-        , div
-        , h2
-        , p
-        , section
-        , table
-        , td
-        , text
-        , th
-        , tr
-        )
-import Html.Attributes exposing (class, href)
-import Html.Events exposing (onClick)
+import Html exposing (Html)
+import Html.Attributes as Attrs
+import Html.Events as Events
 import Http exposing (header)
 import Internal.Cmd as AppCmd
 import Internal.Config exposing (DetailActions)
@@ -175,16 +159,12 @@ update msg params =
 
         DeleteConfirmed ->
             ( params
-            , case params.record of
-                Just record ->
-                    Client.deleteRecord
-                        { record = record
-                        , expect = Deleted
-                        }
-                        params.client
-
-                Nothing ->
-                    AppCmd.none
+            , Client.deleteRecord
+                { client = params.client
+                , table = params.table
+                , id = params.id
+                , expect = Deleted
+                }
             )
 
 
@@ -196,29 +176,29 @@ view : PageDetail -> Html Msg
 view params =
     case params.record of
         Nothing ->
-            text ""
+            Html.text ""
 
         Just record ->
             let
                 tableName =
                     params.table.name
             in
-            section
-                [ class "record-detail" ]
+            Html.section
+                [ Attrs.class "record-detail" ]
                 [ breadcrumbs params.mountPath
                     tableName
                     [ ( tableName, Nothing )
                     , ( params.id, Record.label record )
                     ]
-                , h2
+                , Html.h2
                     []
                     [ Record.label record
-                        |> Maybe.map text
-                        |> Maybe.withDefault (text "")
+                        |> Maybe.map Html.text
+                        |> Maybe.withDefault (Html.text "")
                     ]
-                , article
-                    [ class "card" ]
-                    [ table
+                , Html.article
+                    [ Attrs.class "card" ]
+                    [ Html.table
                         []
                         (sortedFields record
                             |> List.map
@@ -229,35 +209,35 @@ view params =
                     , actions params record
                     ]
                 , if params.confirmDelete then
-                    div
-                        [ class "modal-background" ]
-                        [ div
-                            [ class "modal-dialog" ]
-                            [ h2 []
-                                [ text """Are you sure you want to delete the
+                    Html.div
+                        [ Attrs.class "modal-background" ]
+                        [ Html.div
+                            [ Attrs.class "modal-dialog" ]
+                            [ Html.h2 []
+                                [ Html.text """Are you sure you want to delete the
                                           record?"""
                                 ]
-                            , p [] [ text "This action cannot be undone." ]
-                            , div
-                                [ class "actions" ]
-                                [ button
-                                    [ class "button button-danger"
-                                    , onClick DeleteConfirmed
+                            , Html.p [] [ Html.text "This action cannot be undone." ]
+                            , Html.div
+                                [ Attrs.class "actions" ]
+                                [ Html.button
+                                    [ Attrs.class "button button-danger"
+                                    , Events.onClick DeleteConfirmed
                                     ]
-                                    [ text "Delete" ]
-                                , button
-                                    [ class "button"
-                                    , onClick DeleteModalClosed
+                                    [ Html.text "Delete" ]
+                                , Html.button
+                                    [ Attrs.class "button"
+                                    , Events.onClick DeleteModalClosed
                                     ]
-                                    [ text "Cancel" ]
+                                    [ Html.text "Cancel" ]
                                 ]
                             ]
                         ]
 
                   else
-                    text ""
-                , aside
-                    [ class "associations" ]
+                    Html.text ""
+                , Html.aside
+                    [ Attrs.class "associations" ]
                     (references params.client record
                         |> List.map
                             (referenceToHtml params record)
@@ -267,18 +247,18 @@ view params =
 
 referenceToHtml : PageDetail -> Record -> Reference -> Html Msg
 referenceToHtml { mountPath, counts } record { table, foreignKeyValue } =
-    a
-        [ class "card association"
-        , href
+    Html.a
+        [ Attrs.class "card association"
+        , Attrs.href
             (path mountPath <|
                 Url.absolute [ record.table.name, foreignKeyValue, table.name ] []
             )
         ]
-        [ text (String.humanize table.name)
+        [ Html.text (String.humanize table.name)
         , Dict.get table.name counts
             |> Maybe.map (\i -> " (" ++ String.fromInt i ++ ")")
             |> Maybe.withDefault ""
-            |> text
+            |> Html.text
         ]
 
 
@@ -286,45 +266,45 @@ actions : PageDetail -> Record -> Html Msg
 actions { mountPath, detailActions } record =
     case Record.id record of
         Just id ->
-            div
-                [ class "actions" ]
+            Html.div
+                [ Attrs.class "actions" ]
                 (List.map
                     (\( copy, buildUrl ) ->
-                        a
-                            [ href (path mountPath (buildUrl record id))
-                            , class "button"
+                        Html.a
+                            [ Attrs.href (path mountPath (buildUrl record id))
+                            , Attrs.class "button"
                             ]
-                            [ text copy ]
+                            [ Html.text copy ]
                     )
                     detailActions
-                    ++ [ a
-                            [ href
+                    ++ [ Html.a
+                            [ Attrs.href
                                 (path mountPath <|
                                     Url.absolute
                                         [ Record.tableName record, id, "edit" ]
                                         []
                                 )
-                            , class "button"
+                            , Attrs.class "button"
                             ]
-                            [ text "Edit" ]
-                       , button
-                            [ onClick DeleteModalOpened
-                            , class "button button-danger"
+                            [ Html.text "Edit" ]
+                       , Html.button
+                            [ Events.onClick DeleteModalOpened
+                            , Attrs.class "button button-danger"
                             ]
-                            [ text "Delete" ]
+                            [ Html.text "Delete" ]
                        ]
                 )
 
         Nothing ->
-            text ""
+            Html.text ""
 
 
 tableRow : MountPath -> String -> ( String, Field ) -> Html Msg
 tableRow mountPath resourcesName ( name, field ) =
-    tr
+    Html.tr
         []
-        [ th [] [ text (String.humanize name) ]
-        , td [] [ Field.toHtml mountPath resourcesName field ]
+        [ Html.th [] [ Html.text (String.humanize name) ]
+        , Html.td [] [ Field.toHtml mountPath resourcesName field ]
         ]
 
 

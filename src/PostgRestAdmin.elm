@@ -518,43 +518,16 @@ update msg model =
 
 loginCmd : Model f m msg -> Client -> Cmd (Msg f m msg)
 loginCmd model client =
-    let
-        appLoginCmd =
-            Cmd.batch
-                [ model.onLogin (Client.toJwtString client)
-                , case model.mountedApp of
-                    Application params _ ->
-                        Task.succeed (params.onLogin client)
-                            |> Task.perform PageApplicationChanged
+    Cmd.batch
+        [ model.onLogin (Client.toJwtString client)
+        , case model.mountedApp of
+            Application params _ ->
+                Task.succeed (params.onLogin client)
+                    |> Task.perform PageApplicationChanged
 
-                    _ ->
-                        Cmd.none
-                ]
-    in
-    case model.route of
-        RouteListing _ ->
-            Cmd.batch
-                [ Task.perform PageListingChanged
-                    (Task.succeed (PageListing.onLogin client))
-                , appLoginCmd
-                ]
-
-        RouteDetail _ ->
-            Cmd.batch
-                [ Task.perform PageDetailChanged
-                    (Task.succeed (PageDetail.onLogin client))
-                , appLoginCmd
-                ]
-
-        RouteForm _ ->
-            Cmd.batch
-                [ Task.perform PageFormChanged
-                    (Task.succeed (PageForm.onLogin client))
-                , appLoginCmd
-                ]
-
-        _ ->
-            appLoginCmd
+            _ ->
+                Cmd.none
+        ]
 
 
 
