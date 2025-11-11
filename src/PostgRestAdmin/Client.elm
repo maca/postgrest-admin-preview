@@ -440,9 +440,9 @@ saveRecord { client, body, table, decoder, id, expect } =
             PG.toQueryString [ PG.select (selects table) ]
 
         ( path, method ) =
-            case id of
-                Just recordId ->
-                    ( "/" ++ table.name ++ "?id=eq." ++ recordId ++ "&" ++ queryString
+            case Maybe.map2 Tuple.pair (Schema.tablePrimaryKeyName table) id of
+                Just ( pkName, recordId ) ->
+                    ( "/" ++ table.name ++ "?" ++ pkName ++ "=eq." ++ recordId ++ "&" ++ queryString
                     , "PATCH"
                     )
 

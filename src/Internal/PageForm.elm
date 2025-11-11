@@ -8,21 +8,19 @@ module Internal.PageForm exposing
     )
 
 import Browser.Navigation as Nav
-import Dict exposing (Dict)
+import Dict
 import FormToolkit.Field as Field
 import FormToolkit.Parse as Parse
 import Html exposing (Html)
 import Html.Attributes as Attrs
 import Html.Events as Events
 import Internal.Cmd as AppCmd
-import Internal.Input as Input exposing (Input)
 import Internal.Schema as Schema exposing (ColumnType(..), Constraint(..), Table)
 import Internal.Value as Value exposing (Value(..))
 import Json.Decode as Decode
 import PostgRestAdmin.Client as Client exposing (Client)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
 import PostgRestAdmin.Notification as Notification
-import PostgRestAdmin.Record as Record exposing (Record)
 import String.Extra as String
 import Url.Builder as Url
 
@@ -36,15 +34,10 @@ type Msg
     | Submitted
 
 
-type alias Inputs =
-    Dict String Input
-
-
 type alias PageForm =
     { client : Client
     , mountPath : MountPath
     , key : Nav.Key
-    , inputs : Inputs
     , table : Table
     , id : Maybe String
     , parent : Maybe Table
@@ -76,10 +69,6 @@ init { client, navKey, mountPath, id, table, parent } =
             { client = client
             , mountPath = mountPath
             , key = navKey
-            , inputs =
-                Maybe.map (always Dict.empty) id
-                    |> Maybe.withDefault
-                        (recordToInputs (Record.fromTable table))
             , table = table
             , id = id
             , parent = Nothing
@@ -136,11 +125,7 @@ update msg model =
     case msg of
         LoggedIn client ->
             ( { model | client = client }
-            , if Dict.isEmpty model.inputs then
-                fetchRecord { model | client = client }
-
-              else
-                AppCmd.none
+            , fetchRecord { model | client = client }
             )
 
         Fetched (Ok response) ->
@@ -216,27 +201,24 @@ update msg model =
             )
 
 
-recordToInputs : Record -> Inputs
-recordToInputs record =
-    record.fields
-        |> Dict.map
-            (\name field ->
-                case Dict.get name record.table.columns of
-                    Just column ->
-                        Input.fromFieldAndColumn field column
 
-                    Nothing ->
-                        Input.fromFieldAndColumn field
-                            { constraint = NoConstraint
-                            , required = False
-                            , value = PString Nothing
-                            , columnType = String
-                            , options = []
-                            }
-            )
-
-
-
+-- recordToInputs : Record -> Inputs
+-- recordToInputs record =
+--     record.fields
+--         |> Dict.map
+--             (\name field ->
+--                 case Dict.get name record.table.columns of
+--                     Just column ->
+--                         Input.fromFieldAndColumn field column
+--                     Nothing ->
+--                         Input.fromFieldAndColumn field
+--                             { constraint = NoConstraint
+--                             , required = False
+--                             , value = PString Nothing
+--                             , columnType = String
+--                             , options = []
+--                             }
+--             )
 -- VIEW
 
 
