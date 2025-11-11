@@ -84,3 +84,10 @@ TO web_user;
 
 -- Grant execute permission to web_anon so unauthenticated users can login
 GRANT EXECUTE ON FUNCTION login(text, text) TO web_anon;
+
+
+
+-- ALTER ROLE authenticator SET statement_timeout TO '10s';
+-- ALTER ROLE anonymous SET statement_timeout TO '1s';
+-- 
+-- https://docs.postgrest.org/en/stable/references/configuration.html#db-tx-end

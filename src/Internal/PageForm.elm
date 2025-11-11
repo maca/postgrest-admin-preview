@@ -67,7 +67,7 @@ init { client, navKey, mountPath, id, table, parent } =
         parentParams =
             Maybe.andThen
                 (\params ->
-                    Client.getTable params.tableName client
+                    Dict.get params.tableName client.schema
                         |> Maybe.map (\parentTable -> ( parentTable, params ))
                 )
                 parent

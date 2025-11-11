@@ -32,7 +32,7 @@ import Internal.Schema exposing (Column, Constraint(..), ForeignKeyParams)
 import Internal.Value as Value exposing (Value(..))
 import Json.Decode as Decode
 import Maybe.Extra as Maybe
-import PostgRestAdmin.Client as Client exposing (Client, Collection, Error)
+import PostgRestAdmin.Client as Client exposing (Client, Count, Error)
 import PostgRestAdmin.MountPath exposing (MountPath, path)
 import Postgrest.Client as PG
 import String.Extra as String
@@ -48,7 +48,7 @@ type alias Autocomplete =
 
 type Msg
     = Changed ( String, Input ) String
-    | ListingFetched String (Result Error (Collection Record))
+    | ListingFetched String (Result Error ( List Record, Count ))
 
 
 type Input
@@ -125,7 +125,7 @@ update client msg record =
             , AppCmd.none
             )
 
-        ListingFetched name (Ok { records }) ->
+        ListingFetched name (Ok ( records, _ )) ->
             case Dict.get name record of
                 Just (Association field params) ->
                     let
@@ -517,7 +517,7 @@ displayError error =
 
 fetchRecords : Client -> String -> ForeignKeyParams -> String -> AppCmd.Cmd Msg
 fetchRecords client name { tableName, labelColumnName } userInput =
-    case Client.getTable tableName client of
+    case Dict.get tableName client.schema of
         Just table ->
             let
                 selects =

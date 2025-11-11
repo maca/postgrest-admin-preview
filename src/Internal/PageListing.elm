@@ -16,9 +16,11 @@ module Internal.PageListing exposing
 import Browser.Dom as Dom exposing (Viewport)
 import Browser.Events exposing (onKeyDown)
 import Browser.Navigation as Nav
+import Bytes exposing (Bytes)
 import Csv exposing (Csv)
 import Dict
 import File exposing (File)
+import File.Download as Download
 import File.Select as Select
 import Html
     exposing
@@ -59,18 +61,17 @@ import Html.Events as Events
 import Http
 import Inflect
 import Internal.Cmd as AppCmd
-import Internal.Download as Download exposing (Download, Format(..))
 import Internal.Field as Field
 import Internal.Record exposing (primaryKey, setValidation, updateWithString)
-import Internal.Schema as Schema exposing (Constraint(..), Table)
+import Internal.Schema as Schema exposing (Column, Constraint(..), Table)
 import Internal.Search as Search exposing (Search)
-import Internal.Value as Value
+import Internal.Value as Value exposing (Value(..))
 import Json.Decode as Decode
 import Json.Encode as Encode
 import List.Extra as List
 import List.Split as List
 import Markdown
-import PostgRestAdmin.Client as Client exposing (Client, Collection, Error, endpoint, errorToString, listableColumns, listingSelects)
+import PostgRestAdmin.Client as Client exposing (Client, Count, Error, errorToString)
 import PostgRestAdmin.MountPath as MountPath
     exposing
         ( MountPath
@@ -115,9 +116,14 @@ type UploadState
     | UploadWithErrors (List ( Int, Record ))
 
 
+type Format
+    = CSV
+    | JSON
+
+
 type Msg
     = LoggedIn Client
-    | Fetched (Result Error (Collection Record))
+    | Fetched (Result Error ( List Record, Count ))
     | ParentFetched (Result Error Record)
     | ApplyFilters
     | Sort SortOrder
@@ -126,7 +132,7 @@ type Msg
     | ScrollInfo (Result Dom.Error Viewport)
     | SearchChanged Search.Msg
     | DownloadRequested Format
-    | Downloaded (Result Error Download)
+    | Downloaded Format (Result Error Bytes)
     | ToggleSearchOpen
     | CsvUploadRequested
     | CsvUploadSelected File
@@ -177,7 +183,7 @@ init { client, mountPath, table, parent } url key =
         parentParams =
             Maybe.andThen
                 (\params ->
-                    Client.getTable params.tableName client
+                    Dict.get params.tableName client.schema
                         |> Maybe.map (\parentTable -> ( parentTable, params ))
                 )
                 parent
@@ -254,10 +260,14 @@ fetch pageListing =
         , method = "GET"
         , headers = [ Http.header "Prefer" "count=exact" ]
         , path =
-            listingPath { limit = True, selectAll = False, nest = False }
+            listingPath
+                { limit = True
+                , selectAll = False
+                , nest = False
+                }
                 pageListing
-        , body = Http.emptyBody
         , decoder = Record.decoder pageListing.table
+        , body = Http.emptyBody
         , expect = Fetched
         }
 
@@ -269,7 +279,7 @@ update msg listing =
             fetchListing
                 { listing | client = client }
 
-        Fetched (Ok { records, total }) ->
+        Fetched (Ok ( records, count )) ->
             let
                 recordCount =
                     List.length records
@@ -290,7 +300,7 @@ update msg listing =
                                 loadedRecords =
                                     (List.length pages * perPage) + recordCount
                             in
-                            if loadedRecords >= total then
+                            if loadedRecords >= count.total then
                                 Blank :: Page records :: pages
 
                             else
@@ -382,27 +392,52 @@ update msg listing =
             )
 
         DownloadRequested format ->
+            let
+                path =
+                    listingPath
+                        { limit = False
+                        , selectAll = True
+                        , nest = False
+                        }
+                        listing
+            in
             ( listing
-            , Download.init format
-                (listingPath
-                    { limit = False
-                    , selectAll = True
-                    , nest = False
-                    }
-                    listing
+            , Client.bytesRequest
+                { client = listing.client
+                , method = "GET"
+                , headers =
+                    [ case format of
+                        CSV ->
+                            Http.header "Accept" "text/csv"
+
+                        JSON ->
+                            Http.header "Accept" "application/json"
+                    ]
+                , path = path
+                , body = Http.emptyBody
+                }
+                |> Task.attempt (Downloaded format)
+                |> AppCmd.wrap
+            )
+
+        Downloaded format (Ok body) ->
+            let
+                download ext =
+                    (listing.table.name ++ "-list." ++ ext)
+                        |> Download.bytes
+            in
+            ( listing
+            , AppCmd.wrap
+                (case format of
+                    CSV ->
+                        download "csv" "text/csv" body
+
+                    JSON ->
+                        download "json" "application/json" body
                 )
-                |> Download.fetch listing.client
-                |> Task.attempt Downloaded
-                |> AppCmd.wrap
             )
 
-        Downloaded (Ok download) ->
-            ( listing
-            , Download.save listing.table.name download
-                |> AppCmd.wrap
-            )
-
-        Downloaded (Err err) ->
+        Downloaded _ (Err err) ->
             ( listing, Notification.error (Client.errorToString err) )
 
         CsvUploadRequested ->
@@ -749,46 +784,15 @@ processCsv { table, client } csv =
         ids
             |> List.map
                 (\chunk ->
-                    Http.task
-                        { url =
-                            endpoint client
-                                (Url.absolute [ table.name ]
-                                    (existenceQuery primaryKeyName chunk)
-                                )
+                    Client.task
+                        { client = client
                         , method = "GET"
                         , headers = []
+                        , path =
+                            Url.absolute [ table.name ]
+                                (existenceQuery primaryKeyName chunk)
                         , body = Http.emptyBody
-                        , resolver =
-                            Http.stringResolver
-                                (\response ->
-                                    case response of
-                                        Http.BadUrl_ url ->
-                                            Err (Client.BadUrl url)
-
-                                        Http.Timeout_ ->
-                                            Err Client.Timeout
-
-                                        Http.BadStatus_ { statusCode } _ ->
-                                            case statusCode of
-                                                401 ->
-                                                    Err Client.Unauthorized
-
-                                                403 ->
-                                                    Err Client.Forbidden
-
-                                                _ ->
-                                                    Err (Client.BadStatus statusCode)
-
-                                        Http.NetworkError_ ->
-                                            Err Client.NetworkError
-
-                                        Http.GoodStatus_ _ body ->
-                                            Decode.decodeString
-                                                (Decode.list (Record.decoder table))
-                                                body
-                                                |> Result.mapError Client.DecodeError
-                                )
-                        , timeout = Nothing
+                        , decoder = Decode.list (Record.decoder table)
                         }
                 )
             |> Task.sequence
@@ -1473,3 +1477,49 @@ parentReference table parent =
                         Nothing
             )
         |> List.head
+
+
+listableColumns : Table -> Dict.Dict String Column
+listableColumns table =
+    table.columns
+        |> Dict.filter
+            (\_ column ->
+                case column.value of
+                    PText _ ->
+                        False
+
+                    PJson _ ->
+                        False
+
+                    Unknown _ ->
+                        False
+
+                    _ ->
+                        True
+            )
+
+
+listingSelects : Table -> List PG.Selectable
+listingSelects table =
+    Dict.values table.columns
+        |> List.filterMap associationJoin
+        |> (++)
+            (listableColumns table
+                |> Dict.keys
+                |> List.map PG.attribute
+            )
+
+
+associationJoin : Column -> Maybe PG.Selectable
+associationJoin { constraint } =
+    case constraint of
+        ForeignKey foreignKey ->
+            foreignKey.labelColumnName
+                |> Maybe.map
+                    (\n ->
+                        PG.resource foreignKey.tableName
+                            (PG.attributes [ n, "id" ])
+                    )
+
+        _ ->
+            Nothing

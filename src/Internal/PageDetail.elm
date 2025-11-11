@@ -35,7 +35,7 @@ import Internal.Field as Field exposing (Field)
 import Internal.Record as Record exposing (Record)
 import Internal.Schema exposing (Reference, Table)
 import Json.Decode as Decode
-import PostgRestAdmin.Client as Client exposing (Client, Collection, Error)
+import PostgRestAdmin.Client as Client exposing (Client, Count, Error)
 import PostgRestAdmin.MountPath exposing (MountPath, breadcrumbs, path)
 import PostgRestAdmin.Notification as Notification
 import String.Extra as String
@@ -45,7 +45,7 @@ import Url.Builder as Url exposing (QueryParameter, string)
 type Msg
     = LoggedIn Client
     | Fetched (Result Error Record)
-    | GotCount String (Result Error (Collection ()))
+    | GotCount String (Result Error ( List (), Count ))
     | Deleted (Result Error ())
     | DeleteModalOpened
     | DeleteModalClosed
@@ -131,15 +131,15 @@ update msg params =
                             , path = referencePath ref []
                             , body = Http.emptyBody
                             , decoder = Decode.succeed ()
-                            , expect = GotCount (Client.tableName ref.table)
+                            , expect = GotCount ref.table.name
                             }
                     )
                 |> AppCmd.batch
             )
 
-        GotCount tableName (Ok { total }) ->
+        GotCount tableName (Ok ( _, count )) ->
             ( { params
-                | counts = Dict.insert tableName total params.counts
+                | counts = Dict.insert tableName count.total params.counts
               }
             , AppCmd.none
             )

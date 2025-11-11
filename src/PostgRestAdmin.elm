@@ -874,7 +874,7 @@ initListing :
     -> String
     -> ( Route f m msg, Cmd (Msg f m msg) )
 initListing params url parent tableName =
-    case Client.getTable tableName params.client of
+    case Dict.get tableName params.client.schema of
         Just table ->
             let
                 listingParams =
@@ -917,7 +917,7 @@ initFormHelp :
     -> Maybe String
     -> ( Route f m msg, Cmd (Msg f m msg) )
 initFormHelp { client, key, config } parent tableName id =
-    case Client.getTable tableName client of
+    case Dict.get tableName client.schema of
         Just table ->
             PageForm.init
                 { client = client
@@ -942,7 +942,7 @@ initDetail :
     -> String
     -> ( Route f m msg, Cmd (Msg f m msg) )
 initDetail { client, key, config } tableName id =
-    case Client.getTable tableName client of
+    case Dict.get tableName client.schema of
         Just table ->
             let
                 detailParams =

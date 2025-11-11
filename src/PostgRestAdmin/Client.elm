@@ -1,13 +1,12 @@
 module PostgRestAdmin.Client exposing
     ( Client, init
-    , Table, getTable, tableName
-    , fetchRecord, fetchRecordList, saveRecord, deleteRecord, request, requestMany, Collection
+    , fetchRecord, saveRecord, deleteRecord, request, requestMany, Count
     , Error(..), errorToString
     , AuthScheme(..), jwt, unset, toJwtString, authHeader, updateJwt, logout
     , fetchSchema, schemaIsLoaded
-    , Response(..)
-    , endpoint, listableColumns, listingSelects
+    , endpoint
     , authSchemeConfig, authUrl, authUrlDecoder, basic, encoder, jwtDecoder
+    , bytesRequest, task
     )
 
 {-| PostgREST client for Elm applications.
@@ -18,18 +17,13 @@ module PostgRestAdmin.Client exposing
 @docs Client, init
 
 
-# Table
-
-@docs Table, getTable, tableName
-
-
 # Requests
 
 Note that the request functions **do not produce a vanilla Elm
 [Cmd](https://package.elm-lang.org/packages/elm/core/latest/Platform-Cmd#Cmd)**
 but a [PostgRestAdmin.Cmd](PostgRestAdmin-Cmd).
 
-@docs fetchRecord, fetchRecordList, saveRecord, deleteRecord, request, requestMany, Collection
+@docs fetchRecord, fetchRecordList, saveRecord, deleteRecord, request, requestMany, Collection, Count
 
 
 # Errors
@@ -57,7 +51,7 @@ but a [PostgRestAdmin.Cmd](PostgRestAdmin-Cmd).
 
 # Utilities
 
-@docs endpoint, listableColumns, listingSelects
+@docs endpoint
 
 
 # Advanced
@@ -68,6 +62,7 @@ Functions for advanced configuration and internal use.
 
 -}
 
+import Bytes exposing (Bytes)
 import Dict exposing (Dict)
 import Dict.Extra as Dict
 import Http
@@ -95,6 +90,7 @@ type Error
     | Timeout
     | NetworkError
     | BadStatus Int
+    | BadHeader String
     | DecodeError Decode.Error
     | RequestError String
     | Forbidden
@@ -106,19 +102,6 @@ type alias Count =
     , to : Int
     , total : Int
     }
-
-
-{-| -}
-type alias Collection a =
-    { from : Int
-    , to : Int
-    , total : Int
-    , records : List a
-    }
-
-
-type Response
-    = Many Count (List Decode.Value)
 
 
 type AuthScheme
@@ -139,12 +122,6 @@ type alias Client =
     , authScheme : AuthScheme
     , schema : Schema.Schema
     }
-
-
-{-| Represents a PostgREST table.
--}
-type alias Table =
-    Schema.Table
 
 
 {-| Obtain the JWT as a string.
@@ -171,20 +148,6 @@ authHeader : Client -> Maybe Http.Header
 authHeader client =
     toJwtString client
         |> Maybe.map (\jwtStr -> Http.header "Authorization" ("Bearer " ++ jwtStr))
-
-
-{-| Obtain a table from the table name.
--}
-getTable : String -> Client -> Maybe Table
-getTable name { schema } =
-    Dict.get name schema
-
-
-{-| Obtain the name of a table
--}
-tableName : Table -> String
-tableName table =
-    table.name
 
 
 
@@ -285,7 +248,7 @@ fetchSchema config client =
         , headers = List.filterMap identity [ authHeader client ]
         , url = endpoint client "/"
         , body = Http.emptyBody
-        , resolver = jsonResolver (Schema.decoder config)
+        , resolver = oneResolver (Schema.decoder config)
         , timeout = Nothing
         }
 
@@ -319,6 +282,9 @@ errorToString error =
         Unauthorized ->
             "Unauthorized: please check your credentials."
 
+        BadHeader headerName ->
+            "The header \"" ++ headerName ++ "\" could not be read."
+
 
 removeLeadingOrTrailingSlash : String -> String
 removeLeadingOrTrailingSlash =
@@ -331,46 +297,80 @@ removeLeadingOrTrailingSlash =
 -- VIEW
 
 
-jsonResolver : Decode.Decoder a -> Http.Resolver Error a
-jsonResolver decoder =
+oneResolver : Decode.Decoder a -> Http.Resolver Error a
+oneResolver decoder =
     Http.stringResolver
-        (\response ->
-            case response of
-                Http.BadUrl_ url ->
-                    Err (BadUrl url)
-
-                Http.Timeout_ ->
-                    Err Timeout
-
-                Http.NetworkError_ ->
-                    Err NetworkError
-
-                Http.BadStatus_ { statusCode } _ ->
-                    case statusCode of
-                        401 ->
-                            Err Unauthorized
-
-                        403 ->
-                            Err Forbidden
-
-                        _ ->
-                            Err (BadStatus statusCode)
-
-                Http.GoodStatus_ _ body ->
-                    Decode.decodeString decoder body
-                        |> Result.mapError DecodeError
+        (resolve
+            (\_ body ->
+                Decode.decodeString decoder body
+                    |> Result.mapError DecodeError
+            )
         )
+
+
+countResolver : Decode.Decoder a -> Http.Resolver Error ( a, Count )
+countResolver decoder =
+    Http.stringResolver
+        (resolve
+            (\{ headers } body ->
+                case
+                    Dict.get "content-range" headers
+                        |> Maybe.map (Parser.run countParser)
+                of
+                    Just (Ok count) ->
+                        Decode.decodeString
+                            (decoder |> Decode.map (\a -> ( a, count )))
+                            body
+                            |> Result.mapError DecodeError
+
+                    _ ->
+                        Err (BadHeader "content-range")
+            )
+        )
+
+
+bytesResolver : Http.Resolver Error Bytes
+bytesResolver =
+    Http.bytesResolver (resolve (\_ body -> Ok body))
+
+
+resolve : (Http.Metadata -> body -> Result Error value) -> Http.Response body -> Result Error value
+resolve fn response =
+    case response of
+        Http.BadUrl_ url ->
+            Err (BadUrl url)
+
+        Http.Timeout_ ->
+            Err Timeout
+
+        Http.NetworkError_ ->
+            Err NetworkError
+
+        Http.BadStatus_ { statusCode } _ ->
+            case statusCode of
+                401 ->
+                    Err Unauthorized
+
+                403 ->
+                    Err Forbidden
+
+                _ ->
+                    Err (BadStatus statusCode)
+
+        Http.GoodStatus_ metadata body ->
+            fn metadata body
 
 
 {-| Fetches a record for a given table.
 Requires a decoder for the response and an `expect` function that returns a `Msg`.
 
+    import Dict
     import Json.Decode as Decode
     import PostgRestAdmin.Cmd as AppCmd
 
     fetchOne : (Result Error Decode.Value -> msg) -> String -> String -> Client -> AppCmd.Cmd Msg
     fetchOne tagger tableName recordId client =
-        case getTable tableName client of
+        case Dict.get tableName client.schema of
             Just table ->
                 fetchRecord
                     { client = client
@@ -414,63 +414,15 @@ fetchRecord { client, table, id, expect, decoder } =
                         [ authHeader client
                         , Just (Http.header "Accept" "application/vnd.pgrst.object+json")
                         ]
-                , url = endpoint client ("/" ++ tableName table ++ "?" ++ queryStr)
+                , url = endpoint client ("/" ++ table.name ++ "?" ++ queryStr)
                 , body = Http.emptyBody
-                , resolver = jsonResolver decoder
+                , resolver = oneResolver decoder
                 , timeout = Nothing
                 }
 
 
 
 -- Internal.Fetch expect missingPrimaryKey
-
-
-{-| Fetches a list of records for a given table.
-`expect` param requires a function that returns a `Msg`.
-
-    import PostgRestAdmin.Cmd as AppCmd
-
-    fetchList : (Result Error (List Record) -> Msg) -> String -> Client -> AppCmd.Cmd Msg
-    fetchList tagger tableName client =
-        case getTable tableName client of
-            Just table ->
-                fetchRecordList
-                    { client = client
-                    , table = table
-                    , params = []
-                    , expect = tagger
-                    }
-
-            Nothing ->
-                AppCmd.none
-
--}
-fetchRecordList :
-    { client : Client
-    , table : Table
-    , queryString : String
-    , expect : Result Error (Collection Record) -> msg
-    }
-    -> AppCmd.Cmd msg
-fetchRecordList { client, table, queryString, expect } =
-    let
-        selectString =
-            PG.toQueryString [ PG.select (selects table) ]
-    in
-    AppCmd.wrap <|
-        Task.attempt (decodeMany (Record.decoder table) >> expect) <|
-            Http.task
-                { method = "GET"
-                , headers =
-                    List.filterMap identity
-                        [ authHeader client
-                        , Just (Http.header "Prefer" "count=planned")
-                        ]
-                , url = endpoint client ("/" ++ tableName table ++ "?" ++ selectString ++ "&" ++ queryString)
-                , body = Http.emptyBody
-                , resolver = manyResolver
-                , timeout = Nothing
-                }
 
 
 saveRecord :
@@ -511,7 +463,7 @@ saveRecord { client, body, table, decoder, id, expect } =
                         ]
                 , url = endpoint client path
                 , body = Http.jsonBody body
-                , resolver = jsonResolver decoder
+                , resolver = oneResolver decoder
                 , timeout = Nothing
                 }
 
@@ -550,7 +502,7 @@ deleteRecord { record, expect } client =
                         , headers = List.filterMap identity [ authHeader client ]
                         , url = endpoint client path
                         , body = Http.emptyBody
-                        , resolver = jsonResolver (Decode.succeed ())
+                        , resolver = oneResolver (Decode.succeed ())
                         , timeout = Nothing
                         }
 
@@ -570,23 +522,63 @@ request :
     , expect : Result Error a -> msg
     }
     -> AppCmd.Cmd msg
-request { client, method, headers, path, body, decoder, expect } =
-    AppCmd.wrap <|
-        Task.attempt expect <|
-            Http.task
-                { method = method
-                , headers =
-                    List.concat
-                        [ authHeader client
-                            |> Maybe.map List.singleton
-                            |> Maybe.withDefault []
-                        , headers
-                        ]
-                , url = endpoint client path
-                , body = body
-                , resolver = jsonResolver decoder
-                , timeout = Nothing
-                }
+request params =
+    task params
+        |> Task.attempt params.expect
+        |> AppCmd.wrap
+
+
+task :
+    { a
+        | client : Client
+        , method : String
+        , headers : List Http.Header
+        , path : String
+        , body : Http.Body
+        , decoder : Decoder b
+    }
+    -> Task Error b
+task { client, method, headers, path, body, decoder } =
+    Http.task
+        { method = method
+        , headers =
+            List.concat
+                [ authHeader client
+                    |> Maybe.map List.singleton
+                    |> Maybe.withDefault []
+                , headers
+                ]
+        , url = endpoint client path
+        , body = body
+        , resolver = oneResolver decoder
+        , timeout = Nothing
+        }
+
+
+bytesRequest :
+    { a
+        | client : Client
+        , method : String
+        , headers : List Http.Header
+        , path : String
+        , body : Http.Body
+    }
+    -> Task Error Bytes
+bytesRequest { client, method, headers, path, body } =
+    Http.task
+        { method = method
+        , headers =
+            List.concat
+                [ authHeader client
+                    |> Maybe.map List.singleton
+                    |> Maybe.withDefault []
+                , headers
+                ]
+        , url = endpoint client path
+        , body = body
+        , resolver = Http.bytesResolver (resolve (always Ok))
+        , timeout = Nothing
+        }
 
 
 {-| -}
@@ -597,20 +589,49 @@ requestMany :
     , path : String
     , body : Http.Body
     , decoder : Decoder a
-    , expect : Result Error (Collection a) -> msg
+    , expect : Result Error ( List a, Count ) -> msg
     }
     -> AppCmd.Cmd msg
 requestMany { client, method, headers, path, decoder, body, expect } =
     AppCmd.wrap <|
-        Task.attempt (decodeMany decoder >> expect) <|
+        Task.attempt expect <|
             Http.task
                 { method = method
                 , headers = List.filterMap identity (authHeader client :: List.map Just headers)
                 , url = endpoint client path
                 , body = body
-                , resolver = manyResolver
+                , resolver = countResolver (Decode.list decoder)
                 , timeout = Nothing
                 }
+
+
+
+-- fetchRecordList :
+--     { client : Client
+--     , table : Table
+--     , queryString : String
+--     , expect : Result Error ( List Record, Count ) -> msg
+--     }
+--     -> AppCmd.Cmd msg
+-- fetchRecordList { client, table, queryString, expect } =
+--     let
+--         selectString =
+--             PG.toQueryString [ PG.select (selects table) ]
+--     in
+--     AppCmd.wrap <|
+--         Task.attempt expect <|
+--             Http.task
+--                 { method = "GET"
+--                 , headers =
+--                     List.filterMap identity
+--                         [ authHeader client
+--                         , Just (Http.header "Prefer" "count=planned")
+--                         ]
+--                 , url = endpoint client ("/" ++ tableName table ++ "?" ++ selectString ++ "&" ++ queryString)
+--                 , body = Http.emptyBody
+--                 , resolver = countResolver (Decode.list (Record.decoder table))
+--                 , timeout = Nothing
+--                 }
 
 
 endpoint : Client -> String -> String
@@ -628,56 +649,6 @@ endpoint { host } path =
 
 
 
--- RESOLVE
-
-
-{-| -}
-manyResolver : Http.Resolver Error Response
-manyResolver =
-    Http.stringResolver <|
-        \response ->
-            case response of
-                Http.BadUrl_ url ->
-                    Err (BadUrl url)
-
-                Http.Timeout_ ->
-                    Err Timeout
-
-                Http.BadStatus_ { statusCode } _ ->
-                    case statusCode of
-                        401 ->
-                            Err Unauthorized
-
-                        403 ->
-                            Err Forbidden
-
-                        _ ->
-                            Err (BadStatus statusCode)
-
-                Http.NetworkError_ ->
-                    Err NetworkError
-
-                Http.GoodStatus_ { headers } body ->
-                    let
-                        count =
-                            Dict.get "content-range" headers
-                                |> Maybe.andThen
-                                    (Parser.run countParser >> Result.toMaybe)
-                                |> Maybe.withDefault (Count 0 0 1)
-                    in
-                    if String.isEmpty body then
-                        Ok (Many count [])
-
-                    else
-                        case Decode.decodeString (Decode.list Decode.value) body of
-                            Err err ->
-                                Err (DecodeError err)
-
-                            Ok values ->
-                                Ok (Many count values)
-
-
-
 -- UTILS
 
 
@@ -691,37 +662,6 @@ selects table =
     Dict.values table.columns
         |> List.filterMap associationJoin
         |> (++) (Dict.keys table.columns |> List.map PG.attribute)
-
-
-listableColumns : Table -> Dict String Column
-listableColumns table =
-    table.columns
-        |> Dict.filter
-            (\_ column ->
-                case column.value of
-                    PText _ ->
-                        False
-
-                    PJson _ ->
-                        False
-
-                    Unknown _ ->
-                        False
-
-                    _ ->
-                        True
-            )
-
-
-listingSelects : Table -> List Selectable
-listingSelects table =
-    Dict.values table.columns
-        |> List.filterMap associationJoin
-        |> (++)
-            (listableColumns table
-                |> Dict.keys
-                |> List.map PG.attribute
-            )
 
 
 associationJoin : Column -> Maybe Selectable
@@ -747,28 +687,6 @@ tablePrimaryKeyName table =
 
 
 -- DECODE
-
-
-{-| -}
-decodeMany :
-    Decoder a
-    -> Result Error Response
-    -> Result Error (Collection a)
-decodeMany decoder result =
-    result
-        |> Result.andThen
-            (\response ->
-                case response of
-                    Many { from, to, total } list ->
-                        let
-                            mapper =
-                                Decode.decodeValue (Decode.list decoder)
-                                    >> Result.mapError DecodeError
-                        in
-                        Encode.list identity list
-                            |> mapper
-                            |> Result.map (Collection from to total)
-            )
 
 
 countParser : Parser Count
