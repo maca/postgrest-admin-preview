@@ -9,6 +9,7 @@ module Internal.PageForm exposing
 
 import Browser.Navigation as Nav
 import Dict
+import FormToolkit.Error
 import FormToolkit.Field as Field
 import FormToolkit.Parse as Parse
 import Html exposing (Html)
@@ -78,7 +79,18 @@ init { client, navKey, mountPath, id, table, parent } =
     in
     ( pageForm
     , AppCmd.batch
-        [ fetchRecord pageForm
+        [ case id of
+            Just recordId ->
+                Client.fetchRecord
+                    { client = client
+                    , table = table
+                    , id = recordId
+                    , expect = Fetched
+                    , decoder = Decode.value
+                    }
+
+            Nothing ->
+                AppCmd.none
         , case parentParams of
             Just ( parentTable, params ) ->
                 Client.fetchRecord
@@ -95,22 +107,6 @@ init { client, navKey, mountPath, id, table, parent } =
     )
 
 
-fetchRecord : PageForm -> AppCmd.Cmd Msg
-fetchRecord { id, client, table } =
-    case id of
-        Just recordId ->
-            Client.fetchRecord
-                { client = client
-                , table = table
-                , id = recordId
-                , expect = Fetched
-                , decoder = Decode.value
-                }
-
-        Nothing ->
-            AppCmd.none
-
-
 onLogin : Client -> Msg
 onLogin =
     LoggedIn
@@ -125,17 +121,31 @@ update msg model =
     case msg of
         LoggedIn client ->
             ( { model | client = client }
-            , fetchRecord { model | client = client }
+            , case model.id of
+                Just recordId ->
+                    Client.fetchRecord
+                        { client = client
+                        , table = model.table
+                        , id = recordId
+                        , expect = Fetched
+                        , decoder = Decode.value
+                        }
+
+                Nothing ->
+                    AppCmd.none
             )
 
         Fetched (Ok response) ->
-            ( { model
-                | form =
-                    Field.updateValuesFromJson response model.form
-                        |> Result.withDefault model.form
-              }
-            , AppCmd.none
-            )
+            case Field.updateValuesFromJson response model.form of
+                Ok form ->
+                    ( { model | form = form }
+                    , AppCmd.none
+                    )
+
+                Err err ->
+                    ( model
+                    , Notification.error (FormToolkit.Error.toEnglish err)
+                    )
 
         Fetched (Err err) ->
             ( model
@@ -310,15 +320,12 @@ buildForm table =
     Field.group []
         (Dict.toList table.columns
             |> List.sortWith sortColumns
-            |> List.filterMap
-                (\( name, column ) ->
-                    fieldFromColumn name column
-                )
+            |> List.filterMap fieldFromColumn
         )
 
 
-fieldFromColumn : String -> Schema.Column -> Maybe (Field.Field String)
-fieldFromColumn name column =
+fieldFromColumn : ( String, Schema.Column ) -> Maybe (Field.Field String)
+fieldFromColumn ( name, column ) =
     let
         attrs =
             List.concat
@@ -333,6 +340,7 @@ fieldFromColumn name column =
                 , if column.constraint == PrimaryKey then
                     [ Field.disabled True
                     , Field.required False
+                    , Field.hidden True
                     ]
 
                   else
