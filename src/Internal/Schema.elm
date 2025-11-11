@@ -1,7 +1,8 @@
 module Internal.Schema exposing
     ( Schema, Column, ColumnType(..)
     , Constraint(..), ForeignKeyParams, Reference
-    , Table, columnNames, label, tablePrimaryKeyName, tablePrimaryKeyValue
+    , Table, columnNames, label
+    , tablePrimaryKey, tablePrimaryKeyName, tablePrimaryKeyValue
     , decoder, valueDecoder
     )
 
@@ -9,7 +10,8 @@ module Internal.Schema exposing
 
 @docs Schema, Column, ColumnType
 @docs Constraint, ForeignKeyParams, Reference
-@docs Table, columnNames, label, tablePrimaryKeyName, tablePrimaryKeyValue
+@docs Table, columnNames, label
+@docs tablePrimaryKey, tablePrimaryKeyName, tablePrimaryKeyValue
 @docs decoder, valueDecoder
 
 -}

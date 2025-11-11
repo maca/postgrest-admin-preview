@@ -15,6 +15,7 @@ import FormToolkit.Parse as Parse
 import Html exposing (Html)
 import Html.Attributes as Attrs
 import Html.Events as Events
+import Http
 import Internal.Cmd as AppCmd
 import Internal.Schema as Schema exposing (ColumnType(..), Constraint(..), Table)
 import Internal.Value as Value exposing (Value(..))
@@ -22,7 +23,9 @@ import Json.Decode as Decode
 import PostgRestAdmin.Client as Client exposing (Client)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
 import PostgRestAdmin.Notification as Notification
+import Postgrest.Client as PG
 import String.Extra as String
+import Task
 import Url.Builder as Url
 
 
@@ -30,7 +33,7 @@ type Msg
     = LoggedIn Client
     | Fetched (Result Client.Error Decode.Value)
     | ParentFetched (Result Client.Error Table)
-    | Saved (Result Client.Error ( Decode.Value, Table ))
+    | Saved (Result Client.Error String)
     | FormChanged (Field.Msg String)
     | Submitted
 
@@ -79,27 +82,39 @@ init { client, navKey, mountPath, id, table, parent } =
     in
     ( pageForm
     , AppCmd.batch
-        [ case id of
-            Just recordId ->
-                Client.fetchRecord
+        [ case Maybe.map2 Tuple.pair (Schema.tablePrimaryKeyName table) id of
+            Just ( primaryKeyName, recordId ) ->
+                let
+                    selectedCols =
+                        PG.select
+                            (Dict.keys table.columns
+                                |> List.filter ((/=) primaryKeyName)
+                                |> List.map PG.attribute
+                            )
+
+                    queryString =
+                        PG.toQueryString
+                            [ selectedCols
+                            , PG.param primaryKeyName (PG.eq (PG.string recordId))
+                            , PG.limit 1
+                            ]
+                in
+                Client.task
                     { client = client
-                    , table = table
-                    , id = recordId
-                    , expect = Fetched
+                    , method = "GET"
+                    , headers = [ Http.header "Accept" "application/vnd.pgrst.object+json" ]
+                    , path = "/" ++ table.name ++ "?" ++ queryString
+                    , body = Http.emptyBody
                     , decoder = Decode.value
                     }
+                    |> Task.attempt Fetched
+                    |> AppCmd.wrap
 
             Nothing ->
                 AppCmd.none
         , case parentParams of
-            Just ( parentTable, params ) ->
-                Client.fetchRecord
-                    { client = client
-                    , table = parentTable
-                    , id = params.id
-                    , expect = ParentFetched
-                    , decoder = tableUpdateDecoder table
-                    }
+            Just _ ->
+                AppCmd.none
 
             Nothing ->
                 AppCmd.none
@@ -121,18 +136,7 @@ update msg model =
     case msg of
         LoggedIn client ->
             ( { model | client = client }
-            , case model.id of
-                Just recordId ->
-                    Client.fetchRecord
-                        { client = client
-                        , table = model.table
-                        , id = recordId
-                        , expect = Fetched
-                        , decoder = Decode.value
-                        }
-
-                Nothing ->
-                    AppCmd.none
+            , Debug.todo "crash"
             )
 
         Fetched (Ok response) ->
@@ -160,22 +164,13 @@ update msg model =
             , Notification.error (Client.errorToString err)
             )
 
-        Saved (Ok ( response, table )) ->
-            let
-                id =
-                    Schema.tablePrimaryKeyValue table
-                        |> Maybe.andThen (Tuple.second >> Value.toString)
-
-                url =
-                    Url.absolute [ model.table.name, Maybe.withDefault "" id ] []
-
-                form =
-                    Field.updateValuesFromJson response model.form
-                        |> Result.withDefault model.form
-            in
-            ( { model | id = id, form = form, table = table }
+        Saved (Ok id) ->
+            ( model
             , AppCmd.batch
-                [ AppCmd.wrap (Nav.pushUrl model.key url)
+                [ AppCmd.wrap
+                    (Nav.pushUrl model.key
+                        (Url.absolute [ model.table.name, id ] [])
+                    )
                 , Notification.confirm "The record was saved"
                 ]
             )
@@ -201,9 +196,15 @@ update msg model =
                         , table = model.table
                         , expect = Saved
                         , decoder =
-                            Decode.map2 Tuple.pair
-                                Decode.value
-                                (tableUpdateDecoder model.table)
+                            case Schema.tablePrimaryKey model.table of
+                                Just ( pkName, column ) ->
+                                    Decode.field pkName
+                                        (Schema.valueDecoder column.columnType)
+                                        |> Decode.map
+                                            (Value.toString >> Maybe.withDefault "")
+
+                                Nothing ->
+                                    Decode.fail "Coudn't figure the field id"
                         }
 
                 Err _ ->
@@ -337,14 +338,6 @@ fieldFromColumn ( name, column ) =
                 , Value.toString column.value
                     |> Maybe.map (Field.stringValue >> List.singleton)
                     |> Maybe.withDefault []
-                , if column.constraint == PrimaryKey then
-                    [ Field.disabled True
-                    , Field.required False
-                    , Field.hidden True
-                    ]
-
-                  else
-                    []
                 ]
     in
     case column.constraint of
@@ -353,7 +346,10 @@ fieldFromColumn ( name, column ) =
             -- TODO: Implement autocomplete with association
             Just (Field.text attrs)
 
-        _ ->
+        PrimaryKey ->
+            Nothing
+
+        NoConstraint ->
             Just
                 (case column.columnType of
                     Schema.String ->
