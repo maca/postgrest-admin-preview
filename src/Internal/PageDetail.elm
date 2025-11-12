@@ -11,16 +11,15 @@ import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes as Attrs
 import Html.Events as Events
-import Http exposing (header)
 import Internal.Cmd as AppCmd
 import Internal.Config exposing (DetailActions)
 import Internal.Schema exposing (Record, Reference, Table)
 import Internal.Value
-import Json.Decode as Decode
-import PostgRestAdmin.Client as Client exposing (Client, Count, Error)
+import PostgRestAdmin.Client as Client exposing (Client, Error)
 import PostgRestAdmin.MountPath exposing (MountPath, breadcrumbs, path)
 import PostgRestAdmin.Notification as Notification
 import String.Extra as String
+import Task
 import Time.Extra as Time
 import Url.Builder as Url
 
@@ -91,8 +90,9 @@ update msg model =
                                 Url.absolute
                                     [ ref.tableName ]
                                     [ Url.string ref.foreignKeyName ("eq." ++ model.id) ]
-                            , expect = GotCount ref.tableName
                             }
+                            |> Task.attempt (GotCount ref.tableName)
+                            |> AppCmd.wrap
                     )
                 |> AppCmd.batch
             )

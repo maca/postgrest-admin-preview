@@ -596,7 +596,9 @@ requestMany { client, method, headers, path, decoder, body, expect } =
         Task.attempt expect <|
             Http.task
                 { method = method
-                , headers = List.filterMap identity (authHeader client :: List.map Just headers)
+                , headers =
+                    List.filterMap identity
+                        (authHeader client :: List.map Just headers)
                 , url = endpoint client path
                 , body = body
                 , resolver = countResolver (Decode.list decoder)
@@ -604,30 +606,34 @@ requestMany { client, method, headers, path, decoder, body, expect } =
                 }
 
 
-count :
-    { client : Client
-    , expect : Result Error Int -> msg
-    , path : String
-    }
-    -> AppCmd.Cmd msg
-count { client, expect, path } =
-    AppCmd.wrap
-        (Task.attempt expect
-            (Http.task
-                { method = "HEAD"
-                , headers =
-                    List.filterMap identity
-                        [ authHeader client
-                        , Just (Http.header "Prefer" "count=exact")
-                        ]
-                , url = endpoint client path
-                , body = Http.emptyBody
-                , resolver = countResolver (Decode.succeed ())
-                , timeout = Nothing
-                }
-                |> Task.map (Tuple.second >> .total)
-            )
-        )
+count : { client : Client, path : String } -> Task Error Int
+count { client, path } =
+    Http.task
+        { method = "HEAD"
+        , headers =
+            List.filterMap identity
+                [ authHeader client
+                , Just (Http.header "Prefer" "count=exact")
+                ]
+        , url = endpoint client path
+        , body = Http.emptyBody
+        , resolver =
+            Http.bytesResolver
+                (resolve
+                    (\{ headers } _ ->
+                        case
+                            Dict.get "content-range" headers
+                                |> Maybe.map (Parser.run countParser)
+                        of
+                            Just (Ok recordCount) ->
+                                Ok recordCount.total
+
+                            _ ->
+                                Err (BadHeader "content-range")
+                    )
+                )
+        , timeout = Nothing
+        }
 
 
 endpoint : Client -> String -> String

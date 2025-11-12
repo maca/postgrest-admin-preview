@@ -18,16 +18,7 @@ module Internal.Record exposing
 
 import Dict exposing (Dict)
 import Internal.Field as Field exposing (Field)
-import Internal.Schema
-    exposing
-        ( Column
-        , Constraint(..)
-        , ForeignKeyParams
-        , Reference
-        , Schema
-        , Table
-        , valueDecoder
-        )
+import Internal.Schema exposing (Column, Constraint(..), ForeignKeyParams, Table, valueDecoder)
 import Internal.Value as Value exposing (Value(..))
 import Json.Decode as Decode exposing (Decoder, string)
 import Json.Encode as Encode

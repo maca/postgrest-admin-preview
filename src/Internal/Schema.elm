@@ -4,7 +4,7 @@ module Internal.Schema exposing
     , Table, label
     , tablePrimaryKey, tablePrimaryKeyName, tablePrimaryKeyValue
     , decoder, valueDecoder
-    , Record, buildParentReference, buildReferences, recordDecoder
+    , Record, buildParentReference, buildReferences, columnFieldValueDecoder, recordDecoder
     )
 
 {-|
@@ -274,6 +274,15 @@ columnType type_ format =
             Other type_ format
 
 
+columnFieldValueDecoder : String -> Table -> Decode.Decoder Value
+columnFieldValueDecoder colName table =
+    Dict.get colName table.columns
+        |> Maybe.map (.columnType >> valueDecoder)
+        |> Maybe.map (Decode.field colName)
+        |> Maybe.withDefault
+            (Decode.fail ("No column " ++ colName ++ " is present"))
+
+
 valueDecoder : ColumnType -> Decode.Decoder Value
 valueDecoder type_ =
     case type_ of
@@ -479,10 +488,10 @@ buildReferencedBy schema table =
 buildReferences : Table -> Dict String ForeignKeyParams
 buildReferences table =
     Dict.foldl
-        (\_ column acc ->
+        (\colName column acc ->
             case column.constraint of
                 ForeignKey foreignKey ->
-                    Dict.insert foreignKey.tableName foreignKey acc
+                    Dict.insert colName foreignKey acc
 
                 _ ->
                     acc
@@ -523,5 +532,9 @@ buildParentReference schema table parent =
                 )
         )
         (Dict.get parent.tableName schema)
-        (Dict.get parent.tableName (buildReferences table))
+        (buildReferences table
+            |> Dict.values
+            |> List.filter (\f -> parent.tableName == f.tableName)
+            |> List.head
+        )
         |> Maybe.andThen identity

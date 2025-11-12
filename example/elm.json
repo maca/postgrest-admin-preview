@@ -28,7 +28,7 @@
             "elm-community/string-extra": "4.0.1",
             "elm-explorations/markdown": "1.0.0",
             "maca/elm-inflect": "1.0.0",
-            "maca/form-toolkit": "1.0.4",
+            "maca/form-toolkit": "1.0.5",
             "periodic/elm-csv": "2.0.1",
             "rtfeldman/elm-iso8601-date-strings": "1.1.4"
         },

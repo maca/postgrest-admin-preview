@@ -5,6 +5,7 @@ import Dict exposing (Dict)
 import FormToolkit.Error
 import FormToolkit.Field as Field
 import FormToolkit.Parse as Parse
+import FormToolkit.Value as FormValue
 import Html exposing (Html)
 import Html.Attributes as Attrs
 import Html.Events as Events
@@ -25,8 +26,10 @@ import Url.Builder as Url
 type Msg
     = Fetched (Result Client.Error Decode.Value)
     | ParentLabelFetched (Result Client.Error (Maybe String))
+    | AutocompleteValuesFetched String (Result Client.Error AutocompleteOptions)
     | Saved (Result Client.Error String)
     | FormChanged (Field.Msg String)
+    | NoOp
     | Submitted
 
 
@@ -39,7 +42,13 @@ type alias Model =
     , parent : Maybe { tableName : String, id : String }
     , parentLabel : Maybe String
     , form : Field.Field String
+    , autocompleteValues : Dict String AutocompleteOptions
     }
+
+
+type AutocompleteOptions
+    = Local (List { id : String, label : String })
+    | Remote
 
 
 init :
@@ -60,17 +69,82 @@ init { client, navKey, mountPath, table, id, parent } =
       , parent = parent
       , parentLabel = Nothing
       , form = buildForm table
+      , autocompleteValues = Dict.empty
       }
     , AppCmd.batch
-        [ Maybe.map2 Tuple.pair (Schema.tablePrimaryKeyName table) id
-            |> Maybe.map (fetch client table)
-            |> Maybe.withDefault AppCmd.none
-        , parent
-            |> Maybe.andThen (Schema.buildParentReference client.schema table)
-            |> Maybe.map (fetchParentLabel client)
-            |> Maybe.withDefault AppCmd.none
-        ]
+        (List.concat
+            [ [ Maybe.map2 Tuple.pair (Schema.tablePrimaryKeyName table) id
+                    |> Maybe.map (fetch client table)
+                    |> Maybe.withDefault AppCmd.none
+              , parent
+                    |> Maybe.andThen (Schema.buildParentReference client.schema table)
+                    |> Maybe.map (fetchParentLabel client)
+                    |> Maybe.withDefault AppCmd.none
+              ]
+            , Schema.buildReferences table
+                |> Dict.toList
+                |> List.map (fetchAutcompleteValues client)
+            ]
+        )
     )
+
+
+fetchAutcompleteValues : Client -> ( String, Schema.ForeignKeyParams ) -> AppCmd.Cmd Msg
+fetchAutcompleteValues client ( colName, ref ) =
+    Client.count
+        { client = client
+        , path = Url.absolute [ ref.tableName ] []
+        }
+        |> Task.andThen
+            (\count ->
+                case ( count < 1000, ref.labelColumnName ) of
+                    ( True, Just labelColumnName ) ->
+                        Client.task
+                            { client = client
+                            , method = "GET"
+                            , headers = []
+                            , path =
+                                String.concat
+                                    [ "/"
+                                    , ref.tableName
+                                    , "?"
+                                    , PG.toQueryString
+                                        [ PG.select
+                                            (PG.attributes
+                                                [ ref.primaryKeyName
+                                                , labelColumnName
+                                                ]
+                                            )
+                                        ]
+                                    ]
+                            , body = Http.emptyBody
+                            , decoder =
+                                let
+                                    stringDecoder field =
+                                        Decode.field field
+                                            (Decode.oneOf
+                                                [ Decode.string
+                                                , Decode.int |> Decode.map String.fromInt
+                                                ]
+                                            )
+                                in
+                                Decode.list
+                                    (Decode.oneOf
+                                        [ Decode.map2
+                                            (\id label -> Just { id = id, label = label })
+                                            (stringDecoder ref.primaryKeyName)
+                                            (stringDecoder labelColumnName)
+                                        , Decode.succeed Nothing
+                                        ]
+                                    )
+                                    |> Decode.map (List.filterMap identity >> Local)
+                            }
+
+                    _ ->
+                        Task.succeed Remote
+            )
+        |> Task.attempt (AutocompleteValuesFetched colName)
+        |> AppCmd.wrap
 
 
 fetch : Client -> Table -> ( String, String ) -> AppCmd.Cmd Msg
@@ -173,6 +247,20 @@ update msg model =
             , Notification.error (Client.errorToString err)
             )
 
+        AutocompleteValuesFetched colName (Ok values) ->
+            ( { model
+                | autocompleteValues =
+                    Dict.insert colName values model.autocompleteValues
+                , form = updateAutocompletOptions colName values model.form
+              }
+            , AppCmd.none
+            )
+
+        AutocompleteValuesFetched _ (Err err) ->
+            ( model
+            , Notification.error (Client.errorToString err)
+            )
+
         Saved (Ok id) ->
             ( model
             , AppCmd.batch
@@ -219,6 +307,25 @@ update msg model =
                 Err _ ->
                     Notification.error "Please check the form errors"
             )
+
+        NoOp ->
+            ( model, AppCmd.none )
+
+
+updateAutocompletOptions : String -> AutocompleteOptions -> Field.Field String -> Field.Field String
+updateAutocompletOptions colName values =
+    case values of
+        Local list ->
+            Field.updateWithId colName
+                (Field.options
+                    (List.map
+                        (\{ id, label } -> ( label ++ " (" ++ id ++ ")", FormValue.string id ))
+                        list
+                    )
+                )
+
+        Remote ->
+            identity
 
 
 
@@ -328,7 +435,7 @@ fieldFromColumn ( name, column ) =
         ForeignKey _ ->
             -- For now, treat foreign keys as text inputs
             -- TODO: Implement autocomplete with association
-            Just (Field.text attrs)
+            Just (Field.strictAutocomplete attrs)
 
         PrimaryKey ->
             Nothing
