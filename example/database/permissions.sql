@@ -91,3 +91,4 @@ GRANT EXECUTE ON FUNCTION login(text, text) TO web_anon;
 -- ALTER ROLE anonymous SET statement_timeout TO '1s';
 -- 
 -- https://docs.postgrest.org/en/stable/references/configuration.html#db-tx-end
+-- Check multiple primary keys

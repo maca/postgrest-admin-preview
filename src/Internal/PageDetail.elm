@@ -1,8 +1,7 @@
 module Internal.PageDetail exposing
-    ( Msg
-    , PageDetail
+    ( Model
+    , Msg
     , init
-    , onLogin
     , update
     , view
     )
@@ -15,20 +14,19 @@ import Html.Events as Events
 import Http exposing (header)
 import Internal.Cmd as AppCmd
 import Internal.Config exposing (DetailActions)
-import Internal.Field as Field exposing (Field)
-import Internal.Record as Record exposing (Record)
-import Internal.Schema exposing (Reference, Table)
+import Internal.Schema exposing (Record, Reference, Table)
+import Internal.Value
 import Json.Decode as Decode
 import PostgRestAdmin.Client as Client exposing (Client, Count, Error)
 import PostgRestAdmin.MountPath exposing (MountPath, breadcrumbs, path)
 import PostgRestAdmin.Notification as Notification
 import String.Extra as String
-import Url.Builder as Url exposing (QueryParameter, string)
+import Time.Extra as Time
+import Url.Builder as Url
 
 
 type Msg
-    = LoggedIn Client
-    | Fetched (Result Error Record)
+    = Fetched (Result Error Record)
     | GotCount String (Result Error ( List (), Count ))
     | Deleted (Result Error ())
     | DeleteModalOpened
@@ -36,7 +34,7 @@ type Msg
     | DeleteConfirmed
 
 
-type alias PageDetail =
+type alias Model =
     { client : Client
     , mountPath : MountPath
     , key : Nav.Key
@@ -57,112 +55,94 @@ init :
     , detailActions : DetailActions
     }
     -> Nav.Key
-    -> ( PageDetail, AppCmd.Cmd Msg )
+    -> ( Model, AppCmd.Cmd Msg )
 init { client, mountPath, table, id, detailActions } key =
-    let
-        pageDetail =
-            { client = client
-            , mountPath = mountPath
-            , key = key
-            , table = table
-            , id = id
-            , record = Nothing
-            , detailActions = detailActions
-            , confirmDelete = False
-            , counts = Dict.empty
-            }
-    in
-    ( pageDetail
-    , fetch pageDetail
-    )
-
-
-fetch : PageDetail -> AppCmd.Cmd Msg
-fetch { client, table, id } =
-    Client.fetchRecord
+    ( { client = client
+      , mountPath = mountPath
+      , key = key
+      , table = table
+      , id = id
+      , record = Nothing
+      , detailActions = detailActions
+      , confirmDelete = False
+      , counts = Dict.empty
+      }
+    , Client.fetchRecord
         { client = client
         , table = table
         , id = id
-        , decoder = Record.decoder table
+        , decoder = Internal.Schema.recordDecoder table
         , expect = Fetched
         }
+    )
 
 
-onLogin : Client -> Msg
-onLogin =
-    LoggedIn
-
-
-update : Msg -> PageDetail -> ( PageDetail, AppCmd.Cmd Msg )
-update msg params =
+update : Msg -> Model -> ( Model, AppCmd.Cmd Msg )
+update msg model =
     case msg of
-        LoggedIn client ->
-            let
-                pageDetail =
-                    { params | client = client }
-            in
-            ( pageDetail, fetch pageDetail )
-
         Fetched (Ok record) ->
-            ( { params | record = Just record }
-            , references params.client record
+            ( { model | record = Just record }
+            , model.table.referencedBy
                 |> List.map
                     (\ref ->
                         Client.requestMany
-                            { client = params.client
+                            { client = model.client
                             , method = "HEAD"
                             , headers = [ header "Prefer" "count=exact" ]
-                            , path = referencePath ref []
+                            , path =
+                                Url.absolute
+                                    [ ref.tableName ]
+                                    [ Url.string ref.foreignKeyName ("eq." ++ model.id) ]
                             , body = Http.emptyBody
                             , decoder = Decode.succeed ()
-                            , expect = GotCount ref.table.name
+                            , expect = GotCount ref.tableName
                             }
                     )
                 |> AppCmd.batch
             )
 
         GotCount tableName (Ok ( _, count )) ->
-            ( { params
-                | counts = Dict.insert tableName count.total params.counts
+            ( { model
+                | counts = Dict.insert tableName count.total model.counts
               }
             , AppCmd.none
             )
 
         GotCount _ _ ->
-            ( params, AppCmd.none )
+            ( model, AppCmd.none )
 
         Fetched (Err err) ->
-            ( params
+            ( model
             , Notification.error (Client.errorToString err)
             )
 
         Deleted (Ok _) ->
-            ( params
+            ( model
             , AppCmd.batch
-                [ Url.absolute [ params.table.name ] []
-                    |> Nav.pushUrl params.key
+                [ Url.absolute [ model.table.name ] []
+                    |> Nav.pushUrl model.key
                     |> AppCmd.wrap
                 , Notification.confirm "The record was deleted"
                 ]
             )
 
         Deleted (Err err) ->
-            ( params
+            ( model
             , Notification.error (Client.errorToString err)
             )
 
         DeleteModalOpened ->
-            ( { params | confirmDelete = True }, AppCmd.none )
+            ( { model | confirmDelete = True }, AppCmd.none )
 
         DeleteModalClosed ->
-            ( { params | confirmDelete = False }, AppCmd.none )
+            ( { model | confirmDelete = False }, AppCmd.none )
 
         DeleteConfirmed ->
-            ( params
+            ( model
             , Client.deleteRecord
-                { client = params.client
-                , table = params.table
-                , id = params.id
+                { client = model.client
+                , table = model.table
+                , id = model.id
                 , expect = Deleted
                 }
             )
@@ -172,27 +152,27 @@ update msg params =
 -- View
 
 
-view : PageDetail -> Html Msg
-view params =
-    case params.record of
+view : Model -> Html Msg
+view model =
+    case model.record of
         Nothing ->
             Html.text ""
 
         Just record ->
             let
                 tableName =
-                    params.table.name
+                    model.table.name
             in
             Html.section
                 [ Attrs.class "record-detail" ]
-                [ breadcrumbs params.mountPath
+                [ breadcrumbs model.mountPath
                     tableName
                     [ ( tableName, Nothing )
-                    , ( params.id, Record.label record )
+                    , ( model.id, recordLabel model.table record )
                     ]
                 , Html.h2
                     []
-                    [ Record.label record
+                    [ recordLabel model.table record
                         |> Maybe.map Html.text
                         |> Maybe.withDefault (Html.text "")
                     ]
@@ -200,15 +180,12 @@ view params =
                     [ Attrs.class "card" ]
                     [ Html.table
                         []
-                        (sortedFields record
-                            |> List.map
-                                (tableRow params.mountPath
-                                    (Record.tableName record)
-                                )
+                        (sortedFields model.table record
+                            |> List.map tableRow
                         )
-                    , actions params record
+                    , actions model
                     ]
-                , if params.confirmDelete then
+                , if model.confirmDelete then
                     Html.div
                         [ Attrs.class "modal-background" ]
                         [ Html.div
@@ -238,93 +215,141 @@ view params =
                     Html.text ""
                 , Html.aside
                     [ Attrs.class "associations" ]
-                    (references params.client record
+                    (model.table.referencedBy
                         |> List.map
-                            (referenceToHtml params record)
+                            (referenceToHtml model)
                     )
                 ]
 
 
-referenceToHtml : PageDetail -> Record -> Reference -> Html Msg
-referenceToHtml { mountPath, counts } record { table, foreignKeyValue } =
+referenceToHtml : Model -> Reference -> Html Msg
+referenceToHtml params ref =
     Html.a
         [ Attrs.class "card association"
         , Attrs.href
-            (path mountPath <|
-                Url.absolute [ record.table.name, foreignKeyValue, table.name ] []
+            (path params.mountPath <|
+                Url.absolute [ params.table.name, params.id, ref.tableName ] []
             )
         ]
-        [ Html.text (String.humanize table.name)
-        , Dict.get table.name counts
+        [ Html.text (String.humanize ref.tableName)
+        , Dict.get ref.tableName params.counts
             |> Maybe.map (\i -> " (" ++ String.fromInt i ++ ")")
             |> Maybe.withDefault ""
             |> Html.text
         ]
 
 
-actions : PageDetail -> Record -> Html Msg
-actions { mountPath, detailActions } record =
-    case Record.id record of
-        Just id ->
-            Html.div
-                [ Attrs.class "actions" ]
-                (List.map
-                    (\( copy, buildUrl ) ->
-                        Html.a
-                            [ Attrs.href (path mountPath (buildUrl record id))
-                            , Attrs.class "button"
-                            ]
-                            [ Html.text copy ]
-                    )
-                    detailActions
-                    ++ [ Html.a
-                            [ Attrs.href
-                                (path mountPath <|
-                                    Url.absolute
-                                        [ Record.tableName record, id, "edit" ]
-                                        []
-                                )
-                            , Attrs.class "button"
-                            ]
-                            [ Html.text "Edit" ]
-                       , Html.button
-                            [ Events.onClick DeleteModalOpened
-                            , Attrs.class "button button-danger"
-                            ]
-                            [ Html.text "Delete" ]
-                       ]
+actions : Model -> Html Msg
+actions { mountPath, table, id } =
+    Html.div
+        [ Attrs.class "actions" ]
+        [ Html.a
+            [ Attrs.href
+                (path mountPath <|
+                    Url.absolute
+                        [ table.name, id, "edit" ]
+                        []
                 )
+            , Attrs.class "button"
+            ]
+            [ Html.text "Edit" ]
+        , Html.button
+            [ Events.onClick DeleteModalOpened
+            , Attrs.class "button button-danger"
+            ]
+            [ Html.text "Delete" ]
+        ]
 
-        Nothing ->
-            Html.text ""
 
-
-tableRow : MountPath -> String -> ( String, Field ) -> Html Msg
-tableRow mountPath resourcesName ( name, field ) =
+tableRow : ( String, Internal.Value.Value ) -> Html Msg
+tableRow ( name, value ) =
     Html.tr
         []
         [ Html.th [] [ Html.text (String.humanize name) ]
-        , Html.td [] [ Field.toHtml mountPath resourcesName field ]
+        , Html.td [] [ valueToHtml value ]
         ]
+
+
+valueToHtml : Internal.Value.Value -> Html msg
+valueToHtml value =
+    case value of
+        Internal.Value.PFloat maybe ->
+            maybeToHtml String.fromFloat maybe
+
+        Internal.Value.PInt maybe ->
+            maybeToHtml String.fromInt maybe
+
+        Internal.Value.PString maybe ->
+            maybeToHtml identity maybe
+
+        Internal.Value.PBool maybe ->
+            maybeToHtml
+                (\bool ->
+                    if bool then
+                        "true"
+
+                    else
+                        "false"
+                )
+                maybe
+
+        Internal.Value.PTime maybe ->
+            maybeToHtml Time.format maybe
+
+        Internal.Value.PDate maybe ->
+            maybeToHtml Time.toDateString maybe
+
+        Internal.Value.PText maybe ->
+            maybeToHtml identity maybe
+
+        Internal.Value.PJson _ ->
+            Html.pre
+                []
+                [ Internal.Value.toString value
+                    |> maybeToHtml identity
+                ]
+
+        Internal.Value.Unknown _ ->
+            Html.text "?"
+
+
+maybeToHtml : (a -> String) -> Maybe a -> Html msg
+maybeToHtml func maybe =
+    Maybe.map func maybe |> Maybe.withDefault "" |> Html.text
 
 
 
 -- UTILS
 
 
-references : Client -> Record -> List Reference
-references client record =
-    Record.referencedBy client.schema record
+sortedFields : Table -> Record -> List ( String, Internal.Value.Value )
+sortedFields table record =
+    Dict.toList record
+        |> List.sortBy
+            (\( name, _ ) ->
+                case Dict.get name table.columns of
+                    Just column ->
+                        if column.constraint == Internal.Schema.PrimaryKey then
+                            0
+
+                        else
+                            case column.constraint of
+                                Internal.Schema.ForeignKey _ ->
+                                    1
+
+                                _ ->
+                                    2
+
+                    Nothing ->
+                        3
+            )
 
 
-referencePath : Reference -> List QueryParameter -> String
-referencePath { foreignKeyName, foreignKeyValue, table } query =
-    Url.absolute
-        [ table.name ]
-        (string foreignKeyName ("eq." ++ foreignKeyValue) :: query)
-
-
-sortedFields : Record -> List ( String, Field )
-sortedFields record =
-    Dict.toList record.fields
-        |> List.sortWith Field.compareTuple
+recordLabel : Table -> Record -> Maybe String
+recordLabel table record =
+    Internal.Schema.label table
+        |> Maybe.andThen
+            (\fieldName ->
+                Dict.get fieldName record
+                    |> Maybe.andThen Internal.Value.toString
+            )

@@ -28,7 +28,7 @@ import Internal.Cmd as AppCmd
 import Internal.Config as Config exposing (Config)
 import Internal.Flag as Flag
 import Internal.Notification as Notification exposing (Notification)
-import Internal.PageDetail as PageDetail exposing (PageDetail)
+import Internal.PageDetail as PageDetail
 import Internal.PageForm as PageForm exposing (PageForm)
 import Internal.PageListing as PageListing exposing (PageListing)
 import Internal.Schema exposing (Schema)
@@ -129,7 +129,7 @@ type Route f m msg
          -> ( Route f m msg, Cmd (Msg f m msg) )
         )
     | RouteListing PageListing
-    | RouteDetail PageDetail
+    | RouteDetail PageDetail.Model
     | RouteForm PageForm
     | RouteApplication
     | RouteNotFound

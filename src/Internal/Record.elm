@@ -11,7 +11,6 @@ module Internal.Record exposing
     , label
     , location
     , primaryKey
-    , referencedBy
     , setValidation
     , tableName
     , updateWithString
@@ -217,39 +216,6 @@ referenceLabelDecoder params =
 
         Nothing ->
             Decode.succeed Nothing
-
-
-referencedBy : Schema -> Record -> List Reference
-referencedBy schema record =
-    Dict.foldl
-        (\_ table acc ->
-            Dict.foldl
-                (\columnName column columns ->
-                    case column.constraint of
-                        ForeignKey foreignKey ->
-                            if foreignKey.tableName == tableName record then
-                                { foreignKeyName = columnName
-                                , foreignKeyValue =
-                                    record.fields
-                                        |> Dict.get foreignKey.primaryKeyName
-                                        |> Maybe.andThen
-                                            (.value >> Value.toString)
-                                        |> Maybe.withDefault ""
-                                , table = table
-                                }
-                                    :: columns
-
-                            else
-                                columns
-
-                        _ ->
-                            columns
-                )
-                acc
-                table.columns
-        )
-        []
-        schema
 
 
 label : Record -> Maybe String

@@ -13,7 +13,6 @@ import Internal.Cmd as AppCmd
 import Internal.Schema as Schema exposing (ColumnType(..), Constraint(..), Table)
 import Internal.Value as Value exposing (Value(..))
 import Json.Decode as Decode
-import Json.Encode as Encode
 import PostgRestAdmin.Client as Client exposing (Client)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
 import PostgRestAdmin.Notification as Notification
@@ -72,46 +71,44 @@ init { client, navKey, mountPath, table, id, parent } =
       , persisted = False
       }
     , AppCmd.batch
-        [ case
-            Maybe.map2 Tuple.pair (Schema.tablePrimaryKeyName table) id
-          of
-            Just ( primaryKeyName, recordId ) ->
-                let
-                    selectedCols =
-                        PG.select
-                            (Dict.keys table.columns
-                                |> List.filter ((/=) primaryKeyName)
-                                |> List.map PG.attribute
-                            )
-
-                    queryString =
-                        PG.toQueryString
-                            [ selectedCols
-                            , PG.param primaryKeyName (PG.eq (PG.string recordId))
-                            , PG.limit 1
-                            ]
-                in
-                Client.task
-                    { client = client
-                    , method = "GET"
-                    , headers = [ Http.header "Accept" "application/vnd.pgrst.object+json" ]
-                    , path = "/" ++ table.name ++ "?" ++ queryString
-                    , body = Http.emptyBody
-                    , decoder = Decode.value
-                    }
-                    |> Task.attempt Fetched
-                    |> AppCmd.wrap
-
-            Nothing ->
-                AppCmd.none
-        , case parentParams of
-            Just _ ->
-                AppCmd.none
-
-            Nothing ->
-                AppCmd.none
+        [ Maybe.map2 Tuple.pair (Schema.tablePrimaryKeyName table) id
+            |> Maybe.map (fetch client table)
+            |> Maybe.withDefault AppCmd.none
         ]
     )
+
+
+fetch : Client -> Table -> ( String, String ) -> AppCmd.Cmd Msg
+fetch client table ( primaryKeyName, recordId ) =
+    let
+        _ =
+            table.referencedBy
+                |> Debug.log "references"
+
+        selectedCols =
+            PG.select
+                (Dict.keys table.columns
+                    |> List.filter ((/=) primaryKeyName)
+                    |> List.map PG.attribute
+                )
+
+        queryString =
+            PG.toQueryString
+                [ selectedCols
+                , PG.param primaryKeyName (PG.eq (PG.string recordId))
+                , PG.limit 1
+                ]
+    in
+    Client.task
+        { client = client
+        , method = "GET"
+        , headers = [ Http.header "Accept" "application/vnd.pgrst.object+json" ]
+        , path = "/" ++ table.name ++ "?" ++ queryString
+        , body = Http.emptyBody
+        , decoder = Decode.value
+        }
+        |> Task.attempt Fetched
+        |> AppCmd.wrap
 
 
 
@@ -122,10 +119,6 @@ update : Msg -> PageForm -> ( PageForm, AppCmd.Cmd Msg )
 update msg model =
     case msg of
         Fetched (Ok response) ->
-            let
-                _ =
-                    Encode.encode 0 response |> Debug.log "response"
-            in
             case Field.updateValuesFromJson response model.form of
                 Ok form ->
                     ( { model | form = form }
@@ -134,10 +127,7 @@ update msg model =
 
                 Err err ->
                     ( model
-                    , Notification.error
-                        (FormToolkit.Error.toEnglish err
-                            |> Debug.log "error"
-                        )
+                    , Notification.error (FormToolkit.Error.toEnglish err)
                     )
 
         Fetched (Err err) ->

@@ -4,6 +4,7 @@ module Internal.Schema exposing
     , Table, label
     , tablePrimaryKey, tablePrimaryKeyName, tablePrimaryKeyValue
     , decoder, valueDecoder
+    , Record, recordDecoder
     )
 
 {-|
@@ -21,7 +22,6 @@ import Internal.Value exposing (Value(..))
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Regex exposing (Regex)
-import Set exposing (Set)
 import Time.Extra as Time
 
 
@@ -67,15 +67,15 @@ type alias ForeignKeyParams =
 
 
 type alias Table =
-    { name : String
+    { referencedBy : List Reference
+    , name : String
     , columns : Dict String Column
     }
 
 
 type alias Reference =
     { foreignKeyName : String
-    , foreignKeyValue : String
-    , table : Table
+    , tableName : String
     }
 
 
@@ -102,7 +102,7 @@ recordDecoder table =
 decoder :
     { a | tables : List String, tableAliases : Dict String String }
     -> Decode.Decoder Schema
-decoder ({ tableAliases } as params) =
+decoder params =
     let
         columnDecoder definitions requiredCols tableName columnName =
             Decode.at [ "definitions", tableName, "properties", columnName ]
@@ -120,7 +120,7 @@ decoder ({ tableAliases } as params) =
                                     , { constraint =
                                             description
                                                 |> Maybe.map
-                                                    (columnConstraint tableAliases
+                                                    (columnConstraint params.tableAliases
                                                         (definitions
                                                             |> Dict.map (always .properties)
                                                         )
@@ -180,13 +180,21 @@ decoder ({ tableAliases } as params) =
                                  )
                                     |> Decode.map
                                         (Dict.fromList
-                                            >> Table tableName
+                                            >> Table [] tableName
                                             >> Tuple.pair tableName
                                         )
                                 )
                         )
                         (Decode.succeed [])
                     |> Decode.map Dict.fromList
+            )
+        |> Decode.map
+            (\schema ->
+                Dict.map
+                    (\_ table ->
+                        { table | referencedBy = buildReferences schema table }
+                    )
+                    schema
             )
 
 
@@ -378,9 +386,7 @@ columnConstraint tableAliases colNames description =
                 , primaryKeyName = primaryKeyName
                 , labelColumnName =
                     Dict.get table colNames
-                        |> Debug.log table
                         |> Maybe.andThen findLabelColum
-                        |> Debug.log (table ++ "label")
                 , label = Nothing
                 }
 
@@ -437,3 +443,34 @@ findLabelColum requiredCols =
 identifiers : List String
 identifiers =
     [ "title", "name", "full name", "email", "first name", "last name", "city" ]
+
+
+
+-- REFERENCES
+
+
+buildReferences : Schema -> Table -> List Reference
+buildReferences schema table =
+    Dict.foldl
+        (\_ otherTable acc ->
+            Dict.foldl
+                (\columnName column columnsAcc ->
+                    case column.constraint of
+                        ForeignKey foreignKey ->
+                            if foreignKey.tableName == table.name then
+                                { foreignKeyName = columnName
+                                , tableName = otherTable.name
+                                }
+                                    :: columnsAcc
+
+                            else
+                                columnsAcc
+
+                        _ ->
+                            columnsAcc
+                )
+                acc
+                otherTable.columns
+        )
+        []
+        schema
