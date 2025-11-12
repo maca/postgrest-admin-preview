@@ -3,7 +3,6 @@ module Internal.Record exposing
     , decoder
     , encode
     , errors
-    , fieldToString
     , fromTable
     , getTable
     , hasErrors
@@ -85,11 +84,6 @@ location record =
 tableName : Record -> String
 tableName record =
     record.table.name
-
-
-fieldToString : String -> Record -> Maybe String
-fieldToString key record =
-    Dict.get key record.fields |> Maybe.andThen (.value >> Value.toString)
 
 
 primaryKey : Record -> Maybe Field

@@ -1,4 +1,4 @@
-module Internal.Cmd exposing (Cmd(..), batch, map, none, wrap)
+module Internal.Cmd exposing (Cmd(..), batch, none, wrap)
 
 import Internal.Notification as Notification
 import Platform.Cmd as Platform

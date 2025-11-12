@@ -2,9 +2,9 @@ module Internal.Schema exposing
     ( Schema, Column, ColumnType(..)
     , Constraint(..), ForeignKeyParams, Reference
     , Table, label
-    , tablePrimaryKey, tablePrimaryKeyName, tablePrimaryKeyValue
+    , tablePrimaryKey, tablePrimaryKeyName
     , decoder, valueDecoder
-    , Record, buildParentReference, buildReferences, columnFieldValueDecoder, recordDecoder
+    , Record, buildParentReference, buildReferences, recordDecoder
     )
 
 {-|
@@ -12,7 +12,7 @@ module Internal.Schema exposing
 @docs Schema, Column, ColumnType
 @docs Constraint, ForeignKeyParams, Reference
 @docs Table, columnNames, label
-@docs tablePrimaryKey, tablePrimaryKeyName, tablePrimaryKeyValue
+@docs tablePrimaryKey, tablePrimaryKeyName
 @docs decoder, valueDecoder
 
 -}
@@ -214,11 +214,6 @@ tablePrimaryKey { columns } =
         |> List.head
 
 
-tablePrimaryKeyValue : Table -> Maybe ( String, Value )
-tablePrimaryKeyValue table =
-    tablePrimaryKey table |> Maybe.map (Tuple.mapSecond .value)
-
-
 tablePrimaryKeyName : Table -> Maybe String
 tablePrimaryKeyName table =
     tablePrimaryKey table
@@ -272,15 +267,6 @@ columnType type_ format =
 
         _ ->
             Other type_ format
-
-
-columnFieldValueDecoder : String -> Table -> Decode.Decoder Value
-columnFieldValueDecoder colName table =
-    Dict.get colName table.columns
-        |> Maybe.map (.columnType >> valueDecoder)
-        |> Maybe.map (Decode.field colName)
-        |> Maybe.withDefault
-            (Decode.fail ("No column " ++ colName ++ " is present"))
 
 
 valueDecoder : ColumnType -> Decode.Decoder Value

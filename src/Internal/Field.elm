@@ -4,7 +4,6 @@ module Internal.Field exposing
     , isPrimaryKey
     , setValidation
     , toHtml
-    , update
     , updateWithString
     , validate
     , valueToHtml

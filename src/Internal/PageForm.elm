@@ -11,8 +11,8 @@ import Html.Attributes as Attrs
 import Html.Events as Events
 import Http
 import Internal.Cmd as AppCmd
-import Internal.Schema as Schema exposing (ColumnType(..), Constraint(..), Table)
-import Internal.Value as Value exposing (Value(..))
+import Internal.Schema as Schema exposing (Constraint(..), Table)
+import Internal.Value as Value
 import Json.Decode as Decode
 import PostgRestAdmin.Client as Client exposing (Client)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
@@ -29,7 +29,6 @@ type Msg
     | AutocompleteValuesFetched String (Result Client.Error AutocompleteOptions)
     | Saved (Result Client.Error String)
     | FormChanged (Field.Msg String)
-    | NoOp
     | Submitted
 
 
@@ -295,9 +294,6 @@ update msg model =
                 Err _ ->
                     Notification.error "Please check the form errors"
             )
-
-        NoOp ->
-            ( model, AppCmd.none )
 
 
 updateFormParent : Model -> String -> Field.Field String
