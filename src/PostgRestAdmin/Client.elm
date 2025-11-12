@@ -6,7 +6,7 @@ module PostgRestAdmin.Client exposing
     , fetchSchema, schemaIsLoaded
     , endpoint
     , authSchemeConfig, authUrl, authUrlDecoder, basic, encoder, jwtDecoder
-    , associationJoin, bytesRequest, task
+    , associationJoin, bytesRequest, count, task
     )
 
 {-| PostgREST client for Elm applications.
@@ -316,9 +316,9 @@ countResolver decoder =
                     Dict.get "content-range" headers
                         |> Maybe.map (Parser.run countParser)
                 of
-                    Just (Ok count) ->
+                    Just (Ok recordCount) ->
                         Decode.decodeString
-                            (decoder |> Decode.map (\a -> ( a, count )))
+                            (decoder |> Decode.map (\a -> ( a, recordCount )))
                             body
                             |> Result.mapError DecodeError
 
@@ -604,33 +604,30 @@ requestMany { client, method, headers, path, decoder, body, expect } =
                 }
 
 
-
--- fetchRecordList :
---     { client : Client
---     , table : Table
---     , queryString : String
---     , expect : Result Error ( List Record, Count ) -> msg
---     }
---     -> AppCmd.Cmd msg
--- fetchRecordList { client, table, queryString, expect } =
---     let
---         selectString =
---             PG.toQueryString [ PG.select (selects table) ]
---     in
---     AppCmd.wrap <|
---         Task.attempt expect <|
---             Http.task
---                 { method = "GET"
---                 , headers =
---                     List.filterMap identity
---                         [ authHeader client
---                         , Just (Http.header "Prefer" "count=planned")
---                         ]
---                 , url = endpoint client ("/" ++ tableName table ++ "?" ++ selectString ++ "&" ++ queryString)
---                 , body = Http.emptyBody
---                 , resolver = countResolver (Decode.list (Record.decoder table))
---                 , timeout = Nothing
---                 }
+count :
+    { client : Client
+    , expect : Result Error Int -> msg
+    , path : String
+    }
+    -> AppCmd.Cmd msg
+count { client, expect, path } =
+    AppCmd.wrap
+        (Task.attempt expect
+            (Http.task
+                { method = "HEAD"
+                , headers =
+                    List.filterMap identity
+                        [ authHeader client
+                        , Just (Http.header "Prefer" "count=exact")
+                        ]
+                , url = endpoint client path
+                , body = Http.emptyBody
+                , resolver = countResolver (Decode.succeed ())
+                , timeout = Nothing
+                }
+                |> Task.map (Tuple.second >> .total)
+            )
+        )
 
 
 endpoint : Client -> String -> String
@@ -685,7 +682,10 @@ tablePrimaryKeyName table =
 
 countParser : Parser Count
 countParser =
-    Parser.succeed (\( from, to ) count -> Count from to (Maybe.withDefault to count))
+    Parser.succeed
+        (\( from, to ) recordCount ->
+            Count from to (Maybe.withDefault to recordCount)
+        )
         |= Parser.oneOf
             [ Parser.succeed Tuple.pair
                 |= Parser.int

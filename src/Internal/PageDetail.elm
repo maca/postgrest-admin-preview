@@ -27,7 +27,7 @@ import Url.Builder as Url
 
 type Msg
     = Fetched (Result Error Record)
-    | GotCount String (Result Error ( List (), Count ))
+    | GotCount String (Result Error Int)
     | Deleted (Result Error ())
     | DeleteModalOpened
     | DeleteModalClosed
@@ -43,7 +43,7 @@ type alias Model =
     , record : Maybe Record
     , detailActions : DetailActions
     , confirmDelete : Bool
-    , counts : Dict String Int
+    , countTotals : Dict String Int
     }
 
 
@@ -65,7 +65,7 @@ init { client, mountPath, table, id, detailActions } key =
       , record = Nothing
       , detailActions = detailActions
       , confirmDelete = False
-      , counts = Dict.empty
+      , countTotals = Dict.empty
       }
     , Client.fetchRecord
         { client = client
@@ -85,26 +85,20 @@ update msg model =
             , model.table.referencedBy
                 |> List.map
                     (\ref ->
-                        Client.requestMany
+                        Client.count
                             { client = model.client
-                            , method = "HEAD"
-                            , headers = [ header "Prefer" "count=exact" ]
                             , path =
                                 Url.absolute
                                     [ ref.tableName ]
                                     [ Url.string ref.foreignKeyName ("eq." ++ model.id) ]
-                            , body = Http.emptyBody
-                            , decoder = Decode.succeed ()
                             , expect = GotCount ref.tableName
                             }
                     )
                 |> AppCmd.batch
             )
 
-        GotCount tableName (Ok ( _, count )) ->
-            ( { model
-                | counts = Dict.insert tableName count.total model.counts
-              }
+        GotCount tableName (Ok total) ->
+            ( { model | countTotals = Dict.insert tableName total model.countTotals }
             , AppCmd.none
             )
 
@@ -232,7 +226,7 @@ referenceToHtml params ref =
             )
         ]
         [ Html.text (String.humanize ref.tableName)
-        , Dict.get ref.tableName params.counts
+        , Dict.get ref.tableName params.countTotals
             |> Maybe.map (\i -> " (" ++ String.fromInt i ++ ")")
             |> Maybe.withDefault ""
             |> Html.text

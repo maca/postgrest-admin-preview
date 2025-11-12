@@ -4,7 +4,7 @@ module Internal.Schema exposing
     , Table, label
     , tablePrimaryKey, tablePrimaryKeyName, tablePrimaryKeyValue
     , decoder, valueDecoder
-    , Record, recordDecoder
+    , Record, buildParentReference, buildReferences, recordDecoder
     )
 
 {-|
@@ -192,7 +192,7 @@ decoder params =
             (\schema ->
                 Dict.map
                     (\_ table ->
-                        { table | referencedBy = buildReferences schema table }
+                        { table | referencedBy = buildReferencedBy schema table }
                     )
                     schema
             )
@@ -449,8 +449,8 @@ identifiers =
 -- REFERENCES
 
 
-buildReferences : Schema -> Table -> List Reference
-buildReferences schema table =
+buildReferencedBy : Schema -> Table -> List Reference
+buildReferencedBy schema table =
     Dict.foldl
         (\_ otherTable acc ->
             Dict.foldl
@@ -474,3 +474,54 @@ buildReferences schema table =
         )
         []
         schema
+
+
+buildReferences : Table -> Dict String ForeignKeyParams
+buildReferences table =
+    Dict.foldl
+        (\_ column acc ->
+            case column.constraint of
+                ForeignKey foreignKey ->
+                    Dict.insert foreignKey.tableName foreignKey acc
+
+                _ ->
+                    acc
+        )
+        Dict.empty
+        table.columns
+
+
+buildParentReference :
+    Schema
+    -> Table
+    ->
+        ({ id : String, tableName : String }
+         ->
+            Maybe
+                { parentTable : Table
+                , parentPrimaryKey : String
+                , parentId : String
+                , parentLabelColumn : String
+                , parentLabelDecoder : Decode.Decoder Value
+                }
+        )
+buildParentReference schema table parent =
+    Maybe.map2
+        (\parentTable ref ->
+            Maybe.map2
+                (\labelColumn column ->
+                    { parentTable = parentTable
+                    , parentPrimaryKey = ref.primaryKeyName
+                    , parentId = parent.id
+                    , parentLabelColumn = labelColumn
+                    , parentLabelDecoder = valueDecoder column.columnType
+                    }
+                )
+                ref.labelColumnName
+                (ref.labelColumnName
+                    |> Maybe.andThen (\labelCol -> Dict.get labelCol parentTable.columns)
+                )
+        )
+        (Dict.get parent.tableName schema)
+        (Dict.get parent.tableName (buildReferences table))
+        |> Maybe.andThen identity

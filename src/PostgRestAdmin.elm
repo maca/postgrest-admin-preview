@@ -29,7 +29,7 @@ import Internal.Config as Config exposing (Config)
 import Internal.Flag as Flag
 import Internal.Notification as Notification exposing (Notification)
 import Internal.PageDetail as PageDetail
-import Internal.PageForm as PageForm exposing (PageForm)
+import Internal.PageForm as PageForm
 import Internal.PageListing as PageListing exposing (PageListing)
 import Internal.Schema exposing (Schema)
 import Json.Decode as Decode exposing (Decoder)
@@ -130,7 +130,7 @@ type Route f m msg
         )
     | RouteListing PageListing
     | RouteDetail PageDetail.Model
-    | RouteForm PageForm
+    | RouteForm PageForm.Model
     | RouteApplication
     | RouteNotFound
 

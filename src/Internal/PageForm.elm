@@ -1,7 +1,7 @@
-module Internal.PageForm exposing (Msg, PageForm, init, update, view)
+module Internal.PageForm exposing (Model, Msg, init, update, view)
 
 import Browser.Navigation as Nav
-import Dict
+import Dict exposing (Dict)
 import FormToolkit.Error
 import FormToolkit.Field as Field
 import FormToolkit.Parse as Parse
@@ -24,21 +24,21 @@ import Url.Builder as Url
 
 type Msg
     = Fetched (Result Client.Error Decode.Value)
-    | ParentFetched (Result Client.Error Table)
+    | ParentLabelFetched (Result Client.Error (Maybe String))
     | Saved (Result Client.Error String)
     | FormChanged (Field.Msg String)
     | Submitted
 
 
-type alias PageForm =
+type alias Model =
     { client : Client
     , table : Table
     , mountPath : MountPath
     , key : Nav.Key
     , id : Maybe String
     , parent : Maybe { tableName : String, id : String }
+    , parentLabel : Maybe String
     , form : Field.Field String
-    , persisted : Bool
     }
 
 
@@ -50,29 +50,24 @@ init :
     , id : Maybe String
     , parent : Maybe { tableName : String, id : String }
     }
-    -> ( PageForm, AppCmd.Cmd Msg )
+    -> ( Model, AppCmd.Cmd Msg )
 init { client, navKey, mountPath, table, id, parent } =
-    let
-        parentParams =
-            Maybe.andThen
-                (\params ->
-                    Dict.get params.tableName client.schema
-                        |> Maybe.map (\parentTable -> ( parentTable, params ))
-                )
-                parent
-    in
     ( { client = client
       , table = table
       , mountPath = mountPath
       , key = navKey
       , id = id
-      , parent = Nothing
+      , parent = parent
+      , parentLabel = Nothing
       , form = buildForm table
-      , persisted = False
       }
     , AppCmd.batch
         [ Maybe.map2 Tuple.pair (Schema.tablePrimaryKeyName table) id
             |> Maybe.map (fetch client table)
+            |> Maybe.withDefault AppCmd.none
+        , parent
+            |> Maybe.andThen (Schema.buildParentReference client.schema table)
+            |> Maybe.map (fetchParentLabel client)
             |> Maybe.withDefault AppCmd.none
         ]
     )
@@ -81,10 +76,6 @@ init { client, navKey, mountPath, table, id, parent } =
 fetch : Client -> Table -> ( String, String ) -> AppCmd.Cmd Msg
 fetch client table ( primaryKeyName, recordId ) =
     let
-        _ =
-            table.referencedBy
-                |> Debug.log "references"
-
         selectedCols =
             PG.select
                 (Dict.keys table.columns
@@ -111,11 +102,48 @@ fetch client table ( primaryKeyName, recordId ) =
         |> AppCmd.wrap
 
 
+fetchParentLabel :
+    Client
+    ->
+        { parentLabelColumn : String
+        , parentPrimaryKey : String
+        , parentId : String
+        , parentTable : Table
+        , parentLabelDecoder : Decode.Decoder Value.Value
+        }
+    -> AppCmd.Cmd Msg
+fetchParentLabel client params =
+    let
+        selectedCols =
+            PG.select
+                [ PG.attribute params.parentLabelColumn ]
+
+        queryString =
+            PG.toQueryString
+                [ selectedCols
+                , PG.param params.parentPrimaryKey (PG.eq (PG.string params.parentId))
+                , PG.limit 1
+                ]
+    in
+    Client.task
+        { client = client
+        , method = "GET"
+        , headers = [ Http.header "Accept" "application/vnd.pgrst.object+json" ]
+        , path = "/" ++ params.parentTable.name ++ "?" ++ queryString
+        , body = Http.emptyBody
+        , decoder =
+            Decode.field params.parentLabelColumn params.parentLabelDecoder
+                |> Decode.map Value.toString
+        }
+        |> Task.attempt ParentLabelFetched
+        |> AppCmd.wrap
+
+
 
 -- Update
 
 
-update : Msg -> PageForm -> ( PageForm, AppCmd.Cmd Msg )
+update : Msg -> Model -> ( Model, AppCmd.Cmd Msg )
 update msg model =
     case msg of
         Fetched (Ok response) ->
@@ -135,11 +163,12 @@ update msg model =
             , Notification.error (Client.errorToString err)
             )
 
-        ParentFetched (Ok parent) ->
-            Debug.todo "crash"
+        ParentLabelFetched (Ok label) ->
+            ( { model | parentLabel = label }
+            , AppCmd.none
+            )
 
-        -- ( model, AppCmd.none )
-        ParentFetched (Err err) ->
+        ParentLabelFetched (Err err) ->
             ( model
             , Notification.error (Client.errorToString err)
             )
@@ -196,7 +225,7 @@ update msg model =
 -- VIEW
 
 
-view : PageForm -> Html Msg
+view : Model -> Html Msg
 view ({ table, id, mountPath } as model) =
     Html.section
         [ Attrs.class "resource-form" ]
@@ -210,19 +239,10 @@ view ({ table, id, mountPath } as model) =
                     ]
 
                 Nothing ->
-                    case
-                        model.parent
-                            |> Maybe.andThen
-                                (\parent ->
-                                    Dict.get parent.tableName model.client.schema
-                                        |> Maybe.map (Tuple.pair parent)
-                                )
-                    of
-                        Just ( parent, parentTable ) ->
+                    case model.parent of
+                        Just parent ->
                             [ ( parent.tableName, Nothing )
-                            , ( parent.id
-                              , Schema.label parentTable
-                              )
+                            , ( parent.id, model.parentLabel )
                             , ( table.name, Nothing )
                             , ( "new", Nothing )
                             ]
