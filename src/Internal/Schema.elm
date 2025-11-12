@@ -511,25 +511,20 @@ buildParentReference :
                 , parentPrimaryKey : String
                 , parentId : String
                 , parentLabelColumn : String
-                , parentLabelDecoder : Decode.Decoder Value
                 }
         )
 buildParentReference schema table parent =
     Maybe.map2
         (\parentTable ref ->
-            Maybe.map2
-                (\labelColumn column ->
+            Maybe.map
+                (\labelColumn ->
                     { parentTable = parentTable
                     , parentPrimaryKey = ref.primaryKeyName
                     , parentId = parent.id
                     , parentLabelColumn = labelColumn
-                    , parentLabelDecoder = valueDecoder column.columnType
                     }
                 )
                 ref.labelColumnName
-                (ref.labelColumnName
-                    |> Maybe.andThen (\labelCol -> Dict.get labelCol parentTable.columns)
-                )
         )
         (Dict.get parent.tableName schema)
         (buildReferences table

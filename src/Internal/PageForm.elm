@@ -25,7 +25,7 @@ import Url.Builder as Url
 
 type Msg
     = Fetched (Result Client.Error Decode.Value)
-    | ParentLabelFetched (Result Client.Error (Maybe String))
+    | ParentLabelFetched (Result Client.Error String)
     | AutocompleteValuesFetched String (Result Client.Error AutocompleteOptions)
     | Saved (Result Client.Error String)
     | FormChanged (Field.Msg String)
@@ -119,21 +119,12 @@ fetchAutcompleteValues client ( colName, ref ) =
                                     ]
                             , body = Http.emptyBody
                             , decoder =
-                                let
-                                    stringDecoder field =
-                                        Decode.field field
-                                            (Decode.oneOf
-                                                [ Decode.string
-                                                , Decode.int |> Decode.map String.fromInt
-                                                ]
-                                            )
-                                in
                                 Decode.list
                                     (Decode.oneOf
                                         [ Decode.map2
                                             (\id label -> Just { id = id, label = label })
-                                            (stringDecoder ref.primaryKeyName)
-                                            (stringDecoder labelColumnName)
+                                            (Decode.field ref.primaryKeyName Decode.string)
+                                            (Decode.field labelColumnName Decode.string)
                                         , Decode.succeed Nothing
                                         ]
                                     )
@@ -183,7 +174,6 @@ fetchParentLabel :
         , parentPrimaryKey : String
         , parentId : String
         , parentTable : Table
-        , parentLabelDecoder : Decode.Decoder Value.Value
         }
     -> AppCmd.Cmd Msg
 fetchParentLabel client params =
@@ -205,9 +195,7 @@ fetchParentLabel client params =
         , headers = [ Http.header "Accept" "application/vnd.pgrst.object+json" ]
         , path = "/" ++ params.parentTable.name ++ "?" ++ queryString
         , body = Http.emptyBody
-        , decoder =
-            Decode.field params.parentLabelColumn params.parentLabelDecoder
-                |> Decode.map Value.toString
+        , decoder = Decode.field params.parentLabelColumn Decode.string
         }
         |> Task.attempt ParentLabelFetched
         |> AppCmd.wrap
@@ -238,7 +226,7 @@ update msg model =
             )
 
         ParentLabelFetched (Ok label) ->
-            ( { model | parentLabel = label }
+            ( { model | parentLabel = Just label, form = updateFormParent model label }
             , AppCmd.none
             )
 
@@ -312,20 +300,54 @@ update msg model =
             ( model, AppCmd.none )
 
 
+updateFormParent : Model -> String -> Field.Field String
+updateFormParent model label =
+    model.parent
+        |> Maybe.map
+            (\p ->
+                case
+                    Dict.filter (\_ v -> p.tableName == v.tableName)
+                        (Schema.buildReferences model.table)
+                        |> Dict.keys
+                of
+                    [ colName ] ->
+                        (case Dict.get colName model.autocompleteValues of
+                            Just (Local _) ->
+                                model.form
+
+                            _ ->
+                                Field.updateWithId colName
+                                    (Field.options [ autocompleteOption { id = p.id, label = label } ])
+                                    model.form
+                        )
+                            |> Field.updateWithId colName
+                                (Field.stringValue (autocompleteLabel { id = p.id, label = label }))
+
+                    _ ->
+                        model.form
+            )
+        |> Maybe.withDefault model.form
+
+
 updateAutocompletOptions : String -> AutocompleteOptions -> Field.Field String -> Field.Field String
 updateAutocompletOptions colName values =
     case values of
         Local list ->
             Field.updateWithId colName
-                (Field.options
-                    (List.map
-                        (\{ id, label } -> ( label ++ " (" ++ id ++ ")", FormValue.string id ))
-                        list
-                    )
-                )
+                (Field.options (List.map autocompleteOption list))
 
         Remote ->
             identity
+
+
+autocompleteOption : { id : String, label : String } -> ( String, FormValue.Value )
+autocompleteOption attrs =
+    ( autocompleteLabel attrs, FormValue.string attrs.id )
+
+
+autocompleteLabel : { id : String, label : String } -> String
+autocompleteLabel { label, id } =
+    label ++ " (" ++ id ++ ")"
 
 
 
@@ -433,8 +455,6 @@ fieldFromColumn ( name, column ) =
     in
     case column.constraint of
         ForeignKey _ ->
-            -- For now, treat foreign keys as text inputs
-            -- TODO: Implement autocomplete with association
             Just (Field.strictAutocomplete attrs)
 
         PrimaryKey ->
