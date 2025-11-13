@@ -8,6 +8,11 @@ module PostgRestAdmin.Config exposing
     , menuLinks
     , tables
     , tableAliases
+    , FormAuth
+    , formAuthConfig
+    , authUrl
+    , credentialsEncoder
+    , jwtDecoder
     , formAuth
     , jwt
     , onLogin
@@ -56,6 +61,25 @@ module PostgRestAdmin.Config exposing
 @docs onLogout
 
 
+# Form Authentication
+
+Configuration for form based authentication.
+
+Typically user credentials are exchanged for a
+[JWT](https://en.wikipedia.org/wiki/JSON_Web_Token), to the PostgREST instance
+or to an external authentication provider.
+
+See
+[PostgREST documentation](https://postgrest.org/en/stable/auth.html?highlight=authentication#)
+to get a better understanding of JWT and roles in PostgREST.
+
+@docs FormAuth
+@docs formAuthConfig
+@docs authUrl
+@docs credentialsEncoder
+@docs jwtDecoder
+
+
 # Application mounting
 
 @docs routes
@@ -70,8 +94,8 @@ import Internal.Cmd as AppCmd
 import Internal.Config as Config
 import Internal.Schema exposing (Record)
 import Json.Decode as Decode
-import PostgRestAdmin.Client exposing (Client)
-import PostgRestAdmin.Config.FormAuth exposing (FormAuth)
+import Json.Encode exposing (Value)
+import PostgRestAdmin.Client as Client exposing (Client)
 import PostgRestAdmin.MountPath exposing (MountPath)
 import Url.Parser exposing (Parser)
 
@@ -138,14 +162,14 @@ mountPath =
 {-| Enable user credentials form and configure the parameters. Credentials
 are be used to obtain a JWT.
 
-See [FormAuth](PostgRestAdmin.FormAuth) for configuration options.
+See [Form Authentication](#form-authentication) for configuration options.
 
-    import PostgRestAdmin.Config.FormAuth as FormAuth
+    import PostgRestAdmin.Config as Config
 
     main : PostgRestAdmin.Program Never Never Never
     main =
         Config.init
-            |> Config.formAuth FormAuth.config
+            |> Config.formAuth Config.formAuthConfig
             |> PostgRestAdmin.application
 
 -}
@@ -489,3 +513,77 @@ flagsDecoder :
     -> Config flags model msg
 flagsDecoder =
     Config.flagsDecoder
+
+
+
+-- FORM AUTHENTICATION
+
+
+{-| Form authentication configuration.
+-}
+type alias FormAuth =
+    Decode.Decoder Client.AuthScheme
+
+
+{-| Create an authentication configuration.
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.formAuth Config.formAuthConfig
+            |> PostgRestAdmin.application
+
+-}
+formAuthConfig : FormAuth
+formAuthConfig =
+    Client.authSchemeConfig
+
+
+{-| Set authentication request login url. Credentials are to be exchanged for a
+JWT via a post request.
+
+    authUrl "http://localhost:3000/rpc/login" formAuthConfig
+
+Alternatively the host can be specified using flags, configuring using
+`authUrl`. Program flags take precedence.
+
+    Elm.Main.init
+        { flags = { authUrl = "http://localhost:3000/rpc/login" }
+        }
+
+-}
+authUrl : String -> FormAuth -> FormAuth
+authUrl =
+    Client.authUrl
+
+
+{-| Override the credentials JSON encoder to be used when posting to the login
+url.
+
+    credentialsEncoder
+        (\creds ->
+            Encode.object
+                [ ( "credentials"
+                  , Encode.dict identity Encode.string creds
+                  )
+                ]
+        )
+        formAuthConfig
+
+-}
+credentialsEncoder :
+    (Dict String String -> Value)
+    -> FormAuth
+    -> FormAuth
+credentialsEncoder =
+    Client.encoder
+
+
+{-| Override the JSON decoder used to obtain the JWT from the login response.
+
+    jwtDecoder (Decode.at [ "auth", "jwt" ] Decode.string) formAuthConfig
+
+-}
+jwtDecoder : Decode.Decoder String -> FormAuth -> FormAuth
+jwtDecoder =
+    Client.jwtDecoder

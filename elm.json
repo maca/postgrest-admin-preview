@@ -9,7 +9,6 @@
         "PostgRestAdmin.Client",
         "PostgRestAdmin.Cmd",
         "PostgRestAdmin.Config",
-        "PostgRestAdmin.Config.FormAuth",
         "PostgRestAdmin.MountPath",
         "PostgRestAdmin.Notification",
         "PostgRestAdmin.Record"

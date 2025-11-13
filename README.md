@@ -95,10 +95,10 @@ PostgRestAdmin program in the example bellow.
 - [host](PostgRestAdmin-Config#host) sets the PostgREST instance host,
 - [formAuth](PostgRestAdmin-Config#formAuth) enables form
   authentication, and takes a
-- [FormAuth](PostgRestAdmin-Config-FormAuth) configuration
-- optionally [FormAuth](PostgRestAdmin-Config-FormAuth) can be
+- [FormAuth](PostgRestAdmin-Config#formauth) configuration
+- optionally [FormAuth](PostgRestAdmin-Config#formauth) can be
 configured with
-- [authUrl](PostgRestAdmin-Config-FormAuth#authUrl) which specifies a
+- [authUrl](PostgRestAdmin-Config#authurl) which specifies a
   url to POST credentials, wich can be a postgREST function or an external
   service if CORS is configured correctly.
 
@@ -107,7 +107,6 @@ configured with
 
     import PostgRestAdmin
     import PostgRestAdmin.Config as Config
-    import PostgRestAdmin.Config.FormAuth as FormAuth
 
 
     port loginSuccess : String -> Cmd msg
@@ -118,8 +117,8 @@ configured with
         Config.init
             |> Config.host "https://postgrest.example.com"
             |> Config.formAuth
-                (FormAuth.config
-                    |> FormAuth.authUrl
+                (Config.formAuthConfig
+                    |> Config.authUrl
                         "https://postgrest.example.com/rpc/login"
                 )
             |> Config.onLogin loginSuccess
