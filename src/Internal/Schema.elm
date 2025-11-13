@@ -109,7 +109,7 @@ valueToString value =
             Just (String.fromFloat float)
 
         Ref ref ->
-            Just (ref.primaryKey ++ " - " ++ ref.label)
+            Just (ref.label ++ " - " ++ ref.primaryKey)
 
         Blank ->
             Nothing

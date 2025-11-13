@@ -15,24 +15,17 @@ import Internal.Cmd as AppCmd
 import Internal.Config exposing (DetailActions)
 import Internal.Schema as Schema
     exposing
-        ( Column
-        , ColumnType(..)
+        ( ColumnType(..)
         , Record
         , Table
         , Value(..)
         )
-import Iso8601
 import PostgRestAdmin.Client as Client exposing (Client, Error)
-import PostgRestAdmin.MountPath as MountPath
-    exposing
-        ( MountPath
-        , breadcrumbs
-        , path
-        )
+import PostgRestAdmin.MountPath as MountPath exposing (MountPath)
 import PostgRestAdmin.Notification as Notification
+import PostgRestAdmin.Views as Views
 import String.Extra as String
 import Task
-import Time.Extra as Time
 import Url.Builder as Url
 
 
@@ -171,7 +164,7 @@ view model =
             in
             Html.section
                 [ Attrs.class "record-detail" ]
-                [ breadcrumbs model.mountPath
+                [ MountPath.breadcrumbs model.mountPath
                     tableName
                     [ ( tableName, Nothing )
                     , ( model.id, recordLabel model.table record )
@@ -199,7 +192,7 @@ view model =
                                                         [ Html.text (String.humanize colName) ]
                                                     , Html.td
                                                         []
-                                                        [ valueToHtml model.mountPath col value ]
+                                                        [ Views.renderValue model.mountPath col value ]
                                                     ]
                                             )
                                         |> Maybe.withDefault (Html.text "")
@@ -243,7 +236,7 @@ view model =
                                 Html.a
                                     [ Attrs.class "card association"
                                     , Attrs.href
-                                        (path model.mountPath <|
+                                        (MountPath.path model.mountPath <|
                                             Url.absolute [ model.table.name, model.id, ref.tableName ] []
                                         )
                                     ]
@@ -264,7 +257,7 @@ actions { mountPath, table, id } =
         [ Attrs.class "actions" ]
         [ Html.a
             [ Attrs.href
-                (path mountPath <|
+                (MountPath.path mountPath <|
                     Url.absolute
                         [ table.name, id, "edit" ]
                         []
@@ -278,79 +271,6 @@ actions { mountPath, table, id } =
             ]
             [ Html.text "Delete" ]
         ]
-
-
-valueToHtml : MountPath -> Column -> Value -> Html msg
-valueToHtml mountPath col value =
-    case ( value, col.columnType ) of
-        ( Float f, _ ) ->
-            Html.text (String.fromFloat f)
-
-        ( Int i, _ ) ->
-            Html.text (String.fromInt i)
-
-        ( Bool b, _ ) ->
-            Html.text
-                (if b then
-                    "true"
-
-                 else
-                    "false"
-                )
-
-        ( String s, TimestampCol ) ->
-            Html.text
-                (Iso8601.toTime s
-                    |> Result.map Time.format
-                    |> Result.withDefault s
-                )
-
-        ( String s, TimestampWithoutTimezomeCol ) ->
-            Html.text
-                (Iso8601.toTime s
-                    |> Result.map Time.format
-                    |> Result.withDefault s
-                )
-
-        ( String s, DateCol ) ->
-            Html.text
-                (Iso8601.toTime s
-                    |> Result.map Time.toDateString
-                    |> Result.withDefault s
-                )
-
-        ( String s, TimeCol ) ->
-            Html.text
-                (Iso8601.toTime s
-                    |> Result.map Time.format
-                    |> Result.withDefault s
-                )
-
-        ( String s, TimeWithoutTimezoneCol ) ->
-            Html.text
-                (Iso8601.toTime s
-                    |> Result.map Time.format
-                    |> Result.withDefault s
-                )
-
-        ( String s, JsonCol ) ->
-            Html.pre [] [ Html.text s ]
-
-        ( String s, TextCol ) ->
-            Html.text s
-
-        ( String s, _ ) ->
-            Html.text s
-
-        ( Blank, _ ) ->
-            Html.text ""
-
-        ( Ref ref, _ ) ->
-            Html.a
-                [ Attrs.href
-                    (MountPath.path mountPath (ref.tableName ++ "/" ++ ref.primaryKey))
-                ]
-                [ Html.text (ref.primaryKey ++ " - " ++ ref.label) ]
 
 
 

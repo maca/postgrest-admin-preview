@@ -9,7 +9,7 @@ module PostgRestAdmin.Client exposing
     , fetchSchema, schemaIsLoaded
     , endpoint
     , authSchemeConfig, authUrl, authUrlDecoder, basic, encoder, jwtDecoder
-    , associationJoin, bytesRequest, chunk, recordDecoder
+    , associationJoin, bytesRequest, chunk, fetchParentLabel, recordDecoder
     )
 
 {-| PostgREST client for Elm applications.
@@ -424,6 +424,42 @@ fetchRecords { client, table, path } =
         , url = endpoint client path
         , body = Http.emptyBody
         , resolver = countResolver (Decode.list (recordDecoder table))
+        , timeout = Nothing
+        }
+
+
+fetchParentLabel :
+    Client
+    ->
+        { parentLabelColumn : String
+        , parentPrimaryKey : String
+        , parentId : String
+        , parentTable : { b | name : String }
+        }
+    -> Task.Task Error String
+fetchParentLabel client params =
+    let
+        selectedCols =
+            PG.select
+                [ PG.attribute params.parentLabelColumn ]
+
+        queryString =
+            PG.toQueryString
+                [ selectedCols
+                , PG.param params.parentPrimaryKey (PG.eq (PG.string params.parentId))
+                , PG.limit 1
+                ]
+    in
+    Http.task
+        { method = "GET"
+        , headers =
+            List.filterMap identity
+                [ authHeader client
+                , Just (Http.header "Accept" "application/vnd.pgrst.object+json")
+                ]
+        , url = endpoint client ("/" ++ params.parentTable.name ++ "?" ++ queryString)
+        , body = Http.emptyBody
+        , resolver = jsonResolver (Decode.field params.parentLabelColumn Decode.string)
         , timeout = Nothing
         }
 

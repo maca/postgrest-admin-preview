@@ -37,7 +37,15 @@ import Html.Events as Events
 import Http
 import Inflect
 import Internal.Cmd as AppCmd
-import Internal.Schema as Schema exposing (Column, ColumnType(..), Constraint(..), Record, Schema, Table, Value(..))
+import Internal.Schema as Schema
+    exposing
+        ( Column
+        , ColumnType(..)
+        , Constraint(..)
+        , Record
+        , Table
+        , Value(..)
+        )
 import Internal.Search as Search exposing (Search)
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -45,13 +53,9 @@ import List.Extra as List
 import List.Split as List
 import Markdown
 import PostgRestAdmin.Client as Client exposing (Client, Count, Error, errorToString)
-import PostgRestAdmin.MountPath as MountPath
-    exposing
-        ( MountPath
-        , breadcrumbs
-        , path
-        )
+import PostgRestAdmin.MountPath as MountPath exposing (MountPath)
 import PostgRestAdmin.Notification as Notification
+import PostgRestAdmin.Views as Views
 import Postgrest.Client as PG
 import Set
 import String.Extra as String
@@ -96,7 +100,7 @@ type Format
 type Msg
     = LoggedIn Client
     | Fetched (Result Error ( List Record, Count ))
-    | ParentFetched (Result Error Record)
+    | ParentLabelFetched (Result Client.Error String)
     | ApplyFilters
     | Sort SortOrder
     | Reload
@@ -121,7 +125,9 @@ type alias Model =
     , mountPath : MountPath
     , key : Nav.Key
     , table : Table
-    , parent : Maybe Record
+    , columns : List ( String, Column )
+    , parent : Maybe { tableName : String, id : String }
+    , parentLabel : Maybe String
     , foreignKey : Maybe ( String, String )
     , scrollPosition : Float
     , pages : List Page
@@ -152,20 +158,16 @@ init { client, mountPath, table, parent } url key =
                 |> Maybe.map (Tuple.second >> parseOrder)
                 |> Maybe.withDefault Unordered
 
-        parentParams =
-            Maybe.andThen
-                (\params ->
-                    Dict.get params.tableName client.schema
-                        |> Maybe.map (\parentTable -> ( parentTable, params ))
-                )
-                parent
-
-        listing =
+        model =
             { client = client
             , mountPath = mountPath
             , key = key
             , table = table
-            , parent = Nothing
+            , columns =
+                Schema.tableToSortedColumnList table
+                    |> List.filter isColumnVisible
+            , parent = parent
+            , parentLabel = Nothing
             , foreignKey = parentReference table parent
             , page = 0
             , scrollPosition = 0
@@ -176,21 +178,29 @@ init { client, mountPath, table, parent } url key =
             , uploadState = Idle
             }
     in
-    ( listing
+    ( model
     , AppCmd.batch
-        [ fetch listing
-        , case parentParams of
-            Just ( parentTable, { id } ) ->
-                Client.fetchRecord
-                    { client = client
-                    , table = parentTable
-                    , id = id
+        [ Client.fetchRecords
+            { client = client
+            , path =
+                listingPath
+                    { limit = True
+                    , selectAll = False
+                    , nest = False
                     }
-                    |> Task.attempt ParentFetched
-                    |> AppCmd.wrap
-
-            Nothing ->
-                AppCmd.none
+                    model
+            , table = table
+            }
+            |> Task.attempt Fetched
+            |> AppCmd.wrap
+        , parent
+            |> Maybe.andThen (Schema.buildParentReference client.schema table)
+            |> Maybe.map
+                (Client.fetchParentLabel client
+                    >> Task.attempt ParentLabelFetched
+                    >> AppCmd.wrap
+                )
+            |> Maybe.withDefault AppCmd.none
         ]
     )
 
@@ -286,10 +296,12 @@ update msg listing =
                     , reload listing.table
                     )
 
-        ParentFetched (Ok parent) ->
-            ( { listing | parent = Just parent }, AppCmd.none )
+        ParentLabelFetched (Ok parentLabel) ->
+            ( { listing | parentLabel = Just parentLabel }
+            , AppCmd.none
+            )
 
-        ParentFetched (Err err) ->
+        ParentLabelFetched (Err err) ->
             ( listing, Notification.error (Client.errorToString err) )
 
         ApplyFilters ->
@@ -570,17 +582,26 @@ listingPath :
     { limit : Bool, selectAll : Bool, nest : Bool }
     -> Model
     -> String
-listingPath { limit, selectAll, nest } { search, page, table, order, parent, foreignKey } =
+listingPath { limit, selectAll, nest } ({ parent } as model) =
     let
         selectQuery =
             if selectAll then
                 []
 
             else
-                [ PG.select (listingSelects table) ]
+                [ PG.select
+                    (List.concat
+                        [ model.columns
+                            |> List.map (Tuple.first >> PG.attribute)
+                        , model.columns
+                            |> List.filterMap
+                                (Tuple.second >> Client.associationJoin)
+                        ]
+                    )
+                ]
 
         parentQuery =
-            foreignKey
+            model.foreignKey
                 |> Maybe.map
                     (\( colName, id ) ->
                         [ PG.param colName (PG.eq (PG.string id)) ]
@@ -589,13 +610,13 @@ listingPath { limit, selectAll, nest } { search, page, table, order, parent, for
 
         limitQuery =
             if limit then
-                [ PG.limit perPage, PG.offset (perPage * page) ]
+                [ PG.limit perPage, PG.offset (perPage * model.page) ]
 
             else
                 []
 
         queryParams =
-            orderToQueryParams order
+            orderToQueryParams model.order
 
         baseUrl =
             if nest then
@@ -603,21 +624,21 @@ listingPath { limit, selectAll, nest } { search, page, table, order, parent, for
                     (List.filterMap identity
                         [ -- Maybe.map (Record.getTable >> .name) parent
                           -- , Maybe.andThen Record.id parent
-                          Just table.name
+                          Just model.table.name
                         ]
                     )
-                    (orderToQueryParams order)
+                    (orderToQueryParams model.order)
 
             else
-                Url.absolute [ table.name ]
-                    (orderToQueryParams order)
+                Url.absolute [ model.table.name ]
+                    (orderToQueryParams model.order)
 
         filterQuery =
             PG.toQueryString <|
                 parentQuery
                     ++ limitQuery
                     ++ selectQuery
-                    ++ Search.toPGQuery search
+                    ++ Search.toPGQuery model.search
 
         joinChar =
             if List.isEmpty queryParams then
@@ -742,31 +763,22 @@ processCsv { table, client } csv =
 
 
 view : Model -> Html Msg
-view listing =
-    let
-        fields =
-            Dict.toList (listableColumns listing.table)
-                |> List.sortWith fieldCompareTuple
-                |> List.map Tuple.first
-    in
+view model =
     Html.section
         [ class "resources-listing" ]
-        [ listHeader listing
+        [ viewPageHeader model
         , Html.div
-            [ id listing.table.name
+            [ id model.table.name
             , class "resources-listing-results"
-            , case listing.pages of
+            , case model.pages of
                 Blank :: _ ->
                     class ""
 
                 _ ->
                     Events.on "scroll" (Decode.succeed Scrolled)
             ]
-            [ uploadModal fields listing
-            , Html.table []
-                (tableHeading listing fields
-                    :: pagesFold listing fields [] 0 listing.pages
-                )
+            [ uploadModal model
+            , viewRecordsTable model
             ]
         , Html.aside
             [ class "listing-controls" ]
@@ -787,41 +799,40 @@ view listing =
                     ]
                 , Html.div
                     []
-                    [ if Search.isBlank listing.search then
+                    [ if Search.isBlank model.search then
                         Html.text ""
 
                       else
-                        toggleSearchButton listing
+                        toggleSearchButton model
                     , Html.button
                         [ onClick ApplyFilters
-                        , disabled (Search.isBlank listing.search)
+                        , disabled (Search.isBlank model.search)
                         ]
                         [ Html.text "Apply Filters" ]
                     ]
                 ]
             , Html.map SearchChanged
-                (Search.view (isSearchVisible listing) listing.search)
+                (Search.view (isSearchVisible model) model.search)
             ]
         ]
 
 
-listHeader : Model -> Html Msg
-listHeader { mountPath, parent, table } =
+viewPageHeader : Model -> Html Msg
+viewPageHeader ({ mountPath, table } as model) =
     Html.header
         []
-        [ case parent of
-            Just record ->
-                breadcrumbs mountPath
-                    table.name
-                    [ -- ( Record.getTable record |> .name, Nothing )
-                      -- , ( Record.id record |> Maybe.withDefault ""
-                      --   , Record.label record
-                      --   )
-                      ( table.name, Nothing )
+        [ MountPath.breadcrumbs mountPath
+            table.name
+            (case model.parent of
+                Just parent ->
+                    [ ( parent.tableName, Nothing )
+                    , ( parent.id, model.parentLabel )
+                    , ( table.name, Nothing )
                     ]
 
-            Nothing ->
-                breadcrumbs mountPath table.name [ ( table.name, Nothing ) ]
+                Nothing ->
+                    [ ( table.name, Nothing ) ]
+            )
         , Html.div
             []
             [ Html.button
@@ -835,12 +846,12 @@ listHeader { mountPath, parent, table } =
                 [ class "button"
                 , class ("button-new-" ++ table.name)
                 , href
-                    (path mountPath <|
+                    (MountPath.path mountPath <|
                         Url.absolute
                             (List.filterMap identity
-                                [ -- Maybe.map (Record.getTable >> .name) parent
-                                  -- , Maybe.andThen Record.id parent
-                                  Just table.name
+                                [ Maybe.map .tableName model.parent
+                                , Maybe.map .id model.parent
+                                , Just table.name
                                 , Just "new"
                                 ]
                             )
@@ -854,15 +865,38 @@ listHeader { mountPath, parent, table } =
         ]
 
 
-tableHeading : Model -> List String -> Html Msg
-tableHeading listing fields =
-    Html.thead
-        []
-        [ Html.tr [] (List.map (tableHeader listing) fields ++ [ Html.th [] [] ]) ]
+viewRecordsTable : Model -> Html Msg
+viewRecordsTable model =
+    Html.table []
+        (Html.thead []
+            [ Html.tr [] (List.map (viewHeaderCell model) model.columns ++ [ Html.th [] [] ]) ]
+            :: (List.reverse model.pages
+                    |> List.indexedMap
+                        (\pageNum page ->
+                            case page of
+                                Page records ->
+                                    Html.tbody
+                                        [ id (pageId pageNum) ]
+                                        (List.map
+                                            (\record ->
+                                                Html.tr
+                                                    [ class "listing-row" ]
+                                                    (viewRowCells model record
+                                                        ++ [ viewActions model record ]
+                                                    )
+                                            )
+                                            records
+                                        )
+
+                                Blank ->
+                                    Html.text ""
+                        )
+               )
+        )
 
 
-tableHeader : Model -> String -> Html Msg
-tableHeader { order } name =
+viewHeaderCell : Model -> ( String, Column ) -> Html Msg
+viewHeaderCell { order } ( name, _ ) =
     let
         defaultHeader =
             Html.span
@@ -910,87 +944,56 @@ tableHeader { order } name =
         ]
 
 
-pagesFold :
-    Model
-    -> List String
-    -> List (Html Msg)
-    -> Int
-    -> List Page
-    -> List (Html Msg)
-pagesFold listing fields acc pageNum pages =
-    case pages of
-        [] ->
-            acc
-
-        page :: rest ->
-            let
-                elem =
-                    case page of
-                        Page resources ->
-                            pageHtml listing fields pageNum resources
-
-                        Blank ->
-                            Html.text ""
-            in
-            pagesFold listing fields (elem :: acc) (pageNum + 1) rest
-
-
-pageHtml : Model -> List String -> Int -> List Record -> Html Msg
-pageHtml listing fields pageNum records =
-    Html.tbody
-        [ id (pageId pageNum) ]
-        (List.map (rowHtml listing fields) records)
-
-
-rowHtml : Model -> List String -> Record -> Html Msg
-rowHtml { mountPath, table } names record =
-    Html.tr
-        [ class "listing-row" ]
-        (List.filterMap
-            (\fieldName ->
-                Dict.get fieldName record
-                    |> Maybe.map
-                        (\value ->
-                            Html.td
+viewRowCells : Model -> Record -> List (Html Msg)
+viewRowCells model record =
+    List.filterMap
+        (\( colName, col ) ->
+            Dict.get colName record
+                |> Maybe.map
+                    (\value ->
+                        Html.td
+                            []
+                            [ Html.span
                                 []
-                                [ Html.span
-                                    []
-                                    [ fieldToHtml mountPath table.name value ]
+                                [ Views.renderValue model.mountPath col value
                                 ]
-                        )
-            )
-            names
-            ++ [ Html.td []
-                    [ recordId table record
-                        |> Maybe.map
-                            (\id ->
-                                Html.a
-                                    [ class "button button-clear button-small"
-                                    , href
-                                        (path mountPath <|
-                                            Url.absolute
-                                                [ recordTableName table, id ]
-                                                []
-                                        )
-                                    ]
-                                    [ Html.text "View" ]
-                            )
-                        |> Maybe.withDefault (Html.text "")
-                    ]
-               ]
+                            ]
+                    )
         )
+        model.columns
+
+
+viewActions : Model -> Record -> Html Msg
+viewActions model record =
+    Html.td []
+        [ recordId model.table record
+            |> Maybe.map
+                (\id ->
+                    Html.a
+                        [ class "button button-clear button-small"
+                        , href
+                            (MountPath.path model.mountPath <|
+                                Url.absolute
+                                    [ recordTableName model.table, id ]
+                                    []
+                            )
+                        ]
+                        [ Html.text "View" ]
+                )
+            |> Maybe.withDefault (Html.text "")
+        ]
 
 
 toggleSearchButton : Model -> Html Msg
-toggleSearchButton listing =
+toggleSearchButton model =
     Html.button
         [ class "toggle-button"
         , class "button-clear"
-        , classList [ ( "open", isSearchVisible listing ) ]
+        , classList [ ( "open", isSearchVisible model ) ]
         , onClick ToggleSearchOpen
         ]
         [ Html.i [ class "icono-play" ] []
-        , if isSearchVisible listing then
+        , if isSearchVisible model then
             Html.text "Hide"
 
           else
@@ -999,22 +1002,26 @@ toggleSearchButton listing =
         ]
 
 
-uploadModal : List String -> Model -> Html Msg
-uploadModal fieldNames { uploadState, parent } =
-    case uploadState of
+uploadModal : Model -> Html Msg
+uploadModal model =
+    let
+        fieldNames =
+            List.map Tuple.first model.columns
+    in
+    case model.uploadState of
         UploadReady records ->
             Html.div
                 [ class "modal-background"
                 , class "upload-preview"
                 ]
-                [ uploadPreview parent fieldNames records ]
+                [ uploadPreview (Debug.todo "crash") fieldNames records ]
 
         UploadWithErrors records ->
             Html.div
                 [ class "modal-background"
                 , class "upload-preview"
                 ]
-                [ uploadWithErrorsPreview parent fieldNames records
+                [ uploadWithErrorsPreview (Debug.todo "crash") fieldNames records
                 ]
 
         BadCsvSchema csvUpload ->
@@ -1265,18 +1272,7 @@ previewListCell record fieldName =
         (Dict.get fieldName record
             |> Maybe.map
                 (\value ->
-                    [ Html.span
-                        []
-                        [ fieldValueToHtml value ]
-
-                    -- , field
-                    --     |> Debug.todo "crash"
-                    -- |> validate record.persisted
-                    -- |> .error
-                    -- |> Maybe.map
-                    --     (\err -> span [ class "error" ] [ text err ])
-                    -- |> Maybe.withDefault (text "")
-                    ]
+                    [ Html.span [] [ fieldValueToHtml value ] ]
                 )
             |> Maybe.withDefault [ Html.text "" ]
         )
@@ -1402,44 +1398,39 @@ parentReference table parent =
         |> List.head
 
 
-listableColumns : Table -> Dict.Dict String Column
-listableColumns table =
-    table.columns
-        |> Dict.filter
-            (\_ column ->
-                case column.columnType of
-                    TextCol ->
-                        False
+isColumnVisible : ( String, Column ) -> Bool
+isColumnVisible ( _, column ) =
+    case column.columnType of
+        TextCol ->
+            False
 
-                    JsonCol ->
-                        False
+        JsonCol ->
+            False
 
-                    UuidCol ->
-                        False
+        UuidCol ->
+            False
 
-                    ObjectCol ->
-                        False
+        ObjectCol ->
+            False
 
-                    ArrayCol _ ->
-                        False
+        ArrayCol _ ->
+            False
 
-                    OtherCol _ _ ->
-                        False
+        OtherCol _ _ ->
+            False
 
-                    _ ->
-                        True
-            )
+        _ ->
+            True
 
 
-listingSelects : Table -> List PG.Selectable
-listingSelects table =
-    Dict.values table.columns
-        |> List.filterMap Client.associationJoin
-        |> (++)
-            (listableColumns table
-                |> Dict.keys
-                |> List.map PG.attribute
-            )
+
+-- Dict.values table.columns
+--     |> List.filterMap Client.associationJoin
+--     |> (++)
+--         (isColumnVisible table
+--             |> Dict.keys
+--             |> List.map PG.attribute
+--         )
 
 
 hasErrors _ =
@@ -1449,12 +1440,6 @@ hasErrors _ =
 
 -- TEMPORARY HELPER FUNCTIONS
 -- These replace functions from removed modules (Internal.Record, Internal.Field, Internal.Value)
-
-
-recordGetTable : Schema -> Record -> Maybe Table
-recordGetTable schema record =
-    -- Cannot determine table from record alone without metadata
-    Nothing
 
 
 recordId : Table -> Record -> Maybe String
@@ -1467,13 +1452,6 @@ recordId table record =
 recordTableName : Table -> String
 recordTableName table =
     table.name
-
-
-recordLabel : Table -> Record -> Maybe String
-recordLabel table record =
-    Schema.label table
-        |> Maybe.andThen (\labelCol -> Dict.get labelCol record)
-        |> Maybe.andThen valueToString
 
 
 valueToString : Value -> Maybe String
@@ -1502,17 +1480,6 @@ valueToString val =
 
         _ ->
             Nothing
-
-
-fieldCompareTuple : ( String, a ) -> ( String, b ) -> Order
-fieldCompareTuple ( a, _ ) ( b, _ ) =
-    compare a b
-
-
-fieldToHtml : MountPath -> String -> Value -> Html Msg
-fieldToHtml mountPath tableName value =
-    -- Stub: just display the value as text
-    Html.text (valueToString value |> Maybe.withDefault "")
 
 
 fieldValueToHtml : Value -> Html Msg

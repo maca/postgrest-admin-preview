@@ -76,7 +76,11 @@ init { client, navKey, mountPath, table, id, parent } =
                     |> Maybe.withDefault AppCmd.none
               , parent
                     |> Maybe.andThen (Schema.buildParentReference client.schema table)
-                    |> Maybe.map (fetchParentLabel client)
+                    |> Maybe.map
+                        (Client.fetchParentLabel client
+                            >> Task.attempt ParentLabelFetched
+                            >> AppCmd.wrap
+                        )
                     |> Maybe.withDefault AppCmd.none
               ]
             , Schema.buildReferences table
@@ -167,40 +171,6 @@ fetch client table ( primaryKeyName, recordId ) =
         , decoder = Decode.value
         }
         |> Task.attempt Fetched
-        |> AppCmd.wrap
-
-
-fetchParentLabel :
-    Client
-    ->
-        { parentLabelColumn : String
-        , parentPrimaryKey : String
-        , parentId : String
-        , parentTable : Table
-        }
-    -> AppCmd.Cmd Msg
-fetchParentLabel client params =
-    let
-        selectedCols =
-            PG.select
-                [ PG.attribute params.parentLabelColumn ]
-
-        queryString =
-            PG.toQueryString
-                [ selectedCols
-                , PG.param params.parentPrimaryKey (PG.eq (PG.string params.parentId))
-                , PG.limit 1
-                ]
-    in
-    Client.task
-        { client = client
-        , method = "GET"
-        , headers = [ Http.header "Accept" "application/vnd.pgrst.object+json" ]
-        , path = "/" ++ params.parentTable.name ++ "?" ++ queryString
-        , body = Http.emptyBody
-        , decoder = Decode.field params.parentLabelColumn Decode.string
-        }
-        |> Task.attempt ParentLabelFetched
         |> AppCmd.wrap
 
 
