@@ -28,11 +28,11 @@ module Internal.Config exposing
 
 import Dict exposing (Dict)
 import Internal.Application as Application
-import PostgRestAdmin.Client as Client exposing (AuthScheme)
 import Internal.Flag as Flag
+import Internal.Schema exposing (Record)
 import Json.Decode as Decode exposing (Decoder)
+import PostgRestAdmin.Client as Client exposing (AuthScheme)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath)
-import PostgRestAdmin.Record exposing (Record)
 import Url exposing (Protocol(..), Url)
 import Url.Parser exposing (Parser)
 

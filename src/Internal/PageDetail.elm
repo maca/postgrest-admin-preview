@@ -13,10 +13,22 @@ import Html.Attributes as Attrs
 import Html.Events as Events
 import Internal.Cmd as AppCmd
 import Internal.Config exposing (DetailActions)
-import Internal.Schema exposing (Record, Reference, Table)
-import Internal.Value
+import Internal.Schema as Schema
+    exposing
+        ( Column
+        , ColumnType(..)
+        , Record
+        , Table
+        , Value(..)
+        )
+import Iso8601
 import PostgRestAdmin.Client as Client exposing (Client, Error)
-import PostgRestAdmin.MountPath exposing (MountPath, breadcrumbs, path)
+import PostgRestAdmin.MountPath as MountPath
+    exposing
+        ( MountPath
+        , breadcrumbs
+        , path
+        )
 import PostgRestAdmin.Notification as Notification
 import String.Extra as String
 import Task
@@ -70,9 +82,9 @@ init { client, mountPath, table, id, detailActions } key =
         { client = client
         , table = table
         , id = id
-        , decoder = Internal.Schema.recordDecoder table
-        , expect = Fetched
         }
+        |> Task.attempt Fetched
+        |> AppCmd.wrap
     )
 
 
@@ -174,8 +186,24 @@ view model =
                     [ Attrs.class "card" ]
                     [ Html.table
                         []
-                        (sortedFields model.table record
-                            |> List.map tableRow
+                        (Schema.tableToSortedColumnList model.table
+                            |> List.map
+                                (\( colName, col ) ->
+                                    Dict.get colName record
+                                        |> Maybe.map
+                                            (\value ->
+                                                Html.tr
+                                                    []
+                                                    [ Html.th
+                                                        []
+                                                        [ Html.text (String.humanize colName) ]
+                                                    , Html.td
+                                                        []
+                                                        [ valueToHtml model.mountPath col value ]
+                                                    ]
+                                            )
+                                        |> Maybe.withDefault (Html.text "")
+                                )
                         )
                     , actions model
                     ]
@@ -211,26 +239,23 @@ view model =
                     [ Attrs.class "associations" ]
                     (model.table.referencedBy
                         |> List.map
-                            (referenceToHtml model)
+                            (\ref ->
+                                Html.a
+                                    [ Attrs.class "card association"
+                                    , Attrs.href
+                                        (path model.mountPath <|
+                                            Url.absolute [ model.table.name, model.id, ref.tableName ] []
+                                        )
+                                    ]
+                                    [ Html.text (String.humanize ref.tableName)
+                                    , Dict.get ref.tableName model.countTotals
+                                        |> Maybe.map (\i -> " (" ++ String.fromInt i ++ ")")
+                                        |> Maybe.withDefault ""
+                                        |> Html.text
+                                    ]
+                            )
                     )
                 ]
-
-
-referenceToHtml : Model -> Reference -> Html Msg
-referenceToHtml params ref =
-    Html.a
-        [ Attrs.class "card association"
-        , Attrs.href
-            (path params.mountPath <|
-                Url.absolute [ params.table.name, params.id, ref.tableName ] []
-            )
-        ]
-        [ Html.text (String.humanize ref.tableName)
-        , Dict.get ref.tableName params.countTotals
-            |> Maybe.map (\i -> " (" ++ String.fromInt i ++ ")")
-            |> Maybe.withDefault ""
-            |> Html.text
-        ]
 
 
 actions : Model -> Html Msg
@@ -255,95 +280,88 @@ actions { mountPath, table, id } =
         ]
 
 
-tableRow : ( String, Internal.Value.Value ) -> Html Msg
-tableRow ( name, value ) =
-    Html.tr
-        []
-        [ Html.th [] [ Html.text (String.humanize name) ]
-        , Html.td [] [ valueToHtml value ]
-        ]
+valueToHtml : MountPath -> Column -> Value -> Html msg
+valueToHtml mountPath col value =
+    case ( value, col.columnType ) of
+        ( Float f, _ ) ->
+            Html.text (String.fromFloat f)
 
+        ( Int i, _ ) ->
+            Html.text (String.fromInt i)
 
-valueToHtml : Internal.Value.Value -> Html msg
-valueToHtml value =
-    case value of
-        Internal.Value.PFloat maybe ->
-            maybeToHtml String.fromFloat maybe
+        ( Bool b, _ ) ->
+            Html.text
+                (if b then
+                    "true"
 
-        Internal.Value.PInt maybe ->
-            maybeToHtml String.fromInt maybe
-
-        Internal.Value.PString maybe ->
-            maybeToHtml identity maybe
-
-        Internal.Value.PBool maybe ->
-            maybeToHtml
-                (\bool ->
-                    if bool then
-                        "true"
-
-                    else
-                        "false"
+                 else
+                    "false"
                 )
-                maybe
 
-        Internal.Value.PTime maybe ->
-            maybeToHtml Time.format maybe
+        ( String s, TimestampCol ) ->
+            Html.text
+                (Iso8601.toTime s
+                    |> Result.map Time.format
+                    |> Result.withDefault s
+                )
 
-        Internal.Value.PDate maybe ->
-            maybeToHtml Time.toDateString maybe
+        ( String s, TimestampWithoutTimezomeCol ) ->
+            Html.text
+                (Iso8601.toTime s
+                    |> Result.map Time.format
+                    |> Result.withDefault s
+                )
 
-        Internal.Value.PText maybe ->
-            maybeToHtml identity maybe
+        ( String s, DateCol ) ->
+            Html.text
+                (Iso8601.toTime s
+                    |> Result.map Time.toDateString
+                    |> Result.withDefault s
+                )
 
-        Internal.Value.PJson _ ->
-            Html.pre
-                []
-                [ Internal.Value.toString value
-                    |> maybeToHtml identity
+        ( String s, TimeCol ) ->
+            Html.text
+                (Iso8601.toTime s
+                    |> Result.map Time.format
+                    |> Result.withDefault s
+                )
+
+        ( String s, TimeWithoutTimezoneCol ) ->
+            Html.text
+                (Iso8601.toTime s
+                    |> Result.map Time.format
+                    |> Result.withDefault s
+                )
+
+        ( String s, JsonCol ) ->
+            Html.pre [] [ Html.text s ]
+
+        ( String s, TextCol ) ->
+            Html.text s
+
+        ( String s, _ ) ->
+            Html.text s
+
+        ( Blank, _ ) ->
+            Html.text ""
+
+        ( Ref ref, _ ) ->
+            Html.a
+                [ Attrs.href
+                    (MountPath.path mountPath (ref.tableName ++ "/" ++ ref.primaryKey))
                 ]
-
-        Internal.Value.Unknown _ ->
-            Html.text "?"
-
-
-maybeToHtml : (a -> String) -> Maybe a -> Html msg
-maybeToHtml func maybe =
-    Maybe.map func maybe |> Maybe.withDefault "" |> Html.text
+                [ Html.text (ref.primaryKey ++ " - " ++ ref.label) ]
 
 
 
 -- UTILS
 
 
-sortedFields : Table -> Record -> List ( String, Internal.Value.Value )
-sortedFields table record =
-    Dict.toList record
-        |> List.sortBy
-            (\( name, _ ) ->
-                case Dict.get name table.columns of
-                    Just column ->
-                        if column.constraint == Internal.Schema.PrimaryKey then
-                            0
-
-                        else
-                            case column.constraint of
-                                Internal.Schema.ForeignKey _ ->
-                                    1
-
-                                _ ->
-                                    2
-
-                    Nothing ->
-                        3
-            )
-
-
 recordLabel : Table -> Record -> Maybe String
 recordLabel table record =
-    Internal.Schema.label table
+    Schema.label table
         |> Maybe.andThen
             (\fieldName ->
                 Dict.get fieldName record
-                    |> Maybe.andThen Internal.Value.toString
+                    |> Maybe.andThen Schema.valueToString
             )

@@ -11,8 +11,7 @@ import Html.Attributes as Attrs
 import Html.Events as Events
 import Http
 import Internal.Cmd as AppCmd
-import Internal.Schema as Schema exposing (Constraint(..), Table)
-import Internal.Value as Value
+import Internal.Schema as Schema exposing (ColumnType(..), Constraint(..), Table, Value(..))
 import Json.Decode as Decode
 import PostgRestAdmin.Client as Client exposing (Client)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
@@ -122,9 +121,14 @@ fetchAutcompleteValues client ( colName, ref ) =
                                     (Decode.oneOf
                                         [ Decode.map2
                                             (\id label -> Just { id = id, label = label })
-                                            (Decode.field ref.primaryKeyName Decode.string)
+                                            (Decode.field ref.primaryKeyName
+                                                (Decode.oneOf
+                                                    [ Decode.string
+                                                    , Decode.float |> Decode.map String.fromFloat
+                                                    ]
+                                                )
+                                            )
                                             (Decode.field labelColumnName Decode.string)
-                                        , Decode.succeed Nothing
                                         ]
                                     )
                                     |> Decode.map (List.filterMap identity >> Local)
@@ -280,12 +284,9 @@ update msg model =
                         , table = model.table
                         , expect = Saved
                         , decoder =
-                            case Schema.tablePrimaryKey model.table of
-                                Just ( pkName, column ) ->
-                                    Decode.field pkName
-                                        (Schema.valueDecoder column.columnType)
-                                        |> Decode.map
-                                            (Value.toString >> Maybe.withDefault "")
+                            case Schema.tablePrimaryKeyName model.table of
+                                Just pkName ->
+                                    Decode.field pkName Decode.string
 
                                 Nothing ->
                                     Decode.fail "Coudn't figure the field id"
@@ -438,16 +439,28 @@ fieldFromColumn : ( String, Schema.Column ) -> Maybe (Field.Field String)
 fieldFromColumn ( name, column ) =
     let
         attrs =
-            List.concat
-                [ [ Field.name name
-                  , Field.identifier name
-                  , Field.label (String.humanize name)
-                  , Field.required column.required
-                  ]
-                , Value.toString column.value
-                    |> Maybe.map (Field.stringValue >> List.singleton)
-                    |> Maybe.withDefault []
-                ]
+            [ Field.name name
+            , Field.identifier name
+            , Field.label (String.humanize name)
+            , Field.required column.required
+            , Field.value
+                (case column.value of
+                    String str ->
+                        FormValue.string str
+
+                    Bool bool ->
+                        FormValue.bool bool
+
+                    Int int ->
+                        FormValue.int int
+
+                    Float float ->
+                        FormValue.float float
+
+                    _ ->
+                        FormValue.blank
+                )
+            ]
     in
     case column.constraint of
         ForeignKey _ ->
@@ -459,45 +472,56 @@ fieldFromColumn ( name, column ) =
         NoConstraint ->
             Just
                 (case column.columnType of
-                    Schema.String ->
-                        case column.options |> List.filterMap Value.toString of
+                    Schema.StringCol ->
+                        case
+                            column.options
+                                |> List.filterMap
+                                    (\value ->
+                                        case value of
+                                            String str ->
+                                                Just str
+
+                                            _ ->
+                                                Nothing
+                                    )
+                        of
                             [] ->
                                 Field.text attrs
 
                             options ->
                                 Field.select (Field.stringOptions options :: attrs)
 
-                    Schema.Text ->
+                    Schema.TextCol ->
                         Field.textarea (Field.autogrow True :: attrs)
 
-                    Schema.Float ->
+                    Schema.FloatCol ->
                         Field.float attrs
 
-                    Schema.Integer ->
+                    Schema.IntegerCol ->
                         Field.int attrs
 
-                    Schema.Boolean ->
+                    Schema.BoolCol ->
                         Field.checkbox attrs
 
-                    Schema.TimestampWithoutTimezome ->
+                    Schema.TimestampWithoutTimezomeCol ->
                         Field.datetime attrs
 
-                    Schema.Timestamp ->
+                    Schema.TimestampCol ->
                         Field.datetime attrs
 
-                    Schema.TimeWithoutTimezone ->
+                    Schema.TimeWithoutTimezoneCol ->
                         Field.datetime attrs
 
-                    Schema.Time ->
+                    Schema.TimeCol ->
                         Field.datetime attrs
 
-                    Schema.Date ->
+                    Schema.DateCol ->
                         Field.date attrs
 
-                    Schema.Json ->
+                    Schema.JsonCol ->
                         Field.textarea (Field.autogrow True :: attrs)
 
-                    Schema.Uuid ->
+                    Schema.UuidCol ->
                         Field.text attrs
 
                     _ ->

@@ -68,11 +68,11 @@ import Dict exposing (Dict)
 import Html exposing (Html)
 import Internal.Cmd as AppCmd
 import Internal.Config as Config
+import Internal.Schema exposing (Record)
 import Json.Decode as Decode
 import PostgRestAdmin.Client exposing (Client)
 import PostgRestAdmin.Config.FormAuth exposing (FormAuth)
 import PostgRestAdmin.MountPath exposing (MountPath)
-import PostgRestAdmin.Record exposing (Record)
 import Url.Parser exposing (Parser)
 
 

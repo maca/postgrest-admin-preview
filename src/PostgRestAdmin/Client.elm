@@ -1,12 +1,15 @@
 module PostgRestAdmin.Client exposing
     ( Client, init
-    , fetchRecord, saveRecord, deleteRecord, request, requestMany, Count
+    , Count
+    , fetchRecord, fetchRecords, saveRecord, deleteRecord
+    , request, requestMany, task
+    , count
     , Error(..), errorToString
     , AuthScheme(..), jwt, unset, toJwtString, authHeader, updateJwt, logout
     , fetchSchema, schemaIsLoaded
     , endpoint
     , authSchemeConfig, authUrl, authUrlDecoder, basic, encoder, jwtDecoder
-    , associationJoin, bytesRequest, count, task
+    , associationJoin, bytesRequest, chunk, recordDecoder
     )
 
 {-| PostgREST client for Elm applications.
@@ -19,11 +22,10 @@ module PostgRestAdmin.Client exposing
 
 # Requests
 
-Note that the request functions **do not produce a vanilla Elm
-[Cmd](https://package.elm-lang.org/packages/elm/core/latest/Platform-Cmd#Cmd)**
-but a [PostgRestAdmin.Cmd](PostgRestAdmin-Cmd).
-
-@docs fetchRecord, fetchRecordList, saveRecord, deleteRecord, request, requestMany, Collection, Count
+@docs Count
+@docs fetchRecord, fetchRecords, saveRecord, deleteRecord
+@docs request, requestMany, task
+@docs count
 
 
 # Errors
@@ -67,9 +69,7 @@ import Dict exposing (Dict)
 import Dict.Extra as Dict
 import Http
 import Internal.Cmd as AppCmd
-import Internal.Field as Field
-import Internal.Schema as Schema exposing (Column, Constraint(..), Table)
-import Internal.Value exposing (Value(..))
+import Internal.Schema as Schema exposing (Column, Constraint(..), Table, Value(..), buildReferences)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 import Parser exposing ((|.), (|=), Parser)
@@ -78,6 +78,7 @@ import Regex
 import String.Extra as String
 import Task exposing (Task)
 import Url exposing (Url)
+import Url.Builder
 
 
 
@@ -378,41 +379,53 @@ Requires a decoder for the response and an `expect` function that returns a `Msg
                 AppCmd.none
 
 -}
-fetchRecord :
-    { client : Client
-    , table : Table
-    , id : String
-    , decoder : Decode.Decoder a
-    , expect : Result Error a -> msg
-    }
-    -> AppCmd.Cmd msg
-fetchRecord { client, table, id, expect, decoder } =
+fetchRecord : { client : Client, table : Table, id : String } -> Task Error Schema.Record
+fetchRecord { client, table, id } =
     let
         queryStr =
             PG.toQueryString
                 (List.filterMap identity
                     [ Just (PG.select (selects table))
-                    , tablePrimaryKeyName table
+                    , Schema.tablePrimaryKeyName table
                         |> Maybe.map
                             (\key -> PG.eq (PG.string id) |> PG.param key)
                     , Just (PG.limit 1)
                     ]
                 )
     in
-    AppCmd.wrap <|
-        Task.attempt expect <|
-            Http.task
-                { method = "GET"
-                , headers =
-                    List.filterMap identity
-                        [ authHeader client
-                        , Just (Http.header "Accept" "application/vnd.pgrst.object+json")
-                        ]
-                , url = endpoint client ("/" ++ table.name ++ "?" ++ queryStr)
-                , body = Http.emptyBody
-                , resolver = jsonResolver decoder
-                , timeout = Nothing
-                }
+    Http.task
+        { method = "GET"
+        , headers =
+            List.filterMap identity
+                [ authHeader client
+                , Just (Http.header "Accept" "application/vnd.pgrst.object+json")
+                ]
+        , url = endpoint client ("/" ++ table.name ++ "?" ++ queryStr)
+        , body = Http.emptyBody
+        , resolver = jsonResolver (recordDecoder table)
+        , timeout = Nothing
+        }
+
+
+fetchRecords :
+    { client : Client
+    , table : Table
+    , path : String
+    }
+    -> Task Error ( List Schema.Record, Count )
+fetchRecords { client, table, path } =
+    Http.task
+        { method = "GET"
+        , headers =
+            List.filterMap identity
+                [ authHeader client
+                , Just (Http.header "Prefer" "count=exact")
+                ]
+        , url = endpoint client path
+        , body = Http.emptyBody
+        , resolver = countResolver (Decode.list (recordDecoder table))
+        , timeout = Nothing
+        }
 
 
 saveRecord :
@@ -491,7 +504,7 @@ deleteRecord { client, table, id, expect } =
         queryStr =
             PG.toQueryString
                 (List.filterMap identity
-                    [ tablePrimaryKeyName table
+                    [ Schema.tablePrimaryKeyName table
                         |> Maybe.map
                             (\key -> PG.eq (PG.string id) |> PG.param key)
                     ]
@@ -551,6 +564,35 @@ task { client, method, headers, path, body, decoder } =
         , body = body
         , resolver = jsonResolver decoder
         , timeout = Nothing
+        }
+
+
+chunk : Client -> Table -> Maybe String -> List String -> Task.Task Error (List Schema.Record)
+chunk client table primaryKeyName ids =
+    let
+        existenceQuery =
+            List.filterMap identity
+                [ primaryKeyName
+                    |> Maybe.map
+                        (\pkn ->
+                            let
+                                conds =
+                                    ids
+                                        |> List.map (\id -> pkn ++ ".eq." ++ id)
+                                        |> String.join ","
+                            in
+                            Url.Builder.string "or" <| "(" ++ conds ++ ")"
+                        )
+                ]
+    in
+    task
+        { client = client
+        , method = "GET"
+        , headers = []
+        , path =
+            Url.Builder.absolute [ table.name ] existenceQuery
+        , body = Http.emptyBody
+        , decoder = Decode.list (Decode.dict Schema.valueDecoder)
         }
 
 
@@ -656,9 +698,12 @@ endpoint { host } path =
 
 selects : Table -> List Selectable
 selects table =
-    Dict.values table.columns
-        |> List.filterMap associationJoin
-        |> (++) (Dict.keys table.columns |> List.map PG.attribute)
+    List.concat
+        [ Dict.values table.columns
+            |> List.filterMap associationJoin
+        , Dict.keys table.columns
+            |> List.map PG.attribute
+        ]
 
 
 associationJoin : Column -> Maybe Selectable
@@ -676,14 +721,53 @@ associationJoin { constraint } =
             Nothing
 
 
-tablePrimaryKeyName : Table -> Maybe String
-tablePrimaryKeyName table =
-    Dict.find (\_ column -> Field.isPrimaryKey column) table.columns
-        |> Maybe.map Tuple.first
-
-
 
 -- DECODE
+
+
+recordDecoder : Table -> Decode.Decoder Schema.Record
+recordDecoder table =
+    table.columns
+        |> Dict.foldl
+            (\name col ->
+                Decode.map2
+                    (Maybe.map (Dict.insert name) >> Maybe.withDefault identity)
+                    (Decode.maybe (columnDecoder name col))
+            )
+            (Decode.succeed Dict.empty)
+
+
+columnDecoder : String -> Schema.Column -> Decoder Value
+columnDecoder name col =
+    (case ( col.constraint, col ) of
+        ( ForeignKey ref, _ ) ->
+            ref.labelColumnName
+                |> Maybe.map
+                    (\labelCol ->
+                        Decode.field ref.tableName
+                            (Decode.map2
+                                (\pk label ->
+                                    Ref
+                                        { tableName = ref.tableName
+                                        , primaryKey = pk
+                                        , label = label
+                                        }
+                                )
+                                (Decode.field ref.primaryKeyName
+                                    (Decode.oneOf
+                                        [ Decode.string
+                                        , Decode.float |> Decode.map String.fromFloat
+                                        ]
+                                    )
+                                )
+                                (Decode.field labelCol Decode.string)
+                            )
+                    )
+
+        _ ->
+            Nothing
+    )
+        |> Maybe.withDefault (Decode.field name Schema.valueDecoder)
 
 
 countParser : Parser Count

@@ -30,7 +30,7 @@ import Internal.Flag as Flag
 import Internal.Notification as Notification exposing (Notification)
 import Internal.PageDetail as PageDetail
 import Internal.PageForm as PageForm
-import Internal.PageListing as PageListing exposing (PageListing)
+import Internal.PageListing as PageListing exposing (Model)
 import Internal.Schema exposing (Schema)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
@@ -128,7 +128,7 @@ type Route f m msg
         (InitParams f m msg
          -> ( Route f m msg, Cmd (Msg f m msg) )
         )
-    | RouteListing PageListing
+    | RouteListing PageListing.Model
     | RouteDetail PageDetail.Model
     | RouteForm PageForm.Model
     | RouteApplication
@@ -676,7 +676,7 @@ mainContent model =
             Html.text ""
 
         RouteLoadingSchema _ ->
-            loading
+            Html.text "Not found"
 
         RouteListing listing ->
             Html.map PageListingChanged (PageListing.view listing)
@@ -698,20 +698,10 @@ mainContent model =
                         [ Html.text (Decode.errorToString err) ]
 
                 None ->
-                    notFound
+                    Html.text "Not found"
 
         RouteNotFound ->
-            notFound
-
-
-notFound : Html (Msg f m msg)
-notFound =
-    Html.text "Not found"
-
-
-loading : Html (Msg f m msg)
-loading =
-    Html.text ""
+            Html.text "Not found"
 
 
 

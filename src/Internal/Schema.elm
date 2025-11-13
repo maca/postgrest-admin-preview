@@ -3,8 +3,11 @@ module Internal.Schema exposing
     , Constraint(..), ForeignKeyParams, Reference
     , Table, label
     , tablePrimaryKey, tablePrimaryKeyName
+    , tableToSortedColumnList
     , decoder, valueDecoder
-    , Record, buildParentReference, buildReferences, recordDecoder
+    , Record, Value(..)
+    , buildParentReference, buildReferences
+    , valueToString
     )
 
 {-|
@@ -13,34 +16,34 @@ module Internal.Schema exposing
 @docs Constraint, ForeignKeyParams, Reference
 @docs Table, columnNames, label
 @docs tablePrimaryKey, tablePrimaryKeyName
+@docs tableToSortedColumnList
 @docs decoder, valueDecoder
+@docs Record, Value
+@docs buildParentReference, buildReferences, recordDecoder
 
 -}
 
 import Dict exposing (Dict)
-import Internal.Value exposing (Value(..))
 import Json.Decode as Decode
-import Json.Encode as Encode
 import Regex exposing (Regex)
-import Time.Extra as Time
 
 
 type ColumnType
-    = Integer
-    | Float
-    | String
-    | Text
-    | Boolean
-    | TimestampWithoutTimezome
-    | Timestamp
-    | TimeWithoutTimezone
-    | Time
-    | Date
-    | Uuid
-    | Json
-    | Object
-    | Array ColumnType
-    | Other String (Maybe String)
+    = IntegerCol
+    | FloatCol
+    | StringCol
+    | TextCol
+    | BoolCol
+    | TimestampWithoutTimezomeCol
+    | TimestampCol
+    | TimeWithoutTimezoneCol
+    | TimeCol
+    | DateCol
+    | UuidCol
+    | JsonCol
+    | ObjectCol
+    | ArrayCol ColumnType
+    | OtherCol String (Maybe String)
 
 
 type Constraint
@@ -62,7 +65,6 @@ type alias ForeignKeyParams =
     { tableName : String
     , primaryKeyName : String
     , labelColumnName : Maybe String
-    , label : Maybe String
     }
 
 
@@ -79,6 +81,40 @@ type alias Reference =
     }
 
 
+type Value
+    = String String
+    | Bool Bool
+    | Int Int
+    | Float Float
+    | Ref { tableName : String, primaryKey : String, label : String }
+    | Blank
+
+
+valueToString : Value -> Maybe String
+valueToString value =
+    case value of
+        String str ->
+            Just str
+
+        Bool True ->
+            Just "true"
+
+        Bool False ->
+            Just "false"
+
+        Int int ->
+            Just (String.fromInt int)
+
+        Float float ->
+            Just (String.fromFloat float)
+
+        Ref ref ->
+            Just (ref.primaryKey ++ " - " ++ ref.label)
+
+        Blank ->
+            Nothing
+
+
 type alias Record =
     Dict String Value
 
@@ -87,16 +123,22 @@ type alias Schema =
     Dict String Table
 
 
-recordDecoder : Table -> Decode.Decoder Record
-recordDecoder table =
+tableToSortedColumnList : Table -> List ( String, Column )
+tableToSortedColumnList table =
     table.columns
-        |> Dict.foldl
-            (\name col ->
-                Decode.map2
-                    (Dict.insert name)
-                    (Decode.field name (valueDecoder col.columnType))
+        |> Dict.toList
+        |> List.sortBy
+            (\( _, column ) ->
+                case column.constraint of
+                    PrimaryKey ->
+                        0
+
+                    ForeignKey _ ->
+                        1
+
+                    NoConstraint ->
+                        2
             )
-            (Decode.succeed Dict.empty)
 
 
 decoder :
@@ -134,12 +176,12 @@ decoder params =
                                     )
                                 )
                                 (Decode.oneOf
-                                    [ Decode.field "default" (valueDecoder type_)
-                                    , Decode.succeed (defaultValue type_)
+                                    [ Decode.field "default" valueDecoder
+                                    , Decode.succeed Blank
                                     ]
                                 )
                                 (Decode.oneOf
-                                    [ Decode.field "enum" (Decode.list (valueDecoder type_))
+                                    [ Decode.field "enum" (Decode.list valueDecoder)
                                     , Decode.succeed []
                                     ]
                                 )
@@ -224,147 +266,60 @@ columnType : String -> Maybe String -> ColumnType
 columnType type_ format =
     case ( type_, format ) of
         ( _, Just "array" ) ->
-            Array (columnType type_ Nothing)
+            ArrayCol (columnType type_ Nothing)
 
         ( "integer", _ ) ->
-            Integer
+            IntegerCol
 
         ( "number", _ ) ->
-            Float
+            FloatCol
 
         ( "string", Just "timestamp without time zone" ) ->
-            TimestampWithoutTimezome
+            TimestampWithoutTimezomeCol
 
         ( "string", Just "timestamp with time zone" ) ->
-            Timestamp
+            TimestampCol
 
         ( "string", Just "times without time zone" ) ->
-            TimeWithoutTimezone
+            TimeWithoutTimezoneCol
 
         ( "string", Just "times with time zone" ) ->
-            Time
+            TimeCol
 
         ( "string", Just "date" ) ->
-            Date
+            DateCol
 
         ( "string", Just "uuid" ) ->
-            Uuid
+            UuidCol
 
         ( "string", Just "json" ) ->
-            Json
+            JsonCol
 
         ( "string", Just "text" ) ->
-            Text
+            TextCol
 
         ( "string", _ ) ->
-            String
+            StringCol
 
         ( "boolean", _ ) ->
-            Boolean
+            BoolCol
 
         ( "object", _ ) ->
-            Object
+            ObjectCol
 
         _ ->
-            Other type_ format
+            OtherCol type_ format
 
 
-valueDecoder : ColumnType -> Decode.Decoder Value
-valueDecoder type_ =
-    case type_ of
-        Integer ->
-            Decode.map PInt (Decode.maybe Decode.int)
-
-        Float ->
-            Decode.map PFloat (Decode.maybe Decode.float)
-
-        String ->
-            Decode.map PString (Decode.maybe Decode.string)
-
-        Text ->
-            Decode.map PText (Decode.maybe Decode.string)
-
-        Boolean ->
-            Decode.map PBool (Decode.maybe Decode.bool)
-
-        TimestampWithoutTimezome ->
-            Decode.map PTime (Decode.maybe Time.decoder)
-
-        Timestamp ->
-            Decode.map PTime (Decode.maybe Time.decoder)
-
-        TimeWithoutTimezone ->
-            Decode.map PTime (Decode.maybe Time.decoder)
-
-        Time ->
-            Decode.map PTime (Decode.maybe Time.decoder)
-
-        Date ->
-            Decode.map PDate (Decode.maybe Time.decoder)
-
-        Uuid ->
-            Decode.map PString (Decode.maybe Decode.string)
-
-        Json ->
-            Decode.map (PJson << Maybe.map (Encode.encode 4)) (Decode.maybe Decode.value)
-
-        Object ->
-            Decode.map Unknown Decode.value
-
-        Array _ ->
-            Decode.map Unknown Decode.value
-
-        Other _ _ ->
-            Decode.map Unknown Decode.value
-
-
-defaultValue : ColumnType -> Value
-defaultValue type_ =
-    case type_ of
-        Integer ->
-            PInt Nothing
-
-        Float ->
-            PFloat Nothing
-
-        String ->
-            PString Nothing
-
-        Text ->
-            PText Nothing
-
-        Boolean ->
-            PBool Nothing
-
-        TimestampWithoutTimezome ->
-            PTime Nothing
-
-        Timestamp ->
-            PTime Nothing
-
-        TimeWithoutTimezone ->
-            PTime Nothing
-
-        Time ->
-            PTime Nothing
-
-        Date ->
-            PDate Nothing
-
-        Uuid ->
-            PString Nothing
-
-        Json ->
-            PJson Nothing
-
-        Object ->
-            Unknown Encode.null
-
-        Array _ ->
-            Unknown Encode.null
-
-        Other _ _ ->
-            Unknown Encode.null
+valueDecoder : Decode.Decoder Value
+valueDecoder =
+    Decode.oneOf
+        [ Decode.string |> Decode.map String
+        , Decode.bool |> Decode.map Bool
+        , Decode.int |> Decode.map Int
+        , Decode.float |> Decode.map Float
+        , Decode.null Blank
+        ]
 
 
 columnConstraint : Dict String String -> Dict String (List String) -> String -> Constraint
@@ -381,8 +336,13 @@ columnConstraint tableAliases colNames description =
                 , primaryKeyName = primaryKeyName
                 , labelColumnName =
                     Dict.get table colNames
-                        |> Maybe.andThen findLabelColum
-                , label = Nothing
+                        |> Maybe.andThen
+                            (\requiredCols ->
+                                List.filter
+                                    (\n -> List.member n requiredCols)
+                                    identifiers
+                                    |> List.head
+                            )
                 }
 
         _ ->
@@ -423,21 +383,6 @@ label table =
         )
         identifiers
         |> List.head
-
-
-findLabelColum : List String -> Maybe String
-findLabelColum requiredCols =
-    List.filter (\n -> List.member n requiredCols) identifiers
-        |> List.head
-
-
-
--- To refactor
-
-
-identifiers : List String
-identifiers =
-    [ "title", "name", "full name", "email", "first name", "last name", "city" ]
 
 
 
@@ -519,3 +464,20 @@ buildParentReference schema table parent =
             |> List.head
         )
         |> Maybe.andThen identity
+
+
+
+-- To refactor
+
+
+identifiers : List String
+identifiers =
+    [ "title"
+    , "name"
+    , "full name"
+    , "email"
+    , "first name"
+    , "last name"
+    , "city"
+    , "country"
+    ]

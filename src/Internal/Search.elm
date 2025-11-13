@@ -42,8 +42,7 @@ import Internal.Filter.Operand as Operand
         , time
         )
 import Internal.Filter.Operation as Operation exposing (Operation(..))
-import Internal.Schema exposing (Table)
-import Internal.Value exposing (Value(..))
+import Internal.Schema exposing (ColumnType(..), Table)
 import Json.Decode as Decode
 import Postgrest.Client as PG
 import Set
@@ -215,8 +214,8 @@ viewFilter table idx filter =
                 op =
                     Filter.operation filter
             in
-            case column.value of
-                PString _ ->
+            case column.columnType of
+                StringCol ->
                     let
                         hasEnumOptions =
                             not (List.isEmpty column.options)
@@ -229,27 +228,39 @@ viewFilter table idx filter =
                         textFilterInputs column.required name idx op
                             |> inputs "text"
 
-                PText _ ->
+                TextCol ->
                     textFilterInputs column.required name idx op
                         |> inputs "text"
 
-                PInt _ ->
+                IntegerCol ->
                     intFilterInputs column.required name idx op
                         |> inputs "number"
 
-                PFloat _ ->
+                FloatCol ->
                     floatFilterInputs column.required name idx op
                         |> inputs "date"
 
-                PBool _ ->
+                BoolCol ->
                     boolFilterInputs column.required name idx op
                         |> inputs "bool"
 
-                PTime _ ->
+                TimeWithoutTimezoneCol ->
                     timeFilterInputs column.required name idx op
                         |> inputs "time"
 
-                PDate _ ->
+                TimeCol ->
+                    timeFilterInputs column.required name idx op
+                        |> inputs "time"
+
+                TimestampWithoutTimezomeCol ->
+                    timeFilterInputs column.required name idx op
+                        |> inputs "time"
+
+                TimestampCol ->
+                    timeFilterInputs column.required name idx op
+                        |> inputs "time"
+
+                DateCol ->
                     dateFilterInputs column.required name idx op
                         |> inputs "time"
 

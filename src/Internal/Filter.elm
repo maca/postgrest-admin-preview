@@ -40,8 +40,7 @@ import Dict
 import Internal.Filter.Operand as Operand exposing (Operand)
 import Internal.Filter.Operation as Operation exposing (Operation(..))
 import Internal.Filter.Parser as FilterParser
-import Internal.Schema exposing (Column, Table)
-import Internal.Value as Value exposing (Value(..))
+import Internal.Schema exposing (Column, ColumnType(..), Table, Value(..))
 import Parser
     exposing
         ( (|.)
@@ -95,11 +94,20 @@ operation (Filter _ op) =
 
 fromColumn : String -> Column -> Maybe Filter
 fromColumn colName col =
-    case .value col of
-        PString _ ->
+    case col.columnType of
+        StringCol ->
             let
                 enumChoices =
-                    col.options |> List.filterMap Value.toString
+                    col.options
+                        |> List.filterMap
+                            (\value ->
+                                case value of
+                                    String str ->
+                                        Just str
+
+                                    _ ->
+                                        Nothing
+                            )
             in
             if not (List.isEmpty enumChoices) then
                 Just (oneOf colName enumChoices Set.empty)
@@ -107,28 +115,37 @@ fromColumn colName col =
             else
                 Just (text colName equals "")
 
-        PText _ ->
+        TextCol ->
             Just (text colName equals "")
 
-        PInt _ ->
+        IntegerCol ->
             Just (int colName equals "")
 
-        PFloat _ ->
+        FloatCol ->
             Just (float colName equals "")
 
-        PBool _ ->
+        BoolCol ->
             Just (isTrue colName)
 
-        PTime _ ->
+        TimeWithoutTimezoneCol ->
             Just (time colName inDate "")
 
-        PDate _ ->
+        TimeCol ->
+            Just (time colName inDate "")
+
+        TimestampWithoutTimezomeCol ->
+            Just (time colName inDate "")
+
+        TimestampCol ->
+            Just (time colName inDate "")
+
+        DateCol ->
             Just (date colName inDate "")
 
-        PJson _ ->
+        JsonCol ->
             Just (text colName equals "")
 
-        Unknown _ ->
+        _ ->
             Nothing
 
 
@@ -444,63 +461,88 @@ combineHelp (Filter name op) ((Filter name_ op_) as f_) =
 
 filterCons : Table -> (OperandConst -> Operation) -> String -> Maybe Filter
 filterCons table operationCons name =
-    case Dict.get name table.columns of
-        Just column ->
-            case column.value of
-                PString _ ->
-                    let
-                        enumChoices =
-                            column.options |> List.filterMap Value.toString
-                    in
-                    if not (List.isEmpty enumChoices) then
-                        IsNull (Just <| NoneOf <| Operand.enum enumChoices Set.empty)
-                            |> (Just << Filter name)
+    Dict.get name table.columns
+        |> Maybe.andThen
+            (\column ->
+                case column.columnType of
+                    StringCol ->
+                        let
+                            enumChoices =
+                                column.options
+                                    |> List.filterMap
+                                        (\value ->
+                                            case value of
+                                                String str ->
+                                                    Just str
 
-                    else
+                                                _ ->
+                                                    Nothing
+                                        )
+                        in
+                        if not (List.isEmpty enumChoices) then
+                            IsNull (Just <| NoneOf <| Operand.enum enumChoices Set.empty)
+                                |> (Just << Filter name)
+
+                        else
+                            Just <| Filter name <| operationCons Operand.text
+
+                    TextCol ->
                         Just <| Filter name <| operationCons Operand.text
 
-                PText _ ->
-                    Just <| Filter name <| operationCons Operand.text
+                    IntegerCol ->
+                        Just <| Filter name <| operationCons Operand.int
 
-                PInt _ ->
-                    Just <| Filter name <| operationCons Operand.int
+                    FloatCol ->
+                        Just <| Filter name <| operationCons Operand.float
 
-                PFloat _ ->
-                    Just <| Filter name <| operationCons Operand.float
+                    BoolCol ->
+                        Just <| Filter name <| operationCons Operand.text
 
-                PBool _ ->
-                    Just <| Filter name <| operationCons Operand.text
+                    TimeWithoutTimezoneCol ->
+                        Just <| Filter name <| operationCons Operand.time
 
-                PTime _ ->
-                    Just <| Filter name <| operationCons Operand.time
+                    TimeCol ->
+                        Just <| Filter name <| operationCons Operand.time
 
-                PDate _ ->
-                    Just <| Filter name <| operationCons Operand.date
+                    TimestampWithoutTimezomeCol ->
+                        Just <| Filter name <| operationCons Operand.time
 
-                _ ->
-                    Nothing
+                    TimestampCol ->
+                        Just <| Filter name <| operationCons Operand.time
 
-        Nothing ->
-            Nothing
+                    DateCol ->
+                        Just <| Filter name <| operationCons Operand.date
+
+                    _ ->
+                        Nothing
+            )
 
 
 enumCons : Table -> (List String -> Operation) -> String -> Maybe Filter
 enumCons table operationCons name =
-    case Dict.get name table.columns of
-        Just column ->
-            let
-                choices =
-                    column.options |> List.filterMap Value.toString
-            in
-            if not (List.isEmpty choices) then
-                if operationCons choices == IsNull Nothing then
-                    Just <| Filter name <| OneOf <| Operand.enum choices Set.empty
+    Dict.get name table.columns
+        |> Maybe.andThen
+            (\column ->
+                let
+                    choices =
+                        column.options
+                            |> List.filterMap
+                                (\value ->
+                                    case value of
+                                        String str ->
+                                            Just str
+
+                                        _ ->
+                                            Nothing
+                                )
+                in
+                if not (List.isEmpty choices) then
+                    if operationCons choices == IsNull Nothing then
+                        Just <| Filter name <| OneOf <| Operand.enum choices Set.empty
+
+                    else
+                        Just <| Filter name <| operationCons choices
 
                 else
-                    Just <| Filter name <| operationCons choices
-
-            else
-                Nothing
-
-        Nothing ->
-            Nothing
+                    Nothing
+            )
