@@ -1,2 +1,5 @@
 static/main.js
 database/pgdata
+static/icono.min.css
+static/milligram.min.css
+static/redoc.standalone.js

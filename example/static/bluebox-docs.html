@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>PostgREST API Documentation</title>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+  </head>
+  <body>
+    <div id="redoc-container"></div>
+    <script src="redoc.standalone.js"></script>
+    <script>
+      // Fetch OpenAPI spec with custom headers
+      fetch('http://localhost:9080/', {
+        headers: {
+          'Accept-Profile': 'bluebox',
+          'Content-Profile': 'bluebox'
+        }
+      })
+        .then(response => response.json())
+        .then(spec => {
+          // Initialize Redoc with the fetched spec
+          Redoc.init(spec, {}, document.getElementById('redoc-container'));
+        })
+        .catch(error => {
+          console.error('Error loading API spec:', error);
+          document.getElementById('redoc-container').innerHTML =
+            '<p style="color: red; padding: 20px;">Error loading API documentation. Make sure PostgREST is running on http://localhost:9080/</p>';
+        });
+    </script>
+  </body>
+</html>
