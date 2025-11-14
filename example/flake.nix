@@ -14,17 +14,18 @@
       let
         postgresql = pkgs.postgresql_17.withPackages (ps: [
           ps.pgjwt
+          ps.postgis
         ]);
 
-        # Fetch Pagila sample database SQL files from GitHub
-        pagilaSchema = pkgs.fetchurl {
-          url = "https://raw.githubusercontent.com/devrimgunduz/pagila/master/pagila-schema.sql";
-          sha256 = "sha256-jONY5MgBQIe4UpZpSgiTiHvXpBkOPOQH8nIbhrmOVwc=";
+        # Fetch BlueBox sample database SQL files from GitHub
+        blueboxSchema = pkgs.fetchurl {
+          url = "https://raw.githubusercontent.com/ryanbooz/bluebox/main/bluebox_schema_v0.4.sql";
+          sha256 = "sha256-1LgfPkaVXG08rlusEclOHKsKaTOzLW8i+vzC0zRnxbM=";
         };
 
-        pagilaData = pkgs.fetchurl {
-          url = "https://raw.githubusercontent.com/devrimgunduz/pagila/master/pagila-data.sql";
-          sha256 = "sha256-iAWA+yzU2qqZ8pDO0mSYjN1lezFYvmPNKBRm95b22/I=";
+        blueboxData = pkgs.fetchurl {
+          url = "https://raw.githubusercontent.com/ryanbooz/bluebox/main/bluebox_dataonly_v0.4.sql.zip";
+          sha256 = "sha256-TXm47I3UWReyZo1KbhBNTTYMsccAYgnBZcTWfcRnGUE=";
         };
 
         # Helper script to load all SQL files
@@ -33,14 +34,19 @@
           export PGHOST=$PWD/database/pgdata
           export PGDATABASE=example
 
-          echo "Loading Pagila schema from ${pagilaSchema}..."
-          ${postgresql}/bin/psql --host="$PGHOST" -d example -f "${pagilaSchema}"
-
-          echo "Loading Pagila data from ${pagilaData}..."
-          ${postgresql}/bin/psql --host="$PGHOST" -d example -f "${pagilaData}"
-
           echo "Loading database schema from database/schema.sql..."
           ${postgresql}/bin/psql --host="$PGHOST" -d example -f "$PWD/database/schema.sql"
+
+          echo "Loading BlueBox schema from ${blueboxSchema}..."
+          ${postgresql}/bin/psql --host="$PGHOST" -d example -f "${blueboxSchema}"
+
+          echo "Extracting BlueBox data from ${blueboxData}..."
+          TMPDIR=$(mktemp -d)
+          ${pkgs.unzip}/bin/unzip -q "${blueboxData}" -d "$TMPDIR"
+
+          echo "Loading BlueBox data..."
+          ${postgresql}/bin/psql --host="$PGHOST" -d example -f "$TMPDIR/bluebox_dataonly_v0.4.sql"
+          rm -rf "$TMPDIR"
 
           echo "Loading sample data from database/data.sql..."
           ${postgresql}/bin/psql --host="$PGHOST" -d example -f "$PWD/database/data.sql"
@@ -48,7 +54,7 @@
           echo "Loading permissions from database/permissions.sql..."
           ${postgresql}/bin/psql --host="$PGHOST" -d example -f "$PWD/database/permissions.sql"
 
-          echo "Database loaded successfully (Pagila + custom schema + permissions)"
+          echo "Database loaded successfully (BlueBox + custom schema + permissions)"
         '';
 
         setup = pkgs.writeShellScriptBin "setup" ''
@@ -95,7 +101,7 @@
             echo "Database 'example' already exists"
           fi
 
-          # Load all SQL files (Pagila + custom schema)
+          # Load all SQL files (BlueBox + custom schema)
           load-sql
 
           # Stop PostgreSQL if we started it
@@ -230,7 +236,7 @@
             STARTED_POSTGRES=true
           fi
 
-          # Load all SQL files (Pagila + custom schema)
+          # Load all SQL files (BlueBox + custom schema)
           load-sql
 
           # Stop PostgreSQL if we started it
@@ -372,6 +378,7 @@
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
             curl
+            unzip
             postgresql
             postgrest
             elmPackages.elm

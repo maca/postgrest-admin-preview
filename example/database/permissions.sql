@@ -2,80 +2,30 @@
 -- This file contains all GRANT statements for exposing tables via PostgREST
 
 -- ============================================================================
--- PAGILA TABLES - DVD Rental Store Schema
+-- BLUEBOX SCHEMA - Grant usage and access
 -- ============================================================================
 
--- Grant SELECT to web_anon (anonymous/unauthenticated users) on all Pagila tables
-GRANT SELECT ON TABLE
-  public.actor,
-  public.address,
-  public.category,
-  public.city,
-  public.country,
-  public.customer,
-  public.film,
-  public.film_actor,
-  public.film_category,
-  public.inventory,
-  public.language,
-  public.payment,
-  public.rental,
-  public.staff,
-  public.store
-TO web_anon;
+-- Grant USAGE on bluebox schema to web_anon and bluebox roles
+GRANT USAGE ON SCHEMA bluebox TO web_anon;
+GRANT USAGE ON SCHEMA bluebox TO bluebox;
 
--- Grant full CRUD permissions to web_user (authenticated users) on all Pagila tables
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
-  public.actor,
-  public.address,
-  public.category,
-  public.city,
-  public.country,
-  public.customer,
-  public.film,
-  public.film_actor,
-  public.film_category,
-  public.inventory,
-  public.language,
-  public.payment,
-  public.rental,
-  public.staff,
-  public.store
-TO web_user;
+-- Grant SELECT to web_anon (anonymous/unauthenticated users) on all tables in bluebox schema
+GRANT SELECT ON ALL TABLES IN SCHEMA bluebox TO web_anon;
 
--- Grant sequence usage for Pagila tables to web_anon
-GRANT USAGE, SELECT ON SEQUENCE
-  public.actor_actor_id_seq,
-  public.address_address_id_seq,
-  public.category_category_id_seq,
-  public.city_city_id_seq,
-  public.country_country_id_seq,
-  public.customer_customer_id_seq,
-  public.film_film_id_seq,
-  public.inventory_inventory_id_seq,
-  public.language_language_id_seq,
-  public.payment_payment_id_seq,
-  public.rental_rental_id_seq,
-  public.staff_staff_id_seq,
-  public.store_store_id_seq
-TO web_anon;
+-- Grant full CRUD permissions to bluebox role (authenticated users) on all tables in bluebox schema
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA bluebox TO bluebox;
 
--- Grant sequence usage for Pagila tables to web_user
-GRANT USAGE, SELECT ON SEQUENCE
-  public.actor_actor_id_seq,
-  public.address_address_id_seq,
-  public.category_category_id_seq,
-  public.city_city_id_seq,
-  public.country_country_id_seq,
-  public.customer_customer_id_seq,
-  public.film_film_id_seq,
-  public.inventory_inventory_id_seq,
-  public.language_language_id_seq,
-  public.payment_payment_id_seq,
-  public.rental_rental_id_seq,
-  public.staff_staff_id_seq,
-  public.store_store_id_seq
-TO web_user;
+-- Grant sequence usage for bluebox schema to web_anon
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA bluebox TO web_anon;
+
+-- Grant sequence usage for bluebox schema to bluebox role
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA bluebox TO bluebox;
+
+-- Set default privileges for future tables in bluebox schema
+ALTER DEFAULT PRIVILEGES IN SCHEMA bluebox GRANT SELECT ON TABLES TO web_anon;
+ALTER DEFAULT PRIVILEGES IN SCHEMA bluebox GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO bluebox;
+ALTER DEFAULT PRIVILEGES IN SCHEMA bluebox GRANT USAGE, SELECT ON SEQUENCES TO web_anon;
+ALTER DEFAULT PRIVILEGES IN SCHEMA bluebox GRANT USAGE, SELECT ON SEQUENCES TO bluebox;
 
 
 -- ============================================================================

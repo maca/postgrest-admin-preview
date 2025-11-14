@@ -26,19 +26,23 @@ BEGIN
 END
 $$;
 
--- Create authenticated user role
+-- Create authenticated user role for bluebox
 -- This role is used for authenticated users
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'web_user') THEN
-    CREATE ROLE web_user NOLOGIN;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'bluebox') THEN
+    CREATE ROLE bluebox NOLOGIN;
   END IF;
 END
 $$;
 
--- Grant the authenticator role permission to switch to web_anon and web_user
+-- Grant the authenticator role permission to switch to web_anon and bluebox
 GRANT web_anon TO authenticator;
-GRANT web_user TO authenticator;
+GRANT bluebox TO authenticator;
+
+-- Configure search_path for bluebox role to use bluebox schema
+-- Users table stays in public schema (default)
+ALTER ROLE bluebox SET search_path TO bluebox, public;
 
 -- Create users table for authentication
 CREATE TABLE IF NOT EXISTS users (
@@ -49,11 +53,13 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- Login function that validates credentials and returns a JWT
--- Usage: POST to /rpc/login with body: {"email": "user@example.com", "password": "password"}
+-- Usage: POST to /rpc/login with body: {"email": "bluebox@example.com", "password": "password"}
+-- The schema is determined from the email prefix (e.g., "bluebox" from "bluebox@example.com")
 CREATE OR REPLACE FUNCTION login(email text, password text)
 RETURNS json AS $$
 DECLARE
   _user users;
+  _schema_name text;
   jwt_token text;
 BEGIN
   -- Find user by email
@@ -73,13 +79,19 @@ BEGIN
       detail = '{"status": 401, "headers": {}}';
   END IF;
 
+  -- Extract schema name from email (part before @)
+  -- e.g., "bluebox" from "bluebox@example.com"
+  _schema_name := split_part(_user.email, '@', 1);
+
   -- Generate JWT token using HS256 with hardcoded secret (must match jwt-secret in postgrest.conf)
+  -- Token expires in 30 minutes (1800 seconds)
   jwt_token := sign(
     json_build_object(
-      'role', 'web_user',
+      'role', 'bluebox',
       'user_id', _user.id,
       'email', _user.email,
-      'exp', extract(epoch from now() + interval '1 hour')::integer
+      'schema', _schema_name,
+      'exp', extract(epoch from now() + interval '30 minutes')::integer
     ),
     'DL+P8+muauKgOSqRKqIKMkjcUpLZ5ajXScgA965i/Bg='
   );
@@ -88,7 +100,8 @@ BEGIN
     'token', jwt_token,
     'user', json_build_object(
       'id', _user.id,
-      'email', _user.email
+      'email', _user.email,
+      'schema', _schema_name
     )
   );
 END;
