@@ -14,9 +14,9 @@
     <script type="text/javascript">
       const app = Elm.Main.init({ jwt: sessionStorage.getItem("jwt") })
 
-     app.ports.loginSuccess.subscribe(jwt => {
-        console.log("got token: ", jwt)
-        sessionStorage.setItem("jwt", jwt)
-      });
+     <!-- app.ports.loginSuccess.subscribe(jwt => { -->
+        <!-- console.log("got token: ", jwt) -->
+        <!-- sessionStorage.setItem("jwt", jwt) -->
+      <!-- }); -->
     </script>
 <body>

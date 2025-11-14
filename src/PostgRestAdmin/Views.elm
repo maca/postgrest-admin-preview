@@ -2,7 +2,7 @@ module PostgRestAdmin.Views exposing (renderValue)
 
 import Html exposing (Html)
 import Html.Attributes as Attrs
-import Internal.Schema exposing (Column, ColumnType(..), Value(..))
+import Internal.Schema as Schema exposing (Column, ColumnType(..), Value(..))
 import Iso8601
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath)
 import Time.Extra as Time
@@ -78,4 +78,7 @@ renderValue mountPath col value =
                 [ Attrs.href
                     (MountPath.path mountPath (ref.tableName ++ "/" ++ ref.primaryKey))
                 ]
-                [ Html.text (ref.label ++ " - " ++ ref.primaryKey) ]
+                [ Schema.valueToString value
+                    |> Maybe.withDefault ""
+                    |> Html.text
+                ]

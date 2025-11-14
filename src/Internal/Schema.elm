@@ -1,6 +1,6 @@
 module Internal.Schema exposing
     ( Schema, Column, ColumnType(..)
-    , Constraint(..), ForeignKeyParams, Reference
+    , Constraint(..), Reference
     , Table, label
     , tablePrimaryKey, tablePrimaryKeyName
     , tableToSortedColumnList
@@ -19,7 +19,7 @@ module Internal.Schema exposing
 @docs tableToSortedColumnList
 @docs decoder, valueDecoder
 @docs Record, Value
-@docs buildParentReference, buildReferences, recordDecoder
+@docs buildParentReference, buildReferences
 
 -}
 
@@ -49,7 +49,7 @@ type ColumnType
 type Constraint
     = NoConstraint
     | PrimaryKey
-    | ForeignKey ForeignKeyParams
+    | ForeignKey Reference
 
 
 type alias Column =
@@ -61,10 +61,10 @@ type alias Column =
     }
 
 
-type alias ForeignKeyParams =
+type alias Reference =
     { tableName : String
-    , primaryKeyName : String
-    , labelColumnName : Maybe String
+    , foreignKey : String
+    , labelColumn : Maybe String
     }
 
 
@@ -75,18 +75,12 @@ type alias Table =
     }
 
 
-type alias Reference =
-    { foreignKeyName : String
-    , tableName : String
-    }
-
-
 type Value
     = String String
     | Bool Bool
     | Int Int
     | Float Float
-    | Ref { tableName : String, primaryKey : String, label : String }
+    | Ref { tableName : String, primaryKey : String, label : Maybe String }
     | Blank
 
 
@@ -109,7 +103,9 @@ valueToString value =
             Just (String.fromFloat float)
 
         Ref ref ->
-            Just (ref.label ++ " - " ++ ref.primaryKey)
+            List.filterMap identity [ ref.label, Just ref.primaryKey ]
+                |> String.join " - "
+                |> Just
 
         Blank ->
             Nothing
@@ -333,8 +329,8 @@ columnConstraint tableAliases colNames description =
             in
             ForeignKey
                 { tableName = table
-                , primaryKeyName = primaryKeyName
-                , labelColumnName =
+                , foreignKey = primaryKeyName
+                , labelColumn =
                     Dict.get table colNames
                         |> Maybe.andThen
                             (\requiredCols ->
@@ -398,8 +394,9 @@ buildReferencedBy schema table =
                     case column.constraint of
                         ForeignKey foreignKey ->
                             if foreignKey.tableName == table.name then
-                                { foreignKeyName = columnName
+                                { foreignKey = columnName
                                 , tableName = otherTable.name
+                                , labelColumn = foreignKey.labelColumn
                                 }
                                     :: columnsAcc
 
@@ -416,7 +413,7 @@ buildReferencedBy schema table =
         schema
 
 
-buildReferences : Table -> Dict String ForeignKeyParams
+buildReferences : Table -> Dict String Reference
 buildReferences table =
     Dict.foldl
         (\colName column acc ->
@@ -450,12 +447,12 @@ buildParentReference schema table parent =
             Maybe.map
                 (\labelColumn ->
                     { parentTable = parentTable
-                    , parentPrimaryKey = ref.primaryKeyName
+                    , parentPrimaryKey = ref.foreignKey
                     , parentId = parent.id
                     , parentLabelColumn = labelColumn
                     }
                 )
-                ref.labelColumnName
+                ref.labelColumn
         )
         (Dict.get parent.tableName schema)
         (buildReferences table

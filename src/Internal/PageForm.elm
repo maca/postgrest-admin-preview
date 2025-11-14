@@ -91,7 +91,7 @@ init { client, navKey, mountPath, table, id, parent } =
     )
 
 
-fetchAutcompleteValues : Client -> ( String, Schema.ForeignKeyParams ) -> AppCmd.Cmd Msg
+fetchAutcompleteValues : Client -> ( String, Schema.Reference ) -> AppCmd.Cmd Msg
 fetchAutcompleteValues client ( colName, ref ) =
     Client.count
         { client = client
@@ -99,7 +99,7 @@ fetchAutcompleteValues client ( colName, ref ) =
         }
         |> Task.andThen
             (\count ->
-                case ( count < 1000, ref.labelColumnName ) of
+                case ( count < 1000, ref.labelColumn ) of
                     ( True, Just labelColumnName ) ->
                         Client.task
                             { client = client
@@ -113,7 +113,7 @@ fetchAutcompleteValues client ( colName, ref ) =
                                     , PG.toQueryString
                                         [ PG.select
                                             (PG.attributes
-                                                [ ref.primaryKeyName
+                                                [ ref.foreignKey
                                                 , labelColumnName
                                                 ]
                                             )
@@ -126,7 +126,7 @@ fetchAutcompleteValues client ( colName, ref ) =
                                         (Decode.oneOf
                                             [ Decode.map2
                                                 (\id label -> Just { id = id, label = label })
-                                                (Decode.field ref.primaryKeyName
+                                                (Decode.field ref.foreignKey
                                                     (Decode.oneOf
                                                         [ Decode.string
                                                         , Decode.float |> Decode.map String.fromFloat

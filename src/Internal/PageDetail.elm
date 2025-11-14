@@ -94,7 +94,7 @@ update msg model =
                             , path =
                                 Url.absolute
                                     [ ref.tableName ]
-                                    [ Url.string ref.foreignKeyName ("eq." ++ model.id) ]
+                                    [ Url.string ref.foreignKey ("eq." ++ model.id) ]
                             }
                             |> Task.attempt (GotCount ref.tableName)
                             |> AppCmd.wrap

@@ -582,7 +582,7 @@ listingPath :
     { limit : Bool, selectAll : Bool, nest : Bool }
     -> Model
     -> String
-listingPath { limit, selectAll, nest } ({ parent } as model) =
+listingPath { limit, selectAll, nest } model =
     let
         selectQuery =
             if selectAll then
@@ -622,9 +622,9 @@ listingPath { limit, selectAll, nest } ({ parent } as model) =
             if nest then
                 Url.absolute
                     (List.filterMap identity
-                        [ -- Maybe.map (Record.getTable >> .name) parent
-                          -- , Maybe.andThen Record.id parent
-                          Just model.table.name
+                        [ Maybe.map .tableName model.parent
+                        , Maybe.map .id model.parent
+                        , Just model.table.name
                         ]
                     )
                     (orderToQueryParams model.order)

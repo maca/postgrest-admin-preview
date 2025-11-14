@@ -69,7 +69,7 @@ import Dict exposing (Dict)
 import Dict.Extra as Dict
 import Http
 import Internal.Cmd as AppCmd
-import Internal.Schema as Schema exposing (Column, Constraint(..), Table, Value(..), buildReferences)
+import Internal.Schema as Schema exposing (Column, Constraint(..), Table, Value(..))
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 import Parser exposing ((|.), (|=), Parser)
@@ -730,11 +730,11 @@ associationJoin : Column -> Maybe Selectable
 associationJoin { constraint } =
     case constraint of
         ForeignKey fk ->
-            fk.labelColumnName
+            fk.labelColumn
                 |> Maybe.map
                     (\n ->
                         PG.resource fk.tableName
-                            (PG.attributes [ n, fk.primaryKeyName ])
+                            (PG.attributes [ n, fk.foreignKey ])
                     )
 
         _ ->
@@ -759,35 +759,33 @@ recordDecoder table =
 
 columnDecoder : String -> Schema.Column -> Decoder Value
 columnDecoder name col =
-    (case ( col.constraint, col ) of
+    let
+        idDecoder =
+            Decode.oneOf
+                [ Decode.string
+                , Decode.float |> Decode.map String.fromFloat
+                ]
+    in
+    case ( col.constraint, col ) of
         ( ForeignKey ref, _ ) ->
-            ref.labelColumnName
-                |> Maybe.map
-                    (\labelCol ->
-                        Decode.field ref.tableName
-                            (Decode.map2
-                                (\pk label ->
-                                    Ref
-                                        { tableName = ref.tableName
-                                        , primaryKey = pk
-                                        , label = label
-                                        }
-                                )
-                                (Decode.field ref.primaryKeyName
-                                    (Decode.oneOf
-                                        [ Decode.string
-                                        , Decode.float |> Decode.map String.fromFloat
-                                        ]
-                                    )
-                                )
-                                (Decode.field labelCol Decode.string)
-                            )
+            Decode.oneOf
+                [ Decode.field ref.tableName
+                    (Decode.map2 Tuple.pair
+                        (ref.labelColumn
+                            |> Maybe.map (\c -> Decode.maybe (Decode.field c Decode.string))
+                            |> Maybe.withDefault (Decode.succeed Nothing)
+                        )
+                        (Decode.field ref.foreignKey idDecoder)
+                    )
+                , Decode.field name idDecoder |> Decode.map (Tuple.pair Nothing)
+                ]
+                |> Decode.map
+                    (\( label, id ) ->
+                        Ref { tableName = ref.tableName, primaryKey = id, label = label }
                     )
 
         _ ->
-            Nothing
-    )
-        |> Maybe.withDefault (Decode.field name Schema.valueDecoder)
+            Decode.field name Schema.valueDecoder
 
 
 countParser : Parser Count
