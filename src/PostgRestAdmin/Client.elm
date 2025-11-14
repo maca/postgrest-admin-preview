@@ -9,7 +9,7 @@ module PostgRestAdmin.Client exposing
     , fetchSchema, schemaIsLoaded
     , endpoint
     , authSchemeConfig, authUrl, authUrlDecoder, basic, encoder, jwtDecoder
-    , associationJoin, bytesRequest, chunk, fetchParentLabel, recordDecoder
+    , associationJoin, bytesRequest, chunk, fetchParentLabel, jsonResolver, recordDecoder
     )
 
 {-| PostgREST client for Elm applications.
@@ -121,6 +121,7 @@ type alias Client =
     { host : Url
     , authScheme : AuthScheme
     , schema : Schema.Schema
+    , headers : List Http.Header
     }
 
 
@@ -202,11 +203,12 @@ jwtDecoder _ =
 -- CLIENT FUNCTIONS
 
 
-init : Url -> AuthScheme -> Client
-init url authScheme =
+init : Url -> AuthScheme -> List Http.Header -> Client
+init url authScheme headers =
     { host = url
     , authScheme = authScheme
     , schema = Dict.empty
+    , headers = headers
     }
 
 
@@ -243,13 +245,13 @@ fetchSchema :
     -> Client
     -> Task Error Schema.Schema
 fetchSchema config client =
-    Http.task
-        { method = "GET"
-        , headers = List.filterMap identity [ authHeader client ]
-        , url = endpoint client "/"
+    task
+        { client = client
+        , method = "GET"
+        , headers = []
+        , path = "/"
         , body = Http.emptyBody
         , resolver = jsonResolver (Schema.decoder config)
-        , timeout = Nothing
         }
 
 
@@ -393,17 +395,13 @@ fetchRecord { client, table, id } =
                     ]
                 )
     in
-    Http.task
-        { method = "GET"
-        , headers =
-            List.filterMap identity
-                [ authHeader client
-                , Just (Http.header "Accept" "application/vnd.pgrst.object+json")
-                ]
-        , url = endpoint client ("/" ++ table.name ++ "?" ++ queryStr)
+    task
+        { client = client
+        , method = "GET"
+        , headers = [ Http.header "Accept" "application/vnd.pgrst.object+json" ]
+        , path = "/" ++ table.name ++ "?" ++ queryStr
         , body = Http.emptyBody
         , resolver = jsonResolver (recordDecoder table)
-        , timeout = Nothing
         }
 
 
@@ -414,17 +412,13 @@ fetchRecords :
     }
     -> Task Error ( List Schema.Record, Count )
 fetchRecords { client, table, path } =
-    Http.task
-        { method = "GET"
-        , headers =
-            List.filterMap identity
-                [ authHeader client
-                , Just (Http.header "Prefer" "count=exact")
-                ]
-        , url = endpoint client path
+    task
+        { client = client
+        , method = "GET"
+        , headers = [ Http.header "Prefer" "count=exact" ]
+        , path = path
         , body = Http.emptyBody
         , resolver = countResolver (Decode.list (recordDecoder table))
-        , timeout = Nothing
         }
 
 
@@ -450,17 +444,13 @@ fetchParentLabel client params =
                 , PG.limit 1
                 ]
     in
-    Http.task
-        { method = "GET"
-        , headers =
-            List.filterMap identity
-                [ authHeader client
-                , Just (Http.header "Accept" "application/vnd.pgrst.object+json")
-                ]
-        , url = endpoint client ("/" ++ params.parentTable.name ++ "?" ++ queryString)
+    task
+        { client = client
+        , method = "GET"
+        , headers = [ Http.header "Accept" "application/vnd.pgrst.object+json" ]
+        , path = "/" ++ params.parentTable.name ++ "?" ++ queryString
         , body = Http.emptyBody
         , resolver = jsonResolver (Decode.field params.parentLabelColumn Decode.string)
-        , timeout = Nothing
         }
 
 
@@ -492,18 +482,16 @@ saveRecord { client, body, table, decoder, id, expect } =
     in
     AppCmd.wrap <|
         Task.attempt expect <|
-            Http.task
-                { method = method
+            task
+                { client = client
+                , method = method
                 , headers =
-                    List.filterMap identity
-                        [ authHeader client
-                        , Just (Http.header "Prefer" "return=representation")
-                        , Just (Http.header "Accept" "application/vnd.pgrst.object+json")
-                        ]
-                , url = endpoint client path
+                    [ Http.header "Prefer" "return=representation"
+                    , Http.header "Accept" "application/vnd.pgrst.object+json"
+                    ]
+                , path = path
                 , body = Http.jsonBody body
                 , resolver = jsonResolver decoder
-                , timeout = Nothing
                 }
 
 
@@ -554,7 +542,7 @@ deleteRecord { client, table, id, expect } =
                 , headers = []
                 , path = "/" ++ table.name ++ "?" ++ queryStr
                 , body = Http.emptyBody
-                , decoder = Decode.succeed ()
+                , resolver = jsonResolver (Decode.succeed ())
                 }
 
 
@@ -571,7 +559,14 @@ request :
     }
     -> AppCmd.Cmd msg
 request params =
-    task params
+    task
+        { client = params.client
+        , method = params.method
+        , headers = params.headers
+        , path = params.path
+        , body = params.body
+        , resolver = jsonResolver params.decoder
+        }
         |> Task.attempt params.expect
         |> AppCmd.wrap
 
@@ -583,22 +578,23 @@ task :
         , headers : List Http.Header
         , path : String
         , body : Http.Body
-        , decoder : Decoder b
+        , resolver : Http.Resolver Error b
     }
     -> Task Error b
-task { client, method, headers, path, body, decoder } =
+task { client, method, headers, path, body, resolver } =
     Http.task
         { method = method
         , headers =
             List.concat
-                [ authHeader client
+                [ client.headers
+                , authHeader client
                     |> Maybe.map List.singleton
                     |> Maybe.withDefault []
                 , headers
                 ]
         , url = endpoint client path
         , body = body
-        , resolver = jsonResolver decoder
+        , resolver = resolver
         , timeout = Nothing
         }
 
@@ -628,7 +624,7 @@ chunk client table primaryKeyName ids =
         , path =
             Url.Builder.absolute [ table.name ] existenceQuery
         , body = Http.emptyBody
-        , decoder = Decode.list (Decode.dict Schema.valueDecoder)
+        , resolver = jsonResolver (Decode.list (Decode.dict Schema.valueDecoder))
         }
 
 
@@ -642,19 +638,13 @@ bytesRequest :
     }
     -> Task Error Bytes
 bytesRequest { client, method, headers, path, body } =
-    Http.task
-        { method = method
-        , headers =
-            List.concat
-                [ authHeader client
-                    |> Maybe.map List.singleton
-                    |> Maybe.withDefault []
-                , headers
-                ]
-        , url = endpoint client path
+    task
+        { client = client
+        , method = method
+        , headers = headers
+        , path = path
         , body = body
         , resolver = Http.bytesResolver (resolve (always Ok))
-        , timeout = Nothing
         }
 
 
@@ -672,28 +662,23 @@ requestMany :
 requestMany { client, method, headers, path, decoder, body, expect } =
     AppCmd.wrap <|
         Task.attempt expect <|
-            Http.task
-                { method = method
-                , headers =
-                    List.filterMap identity
-                        (authHeader client :: List.map Just headers)
-                , url = endpoint client path
+            task
+                { client = client
+                , method = method
+                , headers = headers
+                , path = path
                 , body = body
                 , resolver = countResolver (Decode.list decoder)
-                , timeout = Nothing
                 }
 
 
 count : { client : Client, path : String } -> Task Error Int
 count { client, path } =
-    Http.task
-        { method = "HEAD"
-        , headers =
-            List.filterMap identity
-                [ authHeader client
-                , Just (Http.header "Prefer" "count=exact")
-                ]
-        , url = endpoint client path
+    task
+        { client = client
+        , method = "HEAD"
+        , headers = [ Http.header "Prefer" "count=exact" ]
+        , path = path
         , body = Http.emptyBody
         , resolver =
             Http.bytesResolver
@@ -710,7 +695,6 @@ count { client, path } =
                                 Err (BadHeader "content-range")
                     )
                 )
-        , timeout = Nothing
         }
 
 

@@ -21,6 +21,7 @@ module PostgRestAdmin.Config exposing
     , onLogout
     , routes
     , flagsDecoder
+    , clientHeaders
     )
 
 {-|
@@ -43,6 +44,7 @@ module PostgRestAdmin.Config exposing
 @docs formFields
 @docs detailActions
 @docs menuLinks
+@docs clientHeaders
 
 
 # Tables
@@ -90,6 +92,7 @@ to get a better understanding of JWT and roles in PostgREST.
 import Browser.Navigation as Nav
 import Dict exposing (Dict)
 import Html exposing (Html)
+import Http
 import Internal.Cmd as AppCmd
 import Internal.Config as Config
 import Internal.Schema exposing (Record)
@@ -400,6 +403,35 @@ Program flags take precedence.
 menuLinks : List ( String, String ) -> Config f m msg -> Config f m msg
 menuLinks =
     Config.menuLinks
+
+
+{-| Set default HTTP headers to be included in all Client requests. This is
+useful for setting headers like `Accept-Profile` or `Content-Profile` when
+working with PostgREST schemas.
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.clientHeaders
+                [ Http.header "Accept-Profile" "bluebox"
+                , Http.header "Content-Profile" "bluebox"
+                ]
+            |> PostgRestAdmin.application
+
+Alternatively headers can be specified using flags with `clientHeaders`.
+Program flags take precedence.
+
+    Elm.Main.init({
+        "clientHeaders" : {
+            "Accept-Profile": "bluebox",
+            "Content-Profile": "bluebox"
+        }
+    })
+
+-}
+clientHeaders : List Http.Header -> Config f m msg -> Config f m msg
+clientHeaders =
+    Config.clientHeaders
 
 
 {-| Rename a table referenced in a foreign key. PostgREST OpenApi genreated docs

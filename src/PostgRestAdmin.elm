@@ -161,6 +161,7 @@ applicationParams decoder =
                 |> Flag.stringList "tables" Config.tablesDecoder
                 |> Flag.stringDict "tableAliases" Config.tableAliasesDecoder
                 |> Flag.linksList "menuLinks" Config.menuLinksDecoder
+                |> Flag.headersList "clientHeaders" Config.clientHeadersDecoder
             )
     , update = update
     , view = view
@@ -247,7 +248,7 @@ init decoder flags url key =
             , key = key
             , notification = Notification.none
             , error = Nothing
-            , client = Client.init config.host config.authScheme
+            , client = Client.init config.host config.authScheme config.clientHeaders
             , onLogin =
                 Maybe.withDefault ""
                     >> config.onLogin

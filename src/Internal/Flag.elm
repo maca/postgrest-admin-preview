@@ -1,5 +1,6 @@
 module Internal.Flag exposing
-    ( linksList
+    ( headersList
+    , linksList
     , string
     , stringDict
     , stringList
@@ -7,6 +8,7 @@ module Internal.Flag exposing
     )
 
 import Dict exposing (Dict)
+import Http
 import Json.Decode as Decode exposing (Decoder)
 
 
@@ -54,6 +56,22 @@ linksList =
                 (Decode.field "text" Decode.string)
                 (Decode.field "url" Decode.string)
             )
+        )
+
+
+headersList :
+    String
+    -> (List Http.Header -> c -> Decoder c)
+    -> Decoder c
+    -> Decoder c
+headersList =
+    custom
+        (Decode.dict Decode.string
+            |> Decode.map
+                (\dict ->
+                    Dict.toList dict
+                        |> List.map (\( name, value ) -> Http.header name value)
+                )
         )
 
 

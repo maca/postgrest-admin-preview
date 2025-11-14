@@ -120,22 +120,24 @@ fetchAutcompleteValues client ( colName, ref ) =
                                         ]
                                     ]
                             , body = Http.emptyBody
-                            , decoder =
-                                Decode.list
-                                    (Decode.oneOf
-                                        [ Decode.map2
-                                            (\id label -> Just { id = id, label = label })
-                                            (Decode.field ref.primaryKeyName
-                                                (Decode.oneOf
-                                                    [ Decode.string
-                                                    , Decode.float |> Decode.map String.fromFloat
-                                                    ]
+                            , resolver =
+                                Client.jsonResolver
+                                    (Decode.list
+                                        (Decode.oneOf
+                                            [ Decode.map2
+                                                (\id label -> Just { id = id, label = label })
+                                                (Decode.field ref.primaryKeyName
+                                                    (Decode.oneOf
+                                                        [ Decode.string
+                                                        , Decode.float |> Decode.map String.fromFloat
+                                                        ]
+                                                    )
                                                 )
-                                            )
-                                            (Decode.field labelColumnName Decode.string)
-                                        ]
+                                                (Decode.field labelColumnName Decode.string)
+                                            ]
+                                        )
+                                        |> Decode.map (List.filterMap identity >> Local)
                                     )
-                                    |> Decode.map (List.filterMap identity >> Local)
                             }
 
                     _ ->
@@ -168,7 +170,7 @@ fetch client table ( primaryKeyName, recordId ) =
         , headers = [ Http.header "Accept" "application/vnd.pgrst.object+json" ]
         , path = "/" ++ table.name ++ "?" ++ queryString
         , body = Http.emptyBody
-        , decoder = Decode.value
+        , resolver = Client.jsonResolver Decode.value
         }
         |> Task.attempt Fetched
         |> AppCmd.wrap

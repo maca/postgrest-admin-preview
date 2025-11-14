@@ -24,9 +24,12 @@ module Internal.Config exposing
     , tableAliasesDecoder
     , tables
     , tablesDecoder
+    , clientHeaders
+    , clientHeadersDecoder
     )
 
 import Dict exposing (Dict)
+import Http
 import Internal.Application as Application
 import Internal.Flag as Flag
 import Internal.Schema exposing (Record)
@@ -67,6 +70,7 @@ type alias Config flags model msg =
     , onLogout : () -> Cmd msg
     , tableAliases : Dict String String
     , flagsDecoder : Decoder flags
+    , clientHeaders : List Http.Header
     }
 
 
@@ -250,6 +254,22 @@ menuLinksDecoder links conf =
     Decode.succeed { conf | menuLinks = links }
 
 
+clientHeaders :
+    List Http.Header
+    -> Decoder (Config f m msg)
+    -> Decoder (Config f m msg)
+clientHeaders headers =
+    Decode.andThen (clientHeadersDecoder headers)
+
+
+clientHeadersDecoder :
+    List Http.Header
+    -> Config f m msg
+    -> Decoder (Config f m msg)
+clientHeadersDecoder headers conf =
+    Decode.succeed { conf | clientHeaders = headers }
+
+
 default : Config f m msg
 default =
     { authScheme = Client.unset
@@ -274,4 +294,5 @@ default =
     , onLogout = always Cmd.none
     , tableAliases = Dict.empty
     , flagsDecoder = Decode.fail "No flags decoder provided"
+    , clientHeaders = []
     }
