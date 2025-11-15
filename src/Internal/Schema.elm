@@ -2,7 +2,7 @@ module Internal.Schema exposing
     ( Schema, Column, ColumnType(..)
     , Constraint(..), Reference
     , Table, label
-    , tablePrimaryKey, tablePrimaryKeyName
+    , tablePrimaryKeyName
     , tableToSortedColumnList
     , decoder, valueDecoder
     , Record, Value(..)
@@ -15,7 +15,7 @@ module Internal.Schema exposing
 @docs Schema, Column, ColumnType
 @docs Constraint, ForeignKeyParams, Reference
 @docs Table, columnNames, label
-@docs tablePrimaryKey, tablePrimaryKeyName
+@docs tablePrimaryKeyName
 @docs tableToSortedColumnList
 @docs decoder, valueDecoder
 @docs Record, Value

@@ -1,15 +1,12 @@
 module PostgRestAdmin.Client exposing
     ( Client, init
     , Count
-    , fetchRecord, fetchRecords, saveRecord, deleteRecord
-    , request, requestMany, task
-    , count
+    , fetchRecord, fetchRecords, saveRecord, deleteRecord, count, fetchParentLabel
+    , jsonRequest, bytesRequest, chunk
     , Error(..), errorToString
     , AuthScheme(..), jwt, unset, toJwtString, authHeader, updateJwt, logout
     , fetchSchema, schemaIsLoaded
-    , endpoint
-    , authSchemeConfig, authUrl, authUrlDecoder, basic, encoder, jwtDecoder
-    , associationJoin, bytesRequest, chunk, fetchParentLabel, jsonResolver, recordDecoder
+    , associationJoin
     )
 
 {-| PostgREST client for Elm applications.
@@ -23,9 +20,8 @@ module PostgRestAdmin.Client exposing
 # Requests
 
 @docs Count
-@docs fetchRecord, fetchRecords, saveRecord, deleteRecord
-@docs request, requestMany, task
-@docs count
+@docs fetchRecord, fetchRecords, saveRecord, deleteRecord, count, fetchParentLabel
+@docs jsonRequest, bytesRequest, chunk
 
 
 # Errors
@@ -33,7 +29,7 @@ module PostgRestAdmin.Client exposing
 @docs Error, errorToString
 
 
-# Authentication
+# Auth
 
 @docs AuthScheme, jwt, unset, toJwtString, authHeader, updateJwt, logout
 
@@ -41,34 +37,13 @@ module PostgRestAdmin.Client exposing
 # Schema
 
 @docs fetchSchema, schemaIsLoaded
-
-
-# Resolvers
-
-@docs Response
-
-
-# Tasks
-
-
-# Utilities
-
-@docs endpoint
-
-
-# Advanced
-
-Functions for advanced configuration and internal use.
-
-@docs authSchemeConfig, authUrl, authUrlDecoder, basic, encoder, jwtDecoder, removeLeadingOrTrailingSlash
+@docs associationJoin
 
 -}
 
 import Bytes exposing (Bytes)
 import Dict exposing (Dict)
-import Dict.Extra as Dict
 import Http
-import Internal.Cmd as AppCmd
 import Internal.Schema as Schema exposing (Column, Constraint(..), Table, Value(..))
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
@@ -155,21 +130,6 @@ authHeader client =
 -- AUTH CONFIG
 
 
-authSchemeConfig : Decoder AuthScheme
-authSchemeConfig =
-    Decode.oneOf
-        [ Decode.field "jwt" Decode.string
-            |> Decode.map (Debug.log "jwt")
-            |> Decode.map (\token -> Jwt (PG.jwt token))
-        , Decode.succeed Unset
-        ]
-
-
-basic : AuthScheme -> AuthScheme
-basic auth =
-    auth
-
-
 jwt : String -> AuthScheme
 jwt tokenStr =
     Jwt (PG.jwt tokenStr)
@@ -178,26 +138,6 @@ jwt tokenStr =
 unset : AuthScheme
 unset =
     Unset
-
-
-authUrl : String -> Decoder AuthScheme -> Decoder AuthScheme
-authUrl urlStr =
-    Decode.andThen (authUrlDecoder urlStr)
-
-
-authUrlDecoder : String -> AuthScheme -> Decoder AuthScheme
-authUrlDecoder _ authScheme =
-    Decode.succeed authScheme
-
-
-encoder : (Dict String String -> Encode.Value) -> Decoder AuthScheme -> Decoder AuthScheme
-encoder _ =
-    identity
-
-
-jwtDecoder : Decoder String -> Decoder AuthScheme -> Decoder AuthScheme
-jwtDecoder _ =
-    identity
 
 
 
@@ -461,10 +401,9 @@ saveRecord :
     , table : Table
     , id : Maybe String
     , decoder : Decode.Decoder a
-    , expect : Result Error a -> msg
     }
-    -> AppCmd.Cmd msg
-saveRecord { client, body, table, decoder, id, expect } =
+    -> Task.Task Error a
+saveRecord { client, body, table, decoder, id } =
     let
         queryString =
             PG.toQueryString [ PG.select (selects table) ]
@@ -481,19 +420,17 @@ saveRecord { client, body, table, decoder, id, expect } =
                     , "POST"
                     )
     in
-    AppCmd.wrap <|
-        Task.attempt expect <|
-            task
-                { client = client
-                , method = method
-                , headers =
-                    [ Http.header "Prefer" "return=representation"
-                    , Http.header "Accept" "application/vnd.pgrst.object+json"
-                    ]
-                , path = path
-                , body = Http.jsonBody body
-                , resolver = jsonResolver decoder
-                }
+    task
+        { client = client
+        , method = method
+        , headers =
+            [ Http.header "Prefer" "return=representation"
+            , Http.header "Accept" "application/vnd.pgrst.object+json"
+            ]
+        , path = path
+        , body = Http.jsonBody body
+        , resolver = jsonResolver decoder
+        }
 
 
 {-| Deletes a record.
@@ -521,10 +458,9 @@ deleteRecord :
     { client : Client
     , table : Table
     , id : String
-    , expect : Result Error () -> msg
     }
-    -> AppCmd.Cmd msg
-deleteRecord { client, table, id, expect } =
+    -> Task.Task Error ()
+deleteRecord { client, table, id } =
     let
         queryStr =
             PG.toQueryString
@@ -535,31 +471,28 @@ deleteRecord { client, table, id, expect } =
                     ]
                 )
     in
-    AppCmd.wrap <|
-        Task.attempt expect <|
-            task
-                { client = client
-                , method = "DELETE"
-                , headers = []
-                , path = "/" ++ table.name ++ "?" ++ queryStr
-                , body = Http.emptyBody
-                , resolver = jsonResolver (Decode.succeed ())
-                }
+    task
+        { client = client
+        , method = "DELETE"
+        , headers = []
+        , path = "/" ++ table.name ++ "?" ++ queryStr
+        , body = Http.emptyBody
+        , resolver = jsonResolver (Decode.succeed ())
+        }
 
 
 {-| Perform a request
 -}
-request :
+jsonRequest :
     { client : Client
     , method : String
     , headers : List Http.Header
     , path : String
     , body : Http.Body
     , decoder : Decoder a
-    , expect : Result Error a -> msg
     }
-    -> AppCmd.Cmd msg
-request params =
+    -> Task Error a
+jsonRequest params =
     task
         { client = params.client
         , method = params.method
@@ -568,8 +501,6 @@ request params =
         , body = params.body
         , resolver = jsonResolver params.decoder
         }
-        |> Task.attempt params.expect
-        |> AppCmd.wrap
 
 
 task :
@@ -647,30 +578,6 @@ bytesRequest { client, method, headers, path, body } =
         , body = body
         , resolver = Http.bytesResolver (resolve (always Ok))
         }
-
-
-{-| -}
-requestMany :
-    { client : Client
-    , method : String
-    , headers : List Http.Header
-    , path : String
-    , body : Http.Body
-    , decoder : Decoder a
-    , expect : Result Error ( List a, Count ) -> msg
-    }
-    -> AppCmd.Cmd msg
-requestMany { client, method, headers, path, decoder, body, expect } =
-    AppCmd.wrap <|
-        Task.attempt expect <|
-            task
-                { client = client
-                , method = method
-                , headers = headers
-                , path = path
-                , body = body
-                , resolver = countResolver (Decode.list decoder)
-                }
 
 
 count : { client : Client, path : String } -> Task Error Int

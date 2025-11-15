@@ -11,7 +11,7 @@ import Html.Attributes as Attrs
 import Html.Events as Events
 import Http
 import Internal.Cmd as AppCmd
-import Internal.Schema as Schema exposing (ColumnType(..), Constraint(..), Table, Value(..))
+import Internal.Schema as Schema exposing (Constraint(..), Table, Value(..))
 import Json.Decode as Decode
 import PostgRestAdmin.Client as Client exposing (Client)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
@@ -101,7 +101,7 @@ fetchAutcompleteValues client ( colName, ref ) =
             (\count ->
                 case ( count < 1000, ref.labelColumn ) of
                     ( True, Just labelColumnName ) ->
-                        Client.task
+                        Client.jsonRequest
                             { client = client
                             , method = "GET"
                             , headers = []
@@ -120,24 +120,20 @@ fetchAutcompleteValues client ( colName, ref ) =
                                         ]
                                     ]
                             , body = Http.emptyBody
-                            , resolver =
-                                Client.jsonResolver
-                                    (Decode.list
-                                        (Decode.oneOf
-                                            [ Decode.map2
-                                                (\id label -> Just { id = id, label = label })
-                                                (Decode.field ref.foreignKey
-                                                    (Decode.oneOf
-                                                        [ Decode.string
-                                                        , Decode.float |> Decode.map String.fromFloat
-                                                        ]
-                                                    )
-                                                )
-                                                (Decode.field labelColumnName Decode.string)
-                                            ]
+                            , decoder =
+                                Decode.list
+                                    (Decode.map2
+                                        (\id label -> Just { id = id, label = label })
+                                        (Decode.field ref.foreignKey
+                                            (Decode.oneOf
+                                                [ Decode.string
+                                                , Decode.float |> Decode.map String.fromFloat
+                                                ]
+                                            )
                                         )
-                                        |> Decode.map (List.filterMap identity >> Local)
+                                        (Decode.field labelColumnName Decode.string)
                                     )
+                                    |> Decode.map (List.filterMap identity >> Local)
                             }
 
                     _ ->
@@ -164,13 +160,13 @@ fetch client table ( primaryKeyName, recordId ) =
                 , PG.limit 1
                 ]
     in
-    Client.task
+    Client.jsonRequest
         { client = client
         , method = "GET"
         , headers = [ Http.header "Accept" "application/vnd.pgrst.object+json" ]
         , path = "/" ++ table.name ++ "?" ++ queryString
         , body = Http.emptyBody
-        , resolver = Client.jsonResolver Decode.value
+        , decoder = Decode.value
         }
         |> Task.attempt Fetched
         |> AppCmd.wrap
@@ -254,7 +250,6 @@ update msg model =
                         , id = model.id
                         , body = jsonBody
                         , table = model.table
-                        , expect = Saved
                         , decoder =
                             case Schema.tablePrimaryKeyName model.table of
                                 Just pkName ->
@@ -263,6 +258,8 @@ update msg model =
                                 Nothing ->
                                     Decode.fail "Coudn't figure the field id"
                         }
+                        |> Task.attempt Saved
+                        |> AppCmd.wrap
 
                 Err _ ->
                     Notification.error "Please check the form errors"

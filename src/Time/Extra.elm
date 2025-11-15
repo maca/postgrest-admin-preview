@@ -1,19 +1,8 @@
-module Time.Extra exposing (decoder, format, hours24, parse, toDateString)
+module Time.Extra exposing (format, hours24, parse, toDateString)
 
 import Basics.Extra exposing (flip)
 import Iso8601
-import Json.Decode as Decode exposing (Decoder)
 import Time exposing (Month(..), Weekday(..), utc)
-
-
-decoder : Decoder Time.Posix
-decoder =
-    Decode.string
-        |> Decode.andThen
-            (Iso8601.toTime
-                >> Result.map Decode.succeed
-                >> Result.withDefault (Decode.fail "")
-            )
 
 
 format : Time.Posix -> String

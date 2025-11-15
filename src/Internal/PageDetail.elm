@@ -14,10 +14,8 @@ import Html.Events as Events
 import Internal.Cmd as AppCmd
 import Internal.Schema as Schema
     exposing
-        ( ColumnType(..)
-        , Record
+        ( Record
         , Table
-        , Value(..)
         )
 import PostgRestAdmin.Client as Client exposing (Client, Error)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath)
@@ -138,11 +136,9 @@ update msg model =
         DeleteConfirmed ->
             ( model
             , Client.deleteRecord
-                { client = model.client
-                , table = model.table
-                , id = model.id
-                , expect = Deleted
-                }
+                { client = model.client, table = model.table, id = model.id }
+                |> Task.attempt Deleted
+                |> AppCmd.wrap
             )
 
 

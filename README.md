@@ -136,7 +136,7 @@ flags and ports.
 
 Most of the previous configuration options can be overridden using flags, thus
 the same build can be used in different environments. See the
-[PostgRestAdmin](PostgRestAdmin) module documentation for all available
+[PostgRestAdmin](https://package.elm-lang.org/packages/maca/postgrest-admin-preview/14.0.3/PostgRestAdmin) module documentation for all available
 configuration options.
 
 ### **Mounting your own app**

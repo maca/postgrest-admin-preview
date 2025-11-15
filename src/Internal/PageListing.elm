@@ -516,7 +516,7 @@ update msg listing =
             ( listing
             , case listing.uploadState of
                 UploadReady records ->
-                    Client.request
+                    Client.jsonRequest
                         { client = listing.client
                         , method = "POST"
                         , headers =
@@ -527,12 +527,13 @@ update msg listing =
                         , body =
                             Http.jsonBody
                                 (Encode.list
-                                    (\( _, rec ) -> Debug.todo "crash")
+                                    (\_ -> Debug.todo "crash")
                                     records
                                 )
                         , decoder = Decode.succeed ()
-                        , expect = CsvUploadPosted
                         }
+                        |> Task.attempt CsvUploadPosted
+                        |> AppCmd.wrap
 
                 _ ->
                     AppCmd.none
@@ -1049,7 +1050,7 @@ uploadPreview parent fieldNames records =
             []
             [ Html.text "CSV Upload" ]
         , case parent of
-            Just record ->
+            Just _ ->
                 Html.p
                     []
                     [ Html.text "Upload records for "
@@ -1203,7 +1204,7 @@ uploadWithErrorsPreview parent fieldNames records =
             [ Html.text "Validation failed" ]
         , Html.p []
             [ case parent of
-                Just record ->
+                Just _ ->
                     Html.text <|
                         "There where some errors validating the records. "
 
