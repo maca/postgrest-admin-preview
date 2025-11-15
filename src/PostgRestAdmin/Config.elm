@@ -7,22 +7,23 @@ module PostgRestAdmin.Config exposing
     , formFields
     , detailActions
     , menuLinks
+    , clientHeaders
     , tables
     , tableAliases
-    , FormAuth
-    , formAuthConfig
-    , authUrl
-    , credentialsEncoder
-    , jwtDecoder
     , formAuth
     , jwt
     , onLogin
     , onAuthFailed
     , onExternalLogin
     , onLogout
+    , FormAuth
+    , formAuthConfig
+    , authUrl
+    , credentialsEncoder
+    , jwtDecoder
     , routes
     , flagsDecoder
-    , clientHeaders
+    , ConfigRecord, DetailActions, clientHeadersDecoder, decode, default, formFieldsDecoder, hostDecoder, jwtDecoder_, loginUrlDecoder, menuLinksDecoder, mountPathDecoder, tableAliasesDecoder, tablesDecoder
     )
 
 {-|
@@ -95,21 +96,56 @@ import Browser.Navigation as Nav
 import Dict exposing (Dict)
 import Html exposing (Html)
 import Http
+import Internal.Application as Application
 import Internal.Cmd as AppCmd
-import Internal.Config as Config
+import Internal.Flag as Flag
 import Internal.Schema exposing (Record)
 import Json.Decode as Decode
 import Json.Encode exposing (Value)
-import PostgRestAdmin.Client as Client exposing (Client)
-import PostgRestAdmin.MountPath exposing (MountPath)
+import PostgRestAdmin.Client as Client exposing (AuthScheme, Client)
+import PostgRestAdmin.MountPath as MountPath exposing (MountPath)
+import Url exposing (Protocol(..), Url)
 import Url.Parser exposing (Parser)
+
+
+{-| PostgRestAdmin detail actions type.
+-}
+type alias DetailActions =
+    List ( String, Record -> String -> String )
+
+
+type alias Login =
+    { path : String
+    , accessToken : String
+    }
 
 
 {-| [PostgRestAdmin.application](PostgRestAdmin#application) configuration
 params.
 -}
 type alias Config f m msg =
-    Decode.Decoder (Config.Config f m msg)
+    Decode.Decoder (ConfigRecord f m msg)
+
+
+type alias ConfigRecord flags model msg =
+    { host : Url
+    , mountPath : MountPath
+    , loginUrl : Url
+    , authScheme : AuthScheme
+    , formFields : Dict String (List String)
+    , application : Maybe ( Application.Params flags model msg, Parser (msg -> msg) msg )
+    , detailActions : Dict String DetailActions
+    , tables : List String
+    , menuLinks : List ( String, String )
+    , menuActions : Dict String Url
+    , onLogin : String -> Cmd msg
+    , onAuthFailed : String -> Cmd msg
+    , onExternalLogin : (Login -> Login) -> Sub Login
+    , onLogout : () -> Cmd msg
+    , tableAliases : Dict String String
+    , flagsDecoder : Decode.Decoder flags
+    , clientHeaders : List Http.Header
+    }
 
 
 {-| [PostgRestAdmin.application](PostgRestAdmin#application) decoder with
@@ -122,7 +158,23 @@ defaults.
 -}
 init : Config f m msg
 init =
-    Config.init
+    Decode.succeed default
+
+
+decode : Decode.Decoder (ConfigRecord f m msg) -> Decode.Value -> Result Decode.Error (ConfigRecord f m msg)
+decode decoder =
+    Decode.decodeValue
+        (decoder
+            |> Flag.string "host" hostDecoder
+            |> Flag.string "loginUrl" loginUrlDecoder
+            |> Flag.string "mountPath" mountPathDecoder
+            |> Flag.string "jwt" jwtDecoder_
+            |> Flag.stringListDict "formFields" formFieldsDecoder
+            |> Flag.stringList "tables" tablesDecoder
+            |> Flag.stringDict "tableAliases" tableAliasesDecoder
+            |> Flag.linksList "menuLinks" menuLinksDecoder
+            |> Flag.headersList "clientHeaders" clientHeadersDecoder
+        )
 
 
 {-| Specify the postgREST host.
@@ -140,8 +192,23 @@ Program flags take precedence.
 
 -}
 host : String -> Config f m msg -> Config f m msg
-host =
-    Config.host
+host urlStr =
+    Decode.andThen (hostDecoder urlStr)
+
+
+hostDecoder : String -> ConfigRecord f m msg -> Decode.Decoder (ConfigRecord f m msg)
+hostDecoder urlStr conf =
+    Url.fromString urlStr
+        |> Maybe.map
+            (\u ->
+                Decode.succeed
+                    { conf
+                        | host = u
+                        , loginUrl = { u | path = "/rpc/login" }
+                    }
+            )
+        |> Maybe.withDefault
+            (Decode.fail "`Config.host` was given an invalid URL")
 
 
 {-| Specify a path prefix for all routes, in case the app is not mounted in the
@@ -160,8 +227,13 @@ Alternatively the host can be specified using flags, configuring using
 
 -}
 mountPath : String -> Config f m msg -> Config f m msg
-mountPath =
-    Config.mountPath
+mountPath p =
+    Decode.andThen (mountPathDecoder p)
+
+
+mountPathDecoder : String -> ConfigRecord f m msg -> Decode.Decoder (ConfigRecord f m msg)
+mountPathDecoder p conf =
+    Decode.succeed { conf | mountPath = MountPath.fromString p }
 
 
 {-| Specify the login URL for form authentication.
@@ -179,8 +251,16 @@ Program flags take precedence.
 
 -}
 loginUrl : String -> Config f m msg -> Config f m msg
-loginUrl =
-    Config.loginUrl
+loginUrl urlStr =
+    Decode.andThen (loginUrlDecoder urlStr)
+
+
+loginUrlDecoder : String -> ConfigRecord f m msg -> Decode.Decoder (ConfigRecord f m msg)
+loginUrlDecoder urlStr conf =
+    Url.fromString urlStr
+        |> Maybe.map (\u -> Decode.succeed { conf | loginUrl = u })
+        |> Maybe.withDefault
+            (Decode.fail "`Config.loginUrl` was given an invalid URL")
 
 
 {-| Enable user credentials form and configure the parameters. Credentials
@@ -198,8 +278,9 @@ See [Form Authentication](#form-authentication) for configuration options.
 
 -}
 formAuth : FormAuth -> Config f m msg -> Config f m msg
-formAuth =
-    Config.formAuth
+formAuth authDecoder =
+    Decode.map2 (\auth conf -> { conf | authScheme = Client.basic auth })
+        (Flag.string "authUrl" Client.authUrlDecoder authDecoder)
 
 
 {-| Set a JWT to authenticate postgREST requests. Even when using
@@ -220,8 +301,16 @@ Program flags take precedence.
 
 -}
 jwt : String -> Config f m msg -> Config f m msg
-jwt =
-    Config.jwt
+jwt tokenStr =
+    Decode.map
+        (\conf ->
+            { conf | authScheme = Client.jwt tokenStr }
+        )
+
+
+jwtDecoder_ : String -> ConfigRecord f m msg -> Decode.Decoder (ConfigRecord f m msg)
+jwtDecoder_ tokenStr conf =
+    Decode.succeed { conf | authScheme = Client.jwt tokenStr }
 
 
 {-| Callback triggered with a JWT string on successful login.
@@ -247,8 +336,9 @@ Then subscribe to the corresponding port.
 
 -}
 onLogin : (String -> Cmd msg) -> Config f m msg -> Config f m msg
-onLogin =
-    Config.onLogin
+onLogin f =
+    Decode.map
+        (\conf -> { conf | onLogin = f })
 
 
 {-| Callback triggered when authentication fails when attempting to perform a
@@ -282,8 +372,9 @@ Then wire to the corresponding ports.
 
 -}
 onAuthFailed : (String -> Cmd msg) -> Config f m msg -> Config f m msg
-onAuthFailed =
-    Config.onAuthFailed
+onAuthFailed f =
+    Decode.map
+        (\conf -> { conf | onAuthFailed = f })
 
 
 {-| Subscribe to receive a JWT and a redirect path when login with an external
@@ -300,8 +391,9 @@ onExternalLogin :
     )
     -> Config f m msg
     -> Config f m msg
-onExternalLogin =
-    Config.onExternalLogin
+onExternalLogin sub =
+    Decode.map
+        (\conf -> { conf | onExternalLogin = sub })
 
 
 {-| Callback triggered when authentication fails when attempting to perform a
@@ -325,8 +417,9 @@ Then subscribe to the corresponding port.
 
 -}
 onLogout : (() -> Cmd msg) -> Config f m msg -> Config f m msg
-onLogout =
-    Config.onLogout
+onLogout f =
+    Decode.map
+        (\conf -> { conf | onLogout = f })
 
 
 {-| Specify which fields should be present in the the edit and create forms,
@@ -348,8 +441,21 @@ Program flags take precedence.
 
 -}
 formFields : String -> List String -> Config f m msg -> Config f m msg
-formFields =
-    Config.formFields
+formFields tableName fields =
+    Decode.map
+        (\conf ->
+            { conf
+                | formFields = Dict.insert tableName fields conf.formFields
+            }
+        )
+
+
+formFieldsDecoder :
+    Dict String (List String)
+    -> ConfigRecord f m msg
+    -> Decode.Decoder (ConfigRecord f m msg)
+formFieldsDecoder fields conf =
+    Decode.succeed { conf | formFields = Dict.union fields conf.formFields }
 
 
 {-| Specify a number of actions buttons to be shown in the detail page of a
@@ -378,8 +484,14 @@ detailActions :
     -> List ( String, Record -> String -> String )
     -> Config f m msg
     -> Config f m msg
-detailActions =
-    Config.detailActions
+detailActions tableName actions =
+    Decode.map
+        (\conf ->
+            { conf
+                | detailActions =
+                    Dict.insert tableName actions conf.detailActions
+            }
+        )
 
 
 {-| Pass a list of table names to restrict the editable resources, also sets the
@@ -398,8 +510,13 @@ Program flags take precedence.
 
 -}
 tables : List String -> Config f m msg -> Config f m msg
-tables =
-    Config.tables
+tables tableNames =
+    Decode.andThen (tablesDecoder tableNames)
+
+
+tablesDecoder : List String -> ConfigRecord f m msg -> Decode.Decoder (ConfigRecord f m msg)
+tablesDecoder tableNames conf =
+    Decode.succeed { conf | tables = tableNames }
 
 
 {-| Pass a dict of links to display in the side menu. The list consists of a
@@ -422,8 +539,16 @@ Program flags take precedence.
 
 -}
 menuLinks : List ( String, String ) -> Config f m msg -> Config f m msg
-menuLinks =
-    Config.menuLinks
+menuLinks links =
+    Decode.andThen (menuLinksDecoder links)
+
+
+menuLinksDecoder :
+    List ( String, String )
+    -> ConfigRecord f m msg
+    -> Decode.Decoder (ConfigRecord f m msg)
+menuLinksDecoder links conf =
+    Decode.succeed { conf | menuLinks = links }
 
 
 {-| Set default HTTP headers to be included in all Client requests. This is
@@ -451,8 +576,16 @@ Program flags take precedence.
 
 -}
 clientHeaders : List Http.Header -> Config f m msg -> Config f m msg
-clientHeaders =
-    Config.clientHeaders
+clientHeaders headers =
+    Decode.andThen (clientHeadersDecoder headers)
+
+
+clientHeadersDecoder :
+    List Http.Header
+    -> ConfigRecord f m msg
+    -> Decode.Decoder (ConfigRecord f m msg)
+clientHeadersDecoder headers conf =
+    Decode.succeed { conf | clientHeaders = headers }
 
 
 {-| Rename a table referenced in a foreign key. PostgREST OpenApi genreated docs
@@ -476,8 +609,16 @@ Program flags take precedence.
 
 -}
 tableAliases : Dict String String -> Config f m msg -> Config f m msg
-tableAliases =
-    Config.tableAliases
+tableAliases aliases =
+    Decode.map (\conf -> { conf | tableAliases = aliases })
+
+
+tableAliasesDecoder :
+    Dict String String
+    -> ConfigRecord f m msg
+    -> Decode.Decoder (ConfigRecord f m msg)
+tableAliasesDecoder aliases conf =
+    Decode.succeed { conf | tableAliases = aliases }
 
 
 {-| Mount an application on a give path using
@@ -534,8 +675,11 @@ routes :
     -> Parser (msg -> msg) msg
     -> Config flags model msg
     -> Config flags model msg
-routes =
-    Config.routes
+routes program parser =
+    Decode.map
+        (\conf ->
+            { conf | application = Just ( program, parser ) }
+        )
 
 
 {-| Decode flags to be passed to the `init` function for an application mounted
@@ -564,8 +708,8 @@ flagsDecoder :
     Decode.Decoder flags
     -> Config flags model msg
     -> Config flags model msg
-flagsDecoder =
-    Config.flagsDecoder
+flagsDecoder decoder =
+    Decode.map (\conf -> { conf | flagsDecoder = decoder })
 
 
 
@@ -640,3 +784,39 @@ credentialsEncoder =
 jwtDecoder : Decode.Decoder String -> FormAuth -> FormAuth
 jwtDecoder =
     Client.jwtDecoder
+
+
+
+-- INTERNAL
+
+
+default : ConfigRecord f m msg
+default =
+    let
+        defaultHost =
+            { protocol = Http
+            , host = "localhost"
+            , port_ = Just 3000
+            , path = ""
+            , query = Nothing
+            , fragment = Nothing
+            }
+    in
+    { authScheme = Client.unset
+    , host = defaultHost
+    , mountPath = MountPath.fromString ""
+    , loginUrl = { defaultHost | path = "/rpc/login" }
+    , formFields = Dict.empty
+    , application = Nothing
+    , detailActions = Dict.empty
+    , tables = []
+    , menuLinks = []
+    , menuActions = Dict.empty
+    , onLogin = always Cmd.none
+    , onAuthFailed = always Cmd.none
+    , onExternalLogin = always Sub.none
+    , onLogout = always Cmd.none
+    , tableAliases = Dict.empty
+    , flagsDecoder = Decode.fail "No flags decoder provided"
+    , clientHeaders = []
+    }

@@ -25,8 +25,8 @@ import Html.Events as Events
 import Http
 import Internal.Application as Application exposing (Application(..))
 import Internal.Cmd as AppCmd
-import Internal.Config as Config exposing (Config)
 import Internal.Notification as Notification exposing (Notification)
+import PostgRestAdmin.Config as Config
 import Internal.PageDetail as PageDetail
 import Internal.PageForm as PageForm
 import Internal.PageListing as PageListing exposing (Model)
@@ -67,7 +67,7 @@ type alias Program flags model msg =
 type alias InitParams f m msg =
     { client : Client
     , key : Nav.Key
-    , config : Config f m msg
+    , config : Config.ConfigRecord f m msg
     }
 
 
@@ -81,7 +81,7 @@ type alias Model f m msg =
     , attemptedPath : String
     , mountedApp : Application.Application f m msg
     , mountedAppFlags : Result Decode.Error f
-    , config : Config f m msg
+    , config : Config.ConfigRecord f m msg
     , authFormUrl : Url
     , authFormJwtDecoder : Decoder String
     , authFormJwtEncoder : Dict String String -> Encode.Value
@@ -131,7 +131,7 @@ options.
         PostgRestAdmin.application Config.init
 
 -}
-application : Decoder (Config f m msg) -> Program f m msg
+application : Config.Config f m msg -> Program f m msg
 application decoder =
     Browser.application
         { init = init decoder
@@ -144,7 +144,7 @@ application decoder =
 
 
 init :
-    Decoder (Config f m msg)
+    Config.Config f m msg
     -> Value
     -> Url
     -> Nav.Key
@@ -171,7 +171,7 @@ init decoder flags url key =
             )
 
 
-initModel : Value -> Url -> Nav.Key -> Config f m msg -> Model f m msg
+initModel : Value -> Url -> Nav.Key -> Config.ConfigRecord f m msg -> Model f m msg
 initModel flags url key config =
     { route = RouteRoot
     , key = key
@@ -898,7 +898,7 @@ initDetail { client, key, config } tableName id =
 -- UTILS
 
 
-resources : { a | client : Client, config : Config f m msg } -> List String
+resources : { a | client : Client, config : Config.ConfigRecord f m msg } -> List String
 resources { client, config } =
     if List.isEmpty config.tables then
         Dict.keys client.schema |> List.sort

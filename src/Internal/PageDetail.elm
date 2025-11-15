@@ -12,7 +12,6 @@ import Html exposing (Html)
 import Html.Attributes as Attrs
 import Html.Events as Events
 import Internal.Cmd as AppCmd
-import Internal.Config exposing (DetailActions)
 import Internal.Schema as Schema
     exposing
         ( ColumnType(..)
@@ -21,6 +20,7 @@ import Internal.Schema as Schema
         , Value(..)
         )
 import PostgRestAdmin.Client as Client exposing (Client, Error)
+import PostgRestAdmin.Config exposing (DetailActions)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath)
 import PostgRestAdmin.Notification as Notification
 import PostgRestAdmin.Views as Views
