@@ -5,9 +5,11 @@ import Expect
 import Internal.Filter as Filter exposing (..)
 import Internal.Schema as Table
     exposing
-        ( Table
+        ( ColumnType(..)
+        , Constraint(..)
+        , Table
+        , Value(..)
         )
-import Internal.Value exposing (Value(..))
 import Json.Decode
 import Test exposing (..)
 
@@ -195,23 +197,25 @@ suite =
 table : Table
 table =
     let
-        column val =
-            { constraint = Table.NoConstraint
+        column val colType =
+            { constraint = NoConstraint
             , required = False
             , value = val
-            , decoder = Json.Decode.succeed val
+            , columnType = colType
+            , options = []
             }
     in
     { name = "test_table"
     , columns =
         Dict.fromList
-            [ ( "float", column <| PFloat Nothing )
-            , ( "int", column <| PInt Nothing )
-            , ( "string", column <| PInt Nothing )
-            , ( "text", column <| PText Nothing )
-            , ( "enum", column <| PEnum Nothing [] )
-            , ( "bool", column <| PBool Nothing )
-            , ( "time", column <| PTime Nothing )
-            , ( "date", column <| PDate Nothing )
+            [ ( "float", column (Float 0.0) FloatCol )
+            , ( "int", column (Int 0) IntegerCol )
+            , ( "string", column (String "") StringCol )
+            , ( "text", column (String "") TextCol )
+            , ( "enum", column (String "") StringCol )
+            , ( "bool", column (Bool False) BoolCol )
+            , ( "time", column (String "") TimeCol )
+            , ( "date", column (String "") DateCol )
             ]
+    , referencedBy = []
     }
