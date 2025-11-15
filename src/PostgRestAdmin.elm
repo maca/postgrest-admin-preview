@@ -68,16 +68,6 @@ type alias Program flags model msg =
         (Msg flags model msg)
 
 
-type alias AppParams f m msg =
-    { init : Value -> Url.Url -> Nav.Key -> ( Model f m msg, Cmd (Msg f m msg) )
-    , view : Model f m msg -> Browser.Document (Msg f m msg)
-    , update : Msg f m msg -> Model f m msg -> ( Model f m msg, Cmd (Msg f m msg) )
-    , subscriptions : Model f m msg -> Sub (Msg f m msg)
-    , onUrlRequest : Browser.UrlRequest -> Msg f m msg
-    , onUrlChange : Url -> Msg f m msg
-    }
-
-
 type alias InitParams f m msg =
     { client : Client
     , key : Nav.Key
@@ -147,14 +137,26 @@ options.
 -}
 application : Decoder (Config f m msg) -> Program f m msg
 application decoder =
-    Browser.application (applicationParams decoder)
+    Browser.application
+        { init = init decoder
+        , update = update
+        , view = view
+        , subscriptions = subscriptions
+        , onUrlRequest = LinkClicked
+        , onUrlChange = UrlChanged
+        }
 
 
-applicationParams : Decoder (Config f m msg) -> AppParams f m msg
-applicationParams decoder =
-    { init =
-        init
-            (decoder
+init :
+    Decoder (Config f m msg)
+    -> Value
+    -> Url
+    -> Nav.Key
+    -> ( Model f m msg, Cmd (Msg f m msg) )
+init decoder flags url key =
+    let
+        configDecoder =
+            decoder
                 |> Flag.string "host" Config.hostDecoder
                 |> Flag.string "mountPath" Config.mountPathDecoder
                 |> Flag.stringListDict "formFields" Config.formFieldsDecoder
@@ -162,12 +164,55 @@ applicationParams decoder =
                 |> Flag.stringDict "tableAliases" Config.tableAliasesDecoder
                 |> Flag.linksList "menuLinks" Config.menuLinksDecoder
                 |> Flag.headersList "clientHeaders" Config.clientHeadersDecoder
+    in
+    case
+        Decode.decodeValue configDecoder flags
+            |> Result.map (initModel flags url key)
+    of
+        Ok model ->
+            let
+                ( route, cmd ) =
+                    parseRoute url model
+            in
+            ( { model | route = route }, cmd )
+
+        Err error ->
+            let
+                model =
+                    initModel flags url key Config.default
+            in
+            ( { model | error = Just (Decode.errorToString error) }
+            , Cmd.none
             )
-    , update = update
-    , view = view
-    , subscriptions = subscriptions
-    , onUrlRequest = LinkClicked
-    , onUrlChange = UrlChanged
+
+
+initModel : Value -> Url -> Nav.Key -> Config f m msg -> Model f m msg
+initModel flags url key config =
+    { route = RouteRoot
+    , key = key
+    , notification = Notification.none
+    , error = Nothing
+    , client = Client.init config.host config.authScheme config.clientHeaders
+    , onLogin =
+        Maybe.withDefault ""
+            >> config.onLogin
+            >> Cmd.map (always NoOp)
+    , mountedApp = Application.none
+    , mountedAppFlags = Decode.decodeValue config.flagsDecoder flags
+    , config = config
+    , attemptedPath = urlToPath url
+    , authFormUrl =
+        { protocol = Http
+        , host = "localhost"
+        , port_ = Just 9080
+        , path = "/rpc/login"
+        , query = Nothing
+        , fragment = Nothing
+        }
+    , authFormJwtDecoder = Decode.field "token" Decode.string
+    , authFormJwtEncoder = Encode.dict identity Encode.string
+    , authFormField = authFormField
+    , authFormStatus = Ready
     }
 
 
@@ -233,63 +278,6 @@ handleAuthResponse aDecoder response =
 
         _ ->
             Err Client.NetworkError
-
-
-init :
-    Decoder (Config f m msg)
-    -> Value
-    -> Url.Url
-    -> Nav.Key
-    -> ( Model f m msg, Cmd (Msg f m msg) )
-init decoder flags url key =
-    let
-        makeModel config =
-            { route = RouteRoot
-            , key = key
-            , notification = Notification.none
-            , error = Nothing
-            , client = Client.init config.host config.authScheme config.clientHeaders
-            , onLogin =
-                Maybe.withDefault ""
-                    >> config.onLogin
-                    >> Cmd.map (always NoOp)
-            , mountedApp = Application.none
-            , mountedAppFlags = Decode.decodeValue config.flagsDecoder flags
-            , config = config
-            , attemptedPath = urlToPath url
-            , authFormUrl =
-                { protocol = Http
-                , host = "localhost"
-                , port_ = Just 9080
-                , path = "/rpc/login"
-                , query = Nothing
-                , fragment = Nothing
-                }
-            , authFormJwtDecoder = Decode.field "token" Decode.string
-            , authFormJwtEncoder = Encode.dict identity Encode.string
-            , authFormField = authFormField
-            , authFormStatus = Ready
-            }
-    in
-    case Decode.decodeValue decoder flags of
-        Ok config ->
-            let
-                model =
-                    makeModel config
-
-                ( route, cmd ) =
-                    parseRoute url model
-            in
-            ( { model | route = route }, cmd )
-
-        Err error ->
-            let
-                model =
-                    makeModel Config.default
-            in
-            ( { model | error = Just (Decode.errorToString error) }
-            , Cmd.none
-            )
 
 
 

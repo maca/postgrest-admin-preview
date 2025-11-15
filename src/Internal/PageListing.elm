@@ -972,10 +972,8 @@ viewActions model record =
                     Html.a
                         [ class "button button-clear button-small"
                         , href
-                            (MountPath.path model.mountPath <|
-                                Url.absolute
-                                    [ recordTableName model.table, id ]
-                                    []
+                            (MountPath.path model.mountPath
+                                (Url.absolute [ model.table.name, id ] [])
                             )
                         ]
                         [ Html.text "View" ]
@@ -1102,9 +1100,10 @@ previewUploadCopy action records =
 
     else
         Just
-            ("**"
-                ++ (List.length records |> String.fromInt)
-                ++ String.surround " "
+            (String.concat
+                [ "**"
+                , String.fromInt (List.length records)
+                , String.surround " "
                     (case records of
                         _ :: [] ->
                             "record"
@@ -1112,8 +1111,9 @@ previewUploadCopy action records =
                         _ ->
                             "records"
                     )
-                ++ "** will be "
-                ++ action
+                , "** will be "
+                , action
+                ]
             )
 
 
@@ -1371,31 +1371,26 @@ orderToQueryParams order =
             []
 
 
-parentReference :
-    Table
-    -> Maybe { tableName : String, id : String }
-    -> Maybe ( String, String )
-parentReference table parent =
-    Dict.toList table.columns
-        |> List.filterMap
-            (\( colName, { constraint } ) ->
-                case constraint of
-                    ForeignKey foreignKey ->
-                        case parent of
-                            Just { tableName, id } ->
-                                if foreignKey.tableName == tableName then
-                                    Just ( colName, id )
+parentReference : Table -> Maybe { tableName : String, id : String } -> Maybe ( String, String )
+parentReference table =
+    Maybe.andThen
+        (\parent ->
+            Dict.toList table.columns
+                |> List.filterMap
+                    (\( colName, col ) ->
+                        case col.constraint of
+                            ForeignKey foreignKey ->
+                                if foreignKey.tableName == parent.tableName then
+                                    Just ( colName, parent.id )
 
                                 else
                                     Nothing
 
-                            Nothing ->
+                            _ ->
                                 Nothing
-
-                    _ ->
-                        Nothing
-            )
-        |> List.head
+                    )
+                |> List.head
+        )
 
 
 isColumnVisible : ( String, Column ) -> Bool
@@ -1437,21 +1432,11 @@ hasErrors _ =
     False
 
 
-
--- TEMPORARY HELPER FUNCTIONS
--- These replace functions from removed modules (Internal.Record, Internal.Field, Internal.Value)
-
-
 recordId : Table -> Record -> Maybe String
 recordId table record =
     Schema.tablePrimaryKeyName table
         |> Maybe.andThen (\pkName -> Dict.get pkName record)
         |> Maybe.andThen valueToString
-
-
-recordTableName : Table -> String
-recordTableName table =
-    table.name
 
 
 valueToString : Value -> Maybe String

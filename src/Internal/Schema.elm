@@ -294,6 +294,12 @@ columnType type_ format =
         ( "string", Just "text" ) ->
             TextCol
 
+        ( "string", Just "bytea" ) ->
+            OtherCol type_ format
+
+        ( "string", Just "tsvector" ) ->
+            OtherCol type_ format
+
         ( "string", _ ) ->
             StringCol
 

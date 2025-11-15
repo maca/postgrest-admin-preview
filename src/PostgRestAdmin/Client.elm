@@ -159,6 +159,7 @@ authSchemeConfig : Decoder AuthScheme
 authSchemeConfig =
     Decode.oneOf
         [ Decode.field "jwt" Decode.string
+            |> Decode.map (Debug.log "jwt")
             |> Decode.map (\token -> Jwt (PG.jwt token))
         , Decode.succeed Unset
         ]
@@ -759,15 +760,15 @@ recordDecoder table =
 
 columnDecoder : String -> Schema.Column -> Decoder Value
 columnDecoder name col =
-    let
-        idDecoder =
-            Decode.oneOf
-                [ Decode.string
-                , Decode.float |> Decode.map String.fromFloat
-                ]
-    in
     case ( col.constraint, col ) of
         ( ForeignKey ref, _ ) ->
+            let
+                idDecoder =
+                    Decode.oneOf
+                        [ Decode.string
+                        , Decode.float |> Decode.map String.fromFloat
+                        ]
+            in
             Decode.oneOf
                 [ Decode.field ref.tableName
                     (Decode.map2 Tuple.pair
