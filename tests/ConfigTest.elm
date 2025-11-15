@@ -3,9 +3,10 @@ module ConfigTest exposing (suite)
 import Dict
 import Expect
 import Http
+import Json.Decode as Decode
 import Json.Encode as Encode
+import PostgRestAdmin exposing (configDecoder)
 import PostgRestAdmin.Client as Client
-import PostgRestAdmin.Config as Config
 import PostgRestAdmin.MountPath as MountPath
 import Test exposing (..)
 import Url
@@ -35,35 +36,34 @@ hostTests =
     describe "host configuration"
         [ test "default host is http://localhost:3000" <|
             \_ ->
-                Config.decode
-                    Config.init
-                    (Encode.object [])
+                Decode.decodeValue (configDecoder []) (Encode.object [])
                     |> Result.map (.host >> Url.toString)
                     |> Expect.equal (Ok "http://localhost:3000")
-        , test "Config.host sets the host" <|
+        , test "PostgRestAdmin.host sets the host" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.host "http://localhost:9080"
+                Decode.decodeValue
+                    (configDecoder
+                        [ PostgRestAdmin.host "http://localhost:9080"
+                        ]
                     )
                     (Encode.object [])
                     |> Result.map (.host >> Url.toString)
                     |> Expect.equal (Ok "http://localhost:9080/")
         , test "host flag sets the host" <|
             \_ ->
-                Config.decode
-                    Config.init
+                Decode.decodeValue (configDecoder [])
                     (Encode.object
                         [ ( "host", Encode.string "http://localhost:9080" )
                         ]
                     )
                     |> Result.map (.host >> Url.toString)
                     |> Expect.equal (Ok "http://localhost:9080/")
-        , test "host flag takes precedence over Config.host" <|
+        , test "host flag takes precedence over PostgRestAdmin.host" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.host "http://localhost:3000"
+                Decode.decodeValue
+                    (configDecoder
+                        [ PostgRestAdmin.host "http://localhost:3000"
+                        ]
                     )
                     (Encode.object
                         [ ( "host", Encode.string "http://localhost:9080" )
@@ -83,55 +83,57 @@ loginUrlTests =
     describe "loginUrl configuration"
         [ test "default loginUrl is http://localhost:3000/rpc/login" <|
             \_ ->
-                Config.decode
-                    Config.init
-                    (Encode.object [])
+                Decode.decodeValue (configDecoder []) (Encode.object [])
                     |> Result.map (.loginUrl >> Url.toString)
                     |> Expect.equal (Ok "http://localhost:3000/rpc/login")
         , test "loginUrl derives from host" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.host "http://localhost:9080"
+                Decode.decodeValue
+                    (configDecoder
+                        [ PostgRestAdmin.host "http://localhost:9080"
+                        ]
                     )
                     (Encode.object [])
                     |> Result.map (.loginUrl >> Url.toString)
                     |> Expect.equal (Ok "http://localhost:9080/rpc/login")
-        , test "Config.loginUrl overrides derived loginUrl" <|
+        , test "PostgRestAdmin.loginUrl overrides derived loginUrl" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.host "http://localhost:9080"
-                        |> Config.loginUrl "http://localhost:9080/rpc/authenticate"
+                Decode.decodeValue
+                    (configDecoder
+                        [ PostgRestAdmin.host "http://localhost:9080"
+                        , PostgRestAdmin.loginUrl "http://localhost:9080/rpc/authenticate"
+                        ]
                     )
                     (Encode.object [])
                     |> Result.map (.loginUrl >> Url.toString)
                     |> Expect.equal (Ok "http://localhost:9080/rpc/authenticate")
-        , test "Config.loginUrl can use different host than Config.host" <|
+        , test "PostgRestAdmin.loginUrl can use different host than PostgRestAdmin.host" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.host "http://localhost:3000"
-                        |> Config.loginUrl "http://auth.example.com/login"
+                Decode.decodeValue
+                    (configDecoder
+                        [ PostgRestAdmin.host "http://localhost:3000"
+                        , PostgRestAdmin.loginUrl "http://auth.example.com/login"
+                        ]
                     )
                     (Encode.object [])
                     |> Result.map (.loginUrl >> Url.toString)
                     |> Expect.equal (Ok "http://auth.example.com/login")
         , test "loginUrl flag sets the login URL" <|
             \_ ->
-                Config.decode
-                    Config.init
+                Decode.decodeValue
+                    (configDecoder [])
                     (Encode.object
                         [ ( "loginUrl", Encode.string "http://localhost:9080/rpc/login" )
                         ]
                     )
                     |> Result.map (.loginUrl >> Url.toString)
                     |> Expect.equal (Ok "http://localhost:9080/rpc/login")
-        , test "loginUrl flag takes precedence over Config.loginUrl" <|
+        , test "loginUrl flag takes precedence over PostgRestAdmin.loginUrl" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.loginUrl "http://localhost:3000/rpc/login"
+                Decode.decodeValue
+                    (configDecoder
+                        [ PostgRestAdmin.loginUrl "http://localhost:3000/rpc/login"
+                        ]
                     )
                     (Encode.object
                         [ ( "loginUrl", Encode.string "http://localhost:9080/rpc/login" )
@@ -151,35 +153,35 @@ mountPathTests =
     describe "mountPath configuration"
         [ test "default mountPath is empty string" <|
             \_ ->
-                Config.decode
-                    Config.init
-                    (Encode.object [])
+                Decode.decodeValue (configDecoder []) (Encode.object [])
                     |> Result.map .mountPath
                     |> Expect.equal (Ok (MountPath.fromString ""))
-        , test "Config.mountPath sets the mount path" <|
+        , test "PostgRestAdmin.mountPath sets the mount path" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.mountPath "/admin"
+                Decode.decodeValue
+                    (configDecoder
+                        [ PostgRestAdmin.mountPath "/admin"
+                        ]
                     )
                     (Encode.object [])
                     |> Result.map .mountPath
                     |> Expect.equal (Ok (MountPath.fromString "/admin"))
         , test "mountPath flag sets the mount path" <|
             \_ ->
-                Config.decode
-                    Config.init
+                Decode.decodeValue
+                    (configDecoder [])
                     (Encode.object
                         [ ( "mountPath", Encode.string "/admin" )
                         ]
                     )
                     |> Result.map .mountPath
                     |> Expect.equal (Ok (MountPath.fromString "/admin"))
-        , test "mountPath flag takes precedence over Config.mountPath" <|
+        , test "mountPath flag takes precedence over PostgRestAdmin.mountPath" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.mountPath "/dashboard"
+                Decode.decodeValue
+                    (configDecoder
+                        [ PostgRestAdmin.mountPath "/dashboard"
+                        ]
                     )
                     (Encode.object
                         [ ( "mountPath", Encode.string "/admin" )
@@ -199,24 +201,23 @@ tablesTests =
     describe "tables configuration"
         [ test "default tables is empty list" <|
             \_ ->
-                Config.decode
-                    Config.init
-                    (Encode.object [])
+                Decode.decodeValue (configDecoder []) (Encode.object [])
                     |> Result.map .tables
                     |> Expect.equal (Ok [])
-        , test "Config.tables sets the tables list" <|
+        , test "PostgRestAdmin.tables sets the tables list" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.tables [ "users", "posts" ]
+                Decode.decodeValue
+                    (configDecoder
+                        [ PostgRestAdmin.tables [ "users", "posts" ]
+                        ]
                     )
                     (Encode.object [])
                     |> Result.map .tables
                     |> Expect.equal (Ok [ "users", "posts" ])
         , test "tables flag sets the tables list" <|
             \_ ->
-                Config.decode
-                    Config.init
+                Decode.decodeValue
+                    (configDecoder [])
                     (Encode.object
                         [ ( "tables"
                           , Encode.list Encode.string [ "users", "posts" ]
@@ -225,11 +226,12 @@ tablesTests =
                     )
                     |> Result.map .tables
                     |> Expect.equal (Ok [ "users", "posts" ])
-        , test "tables flag takes precedence over Config.tables" <|
+        , test "tables flag takes precedence over PostgRestAdmin.tables" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.tables [ "comments", "tags" ]
+                Decode.decodeValue
+                    (configDecoder
+                        [ PostgRestAdmin.tables [ "comments", "tags" ]
+                        ]
                     )
                     (Encode.object
                         [ ( "tables"
@@ -251,20 +253,19 @@ tableAliasesTests =
     describe "tableAliases configuration"
         [ test "default tableAliases is empty dict" <|
             \_ ->
-                Config.decode
-                    Config.init
-                    (Encode.object [])
+                Decode.decodeValue (configDecoder []) (Encode.object [])
                     |> Result.map .tableAliases
                     |> Expect.equal (Ok Dict.empty)
-        , test "Config.tableAliases sets the table aliases" <|
+        , test "PostgRestAdmin.tableAliases sets the table aliases" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.tableAliases
+                Decode.decodeValue
+                    (configDecoder
+                        [ PostgRestAdmin.tableAliases
                             (Dict.fromList
                                 [ ( "published_posts", "posts" )
                                 ]
                             )
+                        ]
                     )
                     (Encode.object [])
                     |> Result.map .tableAliases
@@ -272,8 +273,7 @@ tableAliasesTests =
                         (Ok (Dict.fromList [ ( "published_posts", "posts" ) ]))
         , test "tableAliases flag sets the table aliases" <|
             \_ ->
-                Config.decode
-                    Config.init
+                Decode.decodeValue (configDecoder [])
                     (Encode.object
                         [ ( "tableAliases"
                           , Encode.object
@@ -285,15 +285,16 @@ tableAliasesTests =
                     |> Result.map .tableAliases
                     |> Expect.equal
                         (Ok (Dict.fromList [ ( "published_posts", "posts" ) ]))
-        , test "tableAliases flag takes precedence over Config.tableAliases" <|
+        , test "tableAliases flag takes precedence over PostgRestAdmin.tableAliases" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.tableAliases
+                Decode.decodeValue
+                    (configDecoder
+                        [ PostgRestAdmin.tableAliases
                             (Dict.fromList
                                 [ ( "active_users", "users" )
                                 ]
                             )
+                        ]
                     )
                     (Encode.object
                         [ ( "tableAliases"
@@ -318,24 +319,23 @@ formFieldsTests =
     describe "formFields configuration"
         [ test "default formFields is empty dict" <|
             \_ ->
-                Config.decode
-                    Config.init
-                    (Encode.object [])
+                Decode.decodeValue (configDecoder []) (Encode.object [])
                     |> Result.map .formFields
                     |> Expect.equal (Ok Dict.empty)
-        , test "Config.formFields sets the form fields" <|
+        , test "PostgRestAdmin.formFields sets the form fields" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.formFields "users" [ "id", "name", "email" ]
+                Decode.decodeValue
+                    (configDecoder
+                        [ PostgRestAdmin.formFields "users" [ "id", "name", "email" ]
+                        ]
                     )
                     (Encode.object [])
                     |> Result.map (.formFields >> Dict.get "users")
                     |> Expect.equal (Ok (Just [ "id", "name", "email" ]))
         , test "formFields flag sets the form fields" <|
             \_ ->
-                Config.decode
-                    Config.init
+                Decode.decodeValue
+                    (configDecoder [])
                     (Encode.object
                         [ ( "formFields"
                           , Encode.object
@@ -349,11 +349,12 @@ formFieldsTests =
                     )
                     |> Result.map (.formFields >> Dict.get "users")
                     |> Expect.equal (Ok (Just [ "id", "name", "email" ]))
-        , test "formFields flag takes precedence over Config.formFields" <|
+        , test "formFields flag takes precedence over PostgRestAdmin.formFields" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.formFields "users" [ "id", "username" ]
+                Decode.decodeValue
+                    (configDecoder
+                        [ PostgRestAdmin.formFields "users" [ "id", "username" ]
+                        ]
                     )
                     (Encode.object
                         [ ( "formFields"
@@ -380,19 +381,18 @@ menuLinksTests =
     describe "menuLinks configuration"
         [ test "default menuLinks is empty list" <|
             \_ ->
-                Config.decode
-                    Config.init
-                    (Encode.object [])
+                Decode.decodeValue (configDecoder []) (Encode.object [])
                     |> Result.map .menuLinks
                     |> Expect.equal (Ok [])
-        , test "Config.menuLinks sets the menu links" <|
+        , test "PostgRestAdmin.menuLinks sets the menu links" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.menuLinks
+                Decode.decodeValue
+                    (configDecoder
+                        [ PostgRestAdmin.menuLinks
                             [ ( "Documentation", "/docs" )
                             , ( "API", "/api" )
                             ]
+                        ]
                     )
                     (Encode.object [])
                     |> Result.map .menuLinks
@@ -404,8 +404,7 @@ menuLinksTests =
                         )
         , test "menuLinks flag sets the menu links" <|
             \_ ->
-                Config.decode
-                    Config.init
+                Decode.decodeValue (configDecoder [])
                     (Encode.object
                         [ ( "menuLinks"
                           , Encode.list
@@ -428,13 +427,14 @@ menuLinksTests =
                             , ( "API", "/api" )
                             ]
                         )
-        , test "menuLinks flag takes precedence over Config.menuLinks" <|
+        , test "menuLinks flag takes precedence over PostgRestAdmin.menuLinks" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.menuLinks
+                Decode.decodeValue
+                    (configDecoder
+                        [ PostgRestAdmin.menuLinks
                             [ ( "Home", "/" )
                             ]
+                        ]
                     )
                     (Encode.object
                         [ ( "menuLinks"
@@ -470,27 +470,25 @@ clientHeadersTests =
     describe "clientHeaders configuration"
         [ test "default clientHeaders is empty list" <|
             \_ ->
-                Config.decode
-                    Config.init
-                    (Encode.object [])
+                Decode.decodeValue (configDecoder []) (Encode.object [])
                     |> Result.map .clientHeaders
                     |> Expect.equal (Ok [])
-        , test "Config.clientHeaders sets the client headers" <|
+        , test "PostgRestAdmin.clientHeaders sets the client headers" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.clientHeaders
+                Decode.decodeValue
+                    (configDecoder
+                        [ PostgRestAdmin.clientHeaders
                             [ Http.header "Accept-Profile" "bluebox"
                             , Http.header "Content-Profile" "bluebox"
                             ]
+                        ]
                     )
                     (Encode.object [])
                     |> Result.map (.clientHeaders >> List.length)
                     |> Expect.equal (Ok 2)
         , test "clientHeaders flag sets the client headers" <|
             \_ ->
-                Config.decode
-                    Config.init
+                Decode.decodeValue (configDecoder [])
                     (Encode.object
                         [ ( "clientHeaders"
                           , Encode.object
@@ -502,14 +500,15 @@ clientHeadersTests =
                     )
                     |> Result.map (.clientHeaders >> List.length)
                     |> Expect.equal (Ok 2)
-        , test "clientHeaders flag takes precedence over Config.clientHeaders" <|
+        , test "clientHeaders flag takes precedence over PostgRestAdmin.clientHeaders" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.clientHeaders
+                Decode.decodeValue
+                    (configDecoder
+                        [ PostgRestAdmin.clientHeaders
                             [ Http.header "Accept-Profile" "public"
                             , Http.header "Content-Profile" "public"
                             ]
+                        ]
                     )
                     (Encode.object
                         [ ( "clientHeaders"
@@ -533,16 +532,15 @@ jwtTests =
     describe "jwt configuration"
         [ test "default authScheme is unset" <|
             \_ ->
-                Config.decode
-                    Config.init
-                    (Encode.object [])
+                Decode.decodeValue (configDecoder []) (Encode.object [])
                     |> Result.map .authScheme
                     |> Expect.equal (Ok Client.unset)
-        , test "Config.jwt sets the JWT token in authScheme" <|
+        , test "PostgRestAdmin.jwt sets the JWT token in authScheme" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.jwt "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+                Decode.decodeValue
+                    (configDecoder
+                        [ PostgRestAdmin.jwt "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+                        ]
                     )
                     (Encode.object [])
                     |> Result.map .authScheme
@@ -550,8 +548,7 @@ jwtTests =
                         (Ok (Client.jwt "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"))
         , test "jwt flag sets the JWT token in authScheme" <|
             \_ ->
-                Config.decode
-                    Config.init
+                Decode.decodeValue (configDecoder [])
                     (Encode.object
                         [ ( "jwt", Encode.string "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" )
                         ]
@@ -559,12 +556,10 @@ jwtTests =
                     |> Result.map .authScheme
                     |> Expect.equal
                         (Ok (Client.jwt "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"))
-        , test "jwt flag takes precedence over Config.jwt" <|
+        , test "jwt flag takes precedence over PostgRestAdmin.jwt" <|
             \_ ->
-                Config.decode
-                    (Config.init
-                        |> Config.jwt "old-token"
-                    )
+                Decode.decodeValue
+                    (configDecoder [ PostgRestAdmin.jwt "old-token" ])
                     (Encode.object
                         [ ( "jwt", Encode.string "new-token-from-flag" )
                         ]

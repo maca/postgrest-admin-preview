@@ -67,12 +67,11 @@ from PostgREST Open API description.
     module Main exposing (main)
 
     import PostgRestAdmin
-    import PostgRestAdmin.Config as Config
 
 
     main : PostgRestAdmin.Program Never Never Never
     main =
-        PostgRestAdmin.application Config.init
+        PostgRestAdmin.application []
 
 
 Then flags can be passed on `Elm.init`
@@ -89,24 +88,20 @@ Then flags can be passed on `Elm.init`
 
 ### **In Elm configuration**
 
-[Configuration](PostgRestAdmin-Config) params are passed to the
-PostgRestAdmin program in the example bellow.
+Configuration params are passed to the PostgRestAdmin program as attributes
+in the example below.
 
-- [host](PostgRestAdmin-Config#host) sets the PostgREST instance host,
-- [formAuth](PostgRestAdmin-Config#formAuth) enables form
-  authentication, and takes a
-- [FormAuth](PostgRestAdmin-Config#formauth) configuration
-- optionally [FormAuth](PostgRestAdmin-Config#formauth) can be
-configured with
-- [authUrl](PostgRestAdmin-Config#authurl) which specifies a
-  url to POST credentials, wich can be a postgREST function or an external
-  service if CORS is configured correctly.
+- [host](PostgRestAdmin#host) sets the PostgREST instance host
+- [loginUrl](PostgRestAdmin#loginUrl) specifies the URL to POST credentials,
+  which can be a PostgREST function or an external service if CORS is
+  configured correctly
+- [onLogin](PostgRestAdmin#onLogin) is a callback triggered with a JWT string
+  on successful login
 
 
     port module Main exposing (main)
 
     import PostgRestAdmin
-    import PostgRestAdmin.Config as Config
 
 
     port loginSuccess : String -> Cmd msg
@@ -114,20 +109,16 @@ configured with
 
     main : PostgRestAdmin.Program Never Never Never
     main =
-        Config.init
-            |> Config.host "https://postgrest.example.com"
-            |> Config.formAuth
-                (Config.formAuthConfig
-                    |> Config.authUrl
-                        "https://postgrest.example.com/rpc/login"
-                )
-            |> Config.onLogin loginSuccess
-            |> PostgRestAdmin.application
+        PostgRestAdmin.application
+            [ PostgRestAdmin.host "https://postgrest.example.com"
+            , PostgRestAdmin.loginUrl "https://postgrest.example.com/rpc/login"
+            , PostgRestAdmin.onLogin loginSuccess
+            ]
 
 
 
-In addition to configuring the login POST url `formAuth` and `authUrl`,
-the token is persisted to keep the user loggedin across page reloads, by using
+In addition to configuring the login POST url with `loginUrl`,
+the token is persisted to keep the user logged in across page reloads by using
 flags and ports.
 
 
@@ -143,9 +134,10 @@ flags and ports.
 
 
 
-Most of the previous configuration options can be overriden using flags, thus
-the same build can be used in different environments. See
-[Config](PostgRestAdmin-Config).
+Most of the previous configuration options can be overridden using flags, thus
+the same build can be used in different environments. See the
+[PostgRestAdmin](PostgRestAdmin) module documentation for all available
+configuration options.
 
 ### **Mounting your own app**
 
@@ -153,4 +145,4 @@ You can override some listing, the detail for a resource, a form or add
 additional behaviour by *mounting your own application* in as many routes as you
 want.
 
-See [Config.routes](PostgRestAdmin-Config#routes).
+See [PostgRestAdmin.routes](PostgRestAdmin#routes).

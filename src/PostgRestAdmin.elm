@@ -1,12 +1,12 @@
 module PostgRestAdmin exposing
-    ( Program, application, init
-    , Config, config
+    ( Program, application
     , host, mountPath, clientHeaders
     , loginUrl, jwt
     , onLogin, onAuthFailed, onLogout, onExternalLogin
     , menuLinks, formFields, detailActions
     , tables, tableAliases
     , routes
+    , configDecoder
     )
 
 {-|
@@ -14,15 +14,10 @@ module PostgRestAdmin exposing
 
 # Init
 
-@docs Program, application, init
+@docs Program, application
 
 
 # Program configuration
-
-
-## Config
-
-@docs Config, config
 
 
 ## Basics
@@ -32,7 +27,7 @@ module PostgRestAdmin exposing
 
 ## Auth
 
-@docs loginUrl, jwt, formAuth
+@docs loginUrl, jwt
 @docs onLogin, onAuthFailed, onLogout, onExternalLogin
 
 
@@ -100,7 +95,7 @@ type alias Program flags model msg =
 type alias InitParams f m msg =
     { client : Client
     , key : Nav.Key
-    , config : ConfigRecord f m msg
+    , config : Config f m msg
     }
 
 
@@ -114,7 +109,7 @@ type alias Model f m msg =
     , attemptedPath : String
     , mountedApp : MountedApp f m msg
     , mountedAppFlags : Result Decode.Error f
-    , config : ConfigRecord f m msg
+    , config : Config f m msg
     , authFormUrl : Url
     , authFormJwtDecoder : Decoder String
     , authFormJwtEncoder : Dict String String -> Encode.Value
@@ -154,20 +149,23 @@ type Route f m msg
     | RouteNotFound
 
 
-{-| Takes a Config and creates a PostgRestAdmin application.
+{-| Creates a PostgRestAdmin application with the given configuration attributes.
 
-See [Config](PostgRestAdmin-Config) to check all configuration
-options.
+Configuration is provided as a list of attributes. See the configuration functions
+below for all available options.
 
-    main : PostgRestAdmin.Program Never Never
+    main : PostgRestAdmin.Program Never Never Never
     main =
-        PostgRestAdmin.application Config.init
+        PostgRestAdmin.application
+            [ PostgRestAdmin.host "http://localhost:3000"
+            , PostgRestAdmin.onLogin loginSuccess
+            ]
 
 -}
-application : Config f m msg -> Program f m msg
-application decoder =
+application : List (Attribute f m msg) -> Program f m msg
+application attrs =
     Browser.application
-        { init = init decoder
+        { init = programInit (configDecoder attrs)
         , update = update
         , view = view
         , subscriptions = subscriptions
@@ -176,15 +174,10 @@ application decoder =
         }
 
 
-init :
-    Config f m msg
-    -> Value
-    -> Url
-    -> Nav.Key
-    -> ( Model f m msg, Cmd (Msg f m msg) )
-init decoder flags url key =
+programInit : Decode.Decoder (Config f m msg) -> Value -> Url -> Nav.Key -> ( Model f m msg, Cmd (Msg f m msg) )
+programInit decoder flags url key =
     case
-        decode decoder flags
+        Decode.decodeValue decoder flags
             |> Result.map (initModel flags url key)
     of
         Ok model ->
@@ -204,7 +197,7 @@ init decoder flags url key =
             )
 
 
-initModel : Value -> Url -> Nav.Key -> ConfigRecord f m msg -> Model f m msg
+initModel : Value -> Url -> Nav.Key -> Config f m msg -> Model f m msg
 initModel flags url key configRec =
     { route = RouteRoot
     , key = key
@@ -931,7 +924,7 @@ initDetail model tableName id =
 -- UTILS
 
 
-resources : { a | client : Client, config : ConfigRecord f m msg } -> List String
+resources : { a | client : Client, config : Config f m msg } -> List String
 resources params =
     if List.isEmpty params.config.tables then
         Dict.keys params.client.schema |> List.sort
@@ -965,27 +958,18 @@ urlToPath url =
 --
 
 
-{-| PostgRestAdmin detail actions type.
--}
-type alias DetailActions =
-    List ( String, Record -> String -> String )
+type Attribute flag model msg
+    = Attribute (Decoder (Config flag model msg -> Config flag model msg))
 
 
-{-| [PostgRestAdmin.application](PostgRestAdmin#application) configuration
-params.
--}
-type alias Config f m msg =
-    Decode.Decoder (ConfigRecord f m msg)
-
-
-type alias ConfigRecord flags model msg =
+type alias Config flags model msg =
     { host : Url
     , mountPath : MountPath
     , loginUrl : Url
     , authScheme : AuthScheme
     , formFields : Dict String (List String)
     , application : Maybe ( MountedAppParams flags model msg, Parser (msg -> msg) msg )
-    , detailActions : Dict String DetailActions
+    , detailActions : Dict String (List ( String, Record -> String -> String ))
     , tables : List String
     , menuLinks : List ( String, String )
     , menuActions : Dict String Url
@@ -1003,20 +987,21 @@ type alias ConfigRecord flags model msg =
     }
 
 
-{-| [PostgRestAdmin.application](PostgRestAdmin#application) decoder with
-defaults.
+configDecoder : List (Attribute flag model msg) -> Decoder (Config flag model msg)
+configDecoder =
+    List.foldl (\(Attribute attr) -> Decode.map2 (<|) attr) (Decode.succeed default)
+        >> Flag.string "host" hostDecoder
+        >> Flag.string "loginUrl" loginUrlDecoder
+        >> Flag.string "mountPath" mountPathDecoder
+        >> Flag.string "jwt" jwtDecoder
+        >> Flag.stringListDict "formFields" formFieldsDecoder
+        >> Flag.stringList "tables" tablesDecoder
+        >> Flag.stringDict "tableAliases" tableAliasesDecoder
+        >> Flag.linksList "menuLinks" menuLinksDecoder
+        >> Flag.headersList "clientHeaders" clientHeadersDecoder
 
-    main : PostgRestAdmin.Program Never Never Never
-    main =
-        PostgRestAdmin.application Config.init
 
--}
-config : Config f m msg
-config =
-    Decode.succeed default
-
-
-default : ConfigRecord f m msg
+default : Config f m msg
 default =
     let
         defaultHost =
@@ -1048,42 +1033,42 @@ default =
     }
 
 
-decode : Decode.Decoder (ConfigRecord f m msg) -> Decode.Value -> Result Decode.Error (ConfigRecord f m msg)
-decode decoder =
-    Decode.decodeValue
-        (decoder
-            |> Flag.string "host" hostDecoder
-            |> Flag.string "loginUrl" loginUrlDecoder
-            |> Flag.string "mountPath" mountPathDecoder
-            |> Flag.string "jwt" jwtDecoder
-            |> Flag.stringListDict "formFields" formFieldsDecoder
-            |> Flag.stringList "tables" tablesDecoder
-            |> Flag.stringDict "tableAliases" tableAliasesDecoder
-            |> Flag.linksList "menuLinks" menuLinksDecoder
-            |> Flag.headersList "clientHeaders" clientHeadersDecoder
-        )
+attrDecoder : (Config flags model msg -> Config flags model msg) -> Attribute flags model msg
+attrDecoder f =
+    Attribute (Decode.succeed f)
 
 
-{-| Specify the postgREST host.
+{-| Specify the PostgREST host.
 
     main : PostgRestAdmin.Program Never Never Never
     main =
-        Config.init
-            |> Config.host "http://localhost:3000"
-            |> PostgRestAdmin.application
+        PostgRestAdmin.application
+            [ PostgRestAdmin.host "http://localhost:3000"
+            ]
 
-Alternatively the host can be specified using flags, configuring using `host`.
+Alternatively the host can be specified using flags.
 Program flags take precedence.
 
-    Elm.Main.init({ "flags" : { "host" : "http://localhost:3000" }})
+    Elm.Main.init({ flags: { host: "http://localhost:3000" }})
 
 -}
-host : String -> Config f m msg -> Config f m msg
+host : String -> Attribute flags model msg
 host urlStr =
-    Decode.andThen (hostDecoder urlStr)
+    case Url.fromString urlStr of
+        Just u ->
+            attrDecoder
+                (\conf ->
+                    { conf
+                        | host = u
+                        , loginUrl = { u | path = "/rpc/login" }
+                    }
+                )
+
+        Nothing ->
+            Attribute (Decode.fail "`Config.host` was given an invalid URL")
 
 
-hostDecoder : String -> ConfigRecord f m msg -> Decode.Decoder (ConfigRecord f m msg)
+hostDecoder : String -> Config f m msg -> Decode.Decoder (Config f m msg)
 hostDecoder urlStr conf =
     Url.fromString urlStr
         |> Maybe.map
@@ -1103,22 +1088,22 @@ root path.
 
     main : PostgRestAdmin.Program Never Never Never
     main =
-        Config.init
-            |> Config.mountPath "/back-office"
-            |> PostgRestAdmin.application
+        PostgRestAdmin.application
+            [ PostgRestAdmin.mountPath "/back-office"
+            ]
 
-Alternatively the host can be specified using flags, configuring using
-`mountPath`. Program flags take precedence.
+Alternatively the mount path can be specified using flags.
+Program flags take precedence.
 
-    Elm.Main.init({ "flags" : { "mountPath" : "/back-office" }})
+    Elm.Main.init({ flags: { mountPath: "/back-office" }})
 
 -}
-mountPath : String -> Config f m msg -> Config f m msg
+mountPath : String -> Attribute flags model msg
 mountPath p =
-    Decode.andThen (mountPathDecoder p)
+    attrDecoder (\conf -> { conf | mountPath = MountPath.fromString p })
 
 
-mountPathDecoder : String -> ConfigRecord f m msg -> Decode.Decoder (ConfigRecord f m msg)
+mountPathDecoder : String -> Config f m msg -> Decode.Decoder (Config f m msg)
 mountPathDecoder p conf =
     Decode.succeed { conf | mountPath = MountPath.fromString p }
 
@@ -1127,22 +1112,27 @@ mountPathDecoder p conf =
 
     main : PostgRestAdmin.Program Never Never Never
     main =
-        Config.init
-            |> Config.loginUrl "http://localhost:3000/rpc/login"
-            |> PostgRestAdmin.application
+        PostgRestAdmin.application
+            [ PostgRestAdmin.loginUrl "http://localhost:3000/rpc/login"
+            ]
 
-Alternatively the login URL can be specified using flags with `loginUrl`.
+Alternatively the login URL can be specified using flags.
 Program flags take precedence.
 
-    Elm.Main.init({ "flags" : { "loginUrl" : "http://localhost:3000/rpc/login" }})
+    Elm.Main.init({ flags: { loginUrl: "http://localhost:3000/rpc/login" }})
 
 -}
-loginUrl : String -> Config f m msg -> Config f m msg
+loginUrl : String -> Attribute flags model msg
 loginUrl urlStr =
-    Decode.andThen (loginUrlDecoder urlStr)
+    case Url.fromString urlStr of
+        Just u ->
+            attrDecoder (\conf -> { conf | loginUrl = u })
+
+        Nothing ->
+            Attribute (Decode.fail "`Config.loginUrl` was given an invalid URL")
 
 
-loginUrlDecoder : String -> ConfigRecord f m msg -> Decode.Decoder (ConfigRecord f m msg)
+loginUrlDecoder : String -> Config f m msg -> Decode.Decoder (Config f m msg)
 loginUrlDecoder urlStr conf =
     Url.fromString urlStr
         |> Maybe.map (\u -> Decode.succeed { conf | loginUrl = u })
@@ -1150,46 +1140,43 @@ loginUrlDecoder urlStr conf =
             (Decode.fail "`Config.loginUrl` was given an invalid URL")
 
 
-{-| Set a JWT to authenticate postgREST requests. Even when using
-[formAuth](#formAuth) it's possible to set an initial JWT.
+{-| Set a JWT to authenticate PostgREST requests. You can set an initial JWT
+using this attribute.
 
     main : PostgRestAdmin.Program Never Never Never
     main =
-        Config.init
-            |> Config.jwt "8abf3a...9ac36d"
-            |> PostgRestAdmin.application
+        PostgRestAdmin.application
+            [ PostgRestAdmin.jwt "8abf3a...9ac36d"
+            ]
 
-Alternatively the token can be passed using flags, configuring using `jwt`.
+Alternatively the token can be passed using flags.
 Program flags take precedence.
 
     Elm.Main.init({
-        "flags" : { "jwt" : sessionStorage.getItem("jwt") }
+        flags: { jwt: sessionStorage.getItem("jwt") }
      })
 
 -}
-jwt : String -> Config f m msg -> Config f m msg
+jwt : String -> Attribute flags model msg
 jwt tokenStr =
-    Decode.map
-        (\conf ->
-            { conf | authScheme = Client.jwt tokenStr }
-        )
+    attrDecoder (\conf -> { conf | authScheme = Client.jwt tokenStr })
 
 
-jwtDecoder : String -> ConfigRecord f m msg -> Decode.Decoder (ConfigRecord f m msg)
+jwtDecoder : String -> Config f m msg -> Decode.Decoder (Config f m msg)
 jwtDecoder tokenStr conf =
     Decode.succeed { conf | authScheme = Client.jwt tokenStr }
 
 
 {-| Callback triggered with a JWT string on successful login.
-Tipically used to persist the JWT to session storage.
+Typically used to persist the JWT to session storage.
 
     port loginSuccess : String -> Cmd msg
 
     main : PostgRestAdmin.Program Never Never Never
     main =
-        Config.init
-            |> Config.onLogin loginSuccess
-            |> PostgRestAdmin.application
+        PostgRestAdmin.application
+            [ PostgRestAdmin.onLogin loginSuccess
+            ]
 
 Then subscribe to the corresponding port.
 
@@ -1202,14 +1189,13 @@ Then subscribe to the corresponding port.
     });
 
 -}
-onLogin : (String -> Cmd msg) -> Config f m msg -> Config f m msg
+onLogin : (String -> Cmd msg) -> Attribute flags model msg
 onLogin f =
-    Decode.map
-        (\conf -> { conf | onLogin = f })
+    attrDecoder (\conf -> { conf | onLogin = f })
 
 
 {-| Callback triggered when authentication fails when attempting to perform a
-request. You can use to perform external authentication.
+request. You can use this to perform external authentication.
 
     port authFailure : String -> Cmd msg
 
@@ -1219,10 +1205,10 @@ request. You can use to perform external authentication.
 
     main : PostgRestAdmin.Program Never Never Never
     main =
-        Config.init
-            |> Config.withAuthFailed authFailed
-            |> Config.onExternalLogin tokenReceiver
-            |> PostgRestAdmin.application
+        PostgRestAdmin.application
+            [ PostgRestAdmin.onAuthFailed authFailure
+            , PostgRestAdmin.onExternalLogin tokenReceiver
+            ]
 
 Then wire to the corresponding ports.
 
@@ -1238,10 +1224,9 @@ Then wire to the corresponding ports.
     });
 
 -}
-onAuthFailed : (String -> Cmd msg) -> Config f m msg -> Config f m msg
+onAuthFailed : (String -> Cmd msg) -> Attribute flags model msg
 onAuthFailed f =
-    Decode.map
-        (\conf -> { conf | onAuthFailed = f })
+    attrDecoder (\conf -> { conf | onAuthFailed = f })
 
 
 {-| Subscribe to receive a JWT and a redirect path when login with an external
@@ -1256,23 +1241,21 @@ onExternalLogin :
      )
      -> Sub { path : String, accessToken : String }
     )
-    -> Config f m msg
-    -> Config f m msg
+    -> Attribute flags model msg
 onExternalLogin sub =
-    Decode.map
-        (\conf -> { conf | onExternalLogin = sub })
+    attrDecoder (\conf -> { conf | onExternalLogin = sub })
 
 
-{-| Callback triggered when authentication fails when attempting to perform a
-request. You can use to perform external authentication.
+{-| Callback triggered when the user logs out.
+You can use this to perform cleanup or external logout operations.
 
     port logout : () -> Cmd msg
 
     main : PostgRestAdmin.Program Never Never Never
     main =
-        Config.init
-            |> Config.onLogout logout
-            |> PostgRestAdmin.application
+        PostgRestAdmin.application
+            [ PostgRestAdmin.onLogout logout
+            ]
 
 Then subscribe to the corresponding port.
 
@@ -1283,33 +1266,32 @@ Then subscribe to the corresponding port.
     });
 
 -}
-onLogout : (() -> Cmd msg) -> Config f m msg -> Config f m msg
+onLogout : (() -> Cmd msg) -> Attribute flags model msg
 onLogout f =
-    Decode.map
-        (\conf -> { conf | onLogout = f })
+    attrDecoder (\conf -> { conf | onLogout = f })
 
 
-{-| Specify which fields should be present in the the edit and create forms,
+{-| Specify which fields should be present in the edit and create forms,
 overriding the table schema. By default a primary key field is not present in
 the forms.
 
     main : PostgRestAdmin.Program Never Never Never
     main =
-        Config.init
-            |> Config.formFields "posts" [ "id", "title", "content" ]
-            |> PostgRestAdmin.application
+        PostgRestAdmin.application
+            [ PostgRestAdmin.formFields "posts" [ "id", "title", "content" ]
+            ]
 
-Alternatively this parameter can be configured passing the flag `formFields`.
+Alternatively this parameter can be configured using flags.
 Program flags take precedence.
 
     Elm.Main.init({
-        "flags" : { "formFields" : { "posts" : [ "id", "title", "content" ] } }
+        flags: { formFields: { posts: [ "id", "title", "content" ] } }
     })
 
 -}
-formFields : String -> List String -> Config f m msg -> Config f m msg
+formFields : String -> List String -> Attribute flags model msg
 formFields tableName fields =
-    Decode.map
+    attrDecoder
         (\conf ->
             { conf
                 | formFields = Dict.insert tableName fields conf.formFields
@@ -1319,40 +1301,38 @@ formFields tableName fields =
 
 formFieldsDecoder :
     Dict String (List String)
-    -> ConfigRecord f m msg
-    -> Decode.Decoder (ConfigRecord f m msg)
+    -> Config f m msg
+    -> Decode.Decoder (Config f m msg)
 formFieldsDecoder fields conf =
     Decode.succeed { conf | formFields = Dict.union fields conf.formFields }
 
 
-{-| Specify a number of actions buttons to be shown in the detail page of a
+{-| Specify action buttons to be shown in the detail page of a
 record along with Edit and Delete buttons.
 
-`detailActions` expect a dict where the keys correspond with the name of a
-table and the values are a list of tuples, the first element of the tuple
-corresponds to the button text and the second is a function that takes the id of
-the resource and returns a url string.
+`detailActions` expects a table name and a list of tuples. The first element of
+each tuple is the button text and the second is a function that takes a record
+and an ID and returns a URL string.
 
     import Url.Builder as Url
 
     main : PostgRestAdmin.Program Never Never Never
     main =
-        Config.init
-            |> Config.detailActions "posts"
+        PostgRestAdmin.application
+            [ PostgRestAdmin.detailActions "posts"
                 [ ( "View Comments"
                   , \_ id -> Url.absolute [ "posts", id, "comments" ] []
                   )
                 ]
-            |> PostgRestAdmin.application
+            ]
 
 -}
 detailActions :
     String
     -> List ( String, Record -> String -> String )
-    -> Config f m msg
-    -> Config f m msg
+    -> Attribute flags model msg
 detailActions tableName actions =
-    Decode.map
+    attrDecoder
         (\conf ->
             { conf
                 | detailActions =
@@ -1366,54 +1346,56 @@ order of the left resources menu.
 
     main : PostgRestAdmin.Program Never Never Never
     main =
-        Config.init
-            |> Config.tables [ "posts", "comments" ]
-            |> PostgRestAdmin.application
+        PostgRestAdmin.application
+            [ PostgRestAdmin.tables [ "posts", "comments" ]
+            ]
 
-Alternatively the host can be specified passing the flag `tables`.
+Alternatively the tables can be specified using flags.
 Program flags take precedence.
 
-    Elm.Main.init({ "tables" : [ "posts", "comments" ]})
+    Elm.Main.init({ flags: { tables: [ "posts", "comments" ] }})
 
 -}
-tables : List String -> Config f m msg -> Config f m msg
+tables : List String -> Attribute flags model msg
 tables tableNames =
-    Decode.andThen (tablesDecoder tableNames)
+    attrDecoder (\conf -> { conf | tables = tableNames })
 
 
-tablesDecoder : List String -> ConfigRecord f m msg -> Decode.Decoder (ConfigRecord f m msg)
+tablesDecoder : List String -> Config f m msg -> Decode.Decoder (Config f m msg)
 tablesDecoder tableNames conf =
     Decode.succeed { conf | tables = tableNames }
 
 
-{-| Pass a dict of links to display in the side menu. The list consists of a
+{-| Pass a list of links to display in the side menu. The list consists of
 tuples of the link text and a url.
 
     main : PostgRestAdmin.Program Never Never Never
     main =
-        Config.init
-            |> Config.menuLinks [ ( "Api Docs", "/api/docs" ) ]
-            |> PostgRestAdmin.application
+        PostgRestAdmin.application
+            [ PostgRestAdmin.menuLinks [ ( "Api Docs", "/api/docs" ) ]
+            ]
 
-Alternatively the menu links can be specified passing the flag `menuLinks`.
+Alternatively the menu links can be specified using flags.
 Program flags take precedence.
 
     Elm.Main.init({
-        "menuLinks" : [
-             { text : "Api Docs", url : "/api/docs" }
-        ]
+        flags: {
+            menuLinks: [
+                { text: "Api Docs", url: "/api/docs" }
+            ]
+        }
     })
 
 -}
-menuLinks : List ( String, String ) -> Config f m msg -> Config f m msg
+menuLinks : List ( String, String ) -> Attribute flags model msg
 menuLinks links =
-    Decode.andThen (menuLinksDecoder links)
+    attrDecoder (\conf -> { conf | menuLinks = links })
 
 
 menuLinksDecoder :
     List ( String, String )
-    -> ConfigRecord f m msg
-    -> Decode.Decoder (ConfigRecord f m msg)
+    -> Config f m msg
+    -> Decode.Decoder (Config f m msg)
 menuLinksDecoder links conf =
     Decode.succeed { conf | menuLinks = links }
 
@@ -1424,73 +1406,76 @@ working with PostgREST schemas.
 
     main : PostgRestAdmin.Program Never Never Never
     main =
-        Config.init
-            |> Config.clientHeaders
+        PostgRestAdmin.application
+            [ PostgRestAdmin.clientHeaders
                 [ Http.header "Accept-Profile" "bluebox"
                 , Http.header "Content-Profile" "bluebox"
                 ]
-            |> PostgRestAdmin.application
+            ]
 
-Alternatively headers can be specified using flags with `clientHeaders`.
+Alternatively headers can be specified using flags.
 Program flags take precedence.
 
     Elm.Main.init({
-        "clientHeaders" : {
-            "Accept-Profile": "bluebox",
-            "Content-Profile": "bluebox"
+        flags: {
+            clientHeaders: {
+                "Accept-Profile": "bluebox",
+                "Content-Profile": "bluebox"
+            }
         }
     })
 
 -}
-clientHeaders : List Http.Header -> Config f m msg -> Config f m msg
+clientHeaders : List Http.Header -> Attribute flags model msg
 clientHeaders headers =
-    Decode.andThen (clientHeadersDecoder headers)
+    attrDecoder (\conf -> { conf | clientHeaders = headers })
 
 
 clientHeadersDecoder :
     List Http.Header
-    -> ConfigRecord f m msg
-    -> Decode.Decoder (ConfigRecord f m msg)
+    -> Config f m msg
+    -> Decode.Decoder (Config f m msg)
 clientHeadersDecoder headers conf =
     Decode.succeed { conf | clientHeaders = headers }
 
 
-{-| Rename a table referenced in a foreign key. PostgREST OpenApi genreated docs
-confuses tables with views when describing the foreign key for a resource,
+{-| Rename a table referenced in a foreign key. PostgREST OpenAPI generated docs
+confuse tables with views when describing the foreign key for a resource,
 because of this some links might be incorrectly generated.
 
     main : PostgRestAdmin.Program Never Never Never
     main =
-        Config.init
-            |> Config.tableAliases
+        PostgRestAdmin.application
+            [ PostgRestAdmin.tableAliases
                 (Dict.fromList [ ( "published_posts", "posts" ) ])
-            |> PostgRestAdmin.application
+            ]
 
-Alternatively the host can be specified using flags, configuring using
-`tableAliases`.
+Alternatively the table aliases can be specified using flags.
 Program flags take precedence.
 
     Elm.Main.init({
-        tableAliases: { "published_posts" : "posts "}
+        flags: {
+            tableAliases: { "published_posts": "posts" }
+        }
     })
 
 -}
-tableAliases : Dict String String -> Config f m msg -> Config f m msg
+tableAliases : Dict String String -> Attribute flags model msg
 tableAliases aliases =
-    Decode.map (\conf -> { conf | tableAliases = aliases })
+    attrDecoder (\conf -> { conf | tableAliases = aliases })
 
 
 tableAliasesDecoder :
     Dict String String
-    -> ConfigRecord f m msg
-    -> Decode.Decoder (ConfigRecord f m msg)
+    -> Config f m msg
+    -> Decode.Decoder (Config f m msg)
 tableAliasesDecoder aliases conf =
     Decode.succeed { conf | tableAliases = aliases }
 
 
-{-| Mount an application on a give path using
+{-| Mount an application on a given path using
 [Url.Parser](https://package.elm-lang.org/packages/elm/url/latest/Url.Parser).
-This is usefull if you want to override an existing page or add additional
+This is useful if you want to override an existing page or add additional
 behaviour.
 
 The component specification is similar to the specification for
@@ -1499,31 +1484,33 @@ with the addition of `onLogin` param for which a msg should be provided to be
 sent on successful login.
 
 Note that the type signature changes from
-`PostgRestAdmin.Program Never Nothing Nothing`.
-`Model` and `Msg` are defined by your application.
+`PostgRestAdmin.Program Never Never Never` to
+`PostgRestAdmin.Program flags Model Msg` where
+`flags`, `Model` and `Msg` are defined by your application.
 
 The url parser should map to a Msg to be used to `update` your application when
-navigating to this route built the parameters that the parser defines, you can
+navigating to this route built with the parameters that the parser defines. You can
 use
 [Url.Parser.oneOf](https://package.elm-lang.org/packages/elm/url/latest/Url.Parser#oneOf)
 to parse many routes.
 
-    main : PostgRestAdmin.Program Never Model Msg
+    main : PostgRestAdmin.Program Flags Model Msg
     main =
-        Config.init
-            |> Config.routes
+        PostgRestAdmin.application
+            [ PostgRestAdmin.routes
                 { view = view
                 , update = update
                 , init = init
+                , subscriptions = subscriptions
                 , onLogin = LoggedIn
                 }
                 (Parser.map MyPostLoadedMsg
                     (s "posts" </> Parser.string </> s "comments")
                 )
-            |> PostgRestAdmin.application
+            ]
 
-The `application` is initialized with a [Client](PostgRestAdmin-Client) you can
-use to perform requests.
+The mounted application is initialized with a [Client](PostgRestAdmin-Client)
+you can use to perform requests.
 
 -}
 routes :
@@ -1540,13 +1527,9 @@ routes :
     , onLogin : Client -> msg
     }
     -> Parser (msg -> msg) msg
-    -> Config flags model msg
-    -> Config flags model msg
+    -> Attribute flags model msg
 routes program parser =
-    Decode.map
-        (\conf ->
-            { conf | application = Just ( program, parser ) }
-        )
+    attrDecoder (\conf -> { conf | application = Just ( program, parser ) })
 
 
 
