@@ -1,16 +1,50 @@
 module PostgRestAdmin exposing
-    ( Program
-    , application, init
+    ( Program, application, init
+    , Config, config
+    , host, mountPath, clientHeaders
+    , loginUrl, jwt
+    , onLogin, onAuthFailed, onLogout, onExternalLogin
+    , menuLinks, formFields, detailActions
+    , tables, tableAliases
+    , routes
     )
 
 {-|
 
-@docs Program
-
 
 # Init
 
-@docs application, init
+@docs Program, application, init
+
+
+# Program configuration
+
+
+## Config
+
+@docs Config, config
+
+
+## Basics
+
+@docs host, mountPath, clientHeaders
+
+
+## Auth
+
+@docs loginUrl, jwt, formAuth
+@docs onLogin, onAuthFailed, onLogout, onExternalLogin
+
+
+## Customization
+
+@docs menuLinks, formFields, detailActions
+@docs tables, tableAliases
+
+
+# Application mounting
+
+@docs routes
 
 -}
 
@@ -23,17 +57,16 @@ import Html exposing (Html)
 import Html.Attributes as Attrs
 import Html.Events as Events
 import Http
-import Internal.Application as Application exposing (Application(..))
 import Internal.Cmd as AppCmd
+import Internal.Flag as Flag
 import Internal.Notification as Notification exposing (Notification)
-import PostgRestAdmin.Config as Config
 import Internal.PageDetail as PageDetail
 import Internal.PageForm as PageForm
 import Internal.PageListing as PageListing exposing (Model)
-import Internal.Schema exposing (Schema)
+import Internal.Schema exposing (Record, Schema)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
-import PostgRestAdmin.Client as Client exposing (Client)
+import PostgRestAdmin.Client as Client exposing (AuthScheme, Client)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
 import Postgrest.Client as PG
 import String.Extra as String
@@ -67,7 +100,7 @@ type alias Program flags model msg =
 type alias InitParams f m msg =
     { client : Client
     , key : Nav.Key
-    , config : Config.ConfigRecord f m msg
+    , config : ConfigRecord f m msg
     }
 
 
@@ -79,9 +112,9 @@ type alias Model f m msg =
     , client : Client
     , onLogin : Maybe String -> Cmd (Msg f m msg)
     , attemptedPath : String
-    , mountedApp : Application.Application f m msg
+    , mountedApp : MountedApp f m msg
     , mountedAppFlags : Result Decode.Error f
-    , config : Config.ConfigRecord f m msg
+    , config : ConfigRecord f m msg
     , authFormUrl : Url
     , authFormJwtDecoder : Decoder String
     , authFormJwtEncoder : Dict String String -> Encode.Value
@@ -91,7 +124,7 @@ type alias Model f m msg =
 
 
 type Msg f m msg
-    = ApplicationInit ( Application.Params f m msg, msg )
+    = ApplicationInit ( MountedAppParams f m msg, msg )
     | AuthFieldsChanged (Field.Msg Never)
     | AuthFormSubmitted
     | GotToken (Result Client.Error String)
@@ -131,7 +164,7 @@ options.
         PostgRestAdmin.application Config.init
 
 -}
-application : Config.Config f m msg -> Program f m msg
+application : Config f m msg -> Program f m msg
 application decoder =
     Browser.application
         { init = init decoder
@@ -144,14 +177,14 @@ application decoder =
 
 
 init :
-    Config.Config f m msg
+    Config f m msg
     -> Value
     -> Url
     -> Nav.Key
     -> ( Model f m msg, Cmd (Msg f m msg) )
 init decoder flags url key =
     case
-        Config.decode decoder flags
+        decode decoder flags
             |> Result.map (initModel flags url key)
     of
         Ok model ->
@@ -164,29 +197,29 @@ init decoder flags url key =
         Err error ->
             let
                 model =
-                    initModel flags url key Config.default
+                    initModel flags url key default
             in
             ( { model | error = Just (Decode.errorToString error) }
             , Cmd.none
             )
 
 
-initModel : Value -> Url -> Nav.Key -> Config.ConfigRecord f m msg -> Model f m msg
-initModel flags url key config =
+initModel : Value -> Url -> Nav.Key -> ConfigRecord f m msg -> Model f m msg
+initModel flags url key configRec =
     { route = RouteRoot
     , key = key
     , notification = Notification.none
     , error = Nothing
-    , client = Client.init config.host config.authScheme config.clientHeaders
+    , client = Client.init configRec.host configRec.authScheme configRec.clientHeaders
     , onLogin =
         Maybe.withDefault ""
-            >> config.onLogin
+            >> configRec.onLogin
             >> Cmd.map (always NoOp)
     , attemptedPath = urlToPath url
-    , mountedApp = Application.none
-    , mountedAppFlags = Decode.decodeValue config.flagsDecoder flags
-    , config = config
-    , authFormUrl = config.loginUrl
+    , mountedApp = NoMountedApp
+    , mountedAppFlags = Decode.decodeValue configRec.flagsDecoder flags
+    , config = configRec
+    , authFormUrl = configRec.loginUrl
     , authFormJwtDecoder = Decode.field "token" Decode.string
     , authFormJwtEncoder = Encode.dict identity Encode.string
     , authFormField = authFormField
@@ -273,7 +306,7 @@ update msg model =
             let
                 ( app, initCmd ) =
                     case model.mountedApp of
-                        None ->
+                        NoMountedApp ->
                             case model.mountedAppFlags of
                                 Ok flags ->
                                     params.init
@@ -282,10 +315,10 @@ update msg model =
                                         , mountPath = model.config.mountPath
                                         }
                                         model.key
-                                        |> Tuple.mapFirst (Application params)
+                                        |> Tuple.mapFirst (MountedApp params)
 
                                 Err err ->
-                                    ( Application.DecodeFailed err
+                                    ( MountedAppDecodeFailed err
                                     , AppCmd.none
                                     )
 
@@ -293,7 +326,7 @@ update msg model =
                             ( model.mountedApp, AppCmd.none )
 
                 ( app_, cmd ) =
-                    Application.update childMsg app
+                    updateMountedApp childMsg app
             in
             ( { model
                 | mountedApp = app_
@@ -429,7 +462,7 @@ update msg model =
         ( PageApplicationChanged childMsg, _ ) ->
             let
                 ( app, cmd ) =
-                    Application.update childMsg model.mountedApp
+                    updateMountedApp childMsg model.mountedApp
             in
             ( { model | mountedApp = app }
             , mapAppCmd PageApplicationChanged cmd
@@ -488,7 +521,7 @@ loginCmd model client =
     Cmd.batch
         [ model.onLogin (Client.toJwtString client)
         , case model.mountedApp of
-            Application params _ ->
+            MountedApp params _ ->
                 Task.succeed (params.onLogin client)
                     |> Task.perform PageApplicationChanged
 
@@ -595,13 +628,13 @@ errorMessage status =
 
 
 sideMenu : Model f m msg -> Html (Msg f m msg)
-sideMenu ({ config } as model) =
+sideMenu model =
     Html.div
         [ Attrs.class "side-menu" ]
         [ Html.aside
             [ Attrs.class "resources-menu" ]
-            [ Html.ul [] (List.map (menuItem config.mountPath) (resources model))
-            , Html.ul [] (List.map extraMenuItem config.menuLinks)
+            [ Html.ul [] (List.map (menuItem model.config.mountPath) (resources model))
+            , Html.ul [] (List.map extraMenuItem model.config.menuLinks)
             ]
         , Html.div
             [ Attrs.class "account-management" ]
@@ -617,11 +650,11 @@ sideMenu ({ config } as model) =
 
 
 menuItem : MountPath -> String -> Html (Msg f m msg)
-menuItem mountPath name =
+menuItem mount name =
     Html.li
         []
         [ Html.a
-            [ Attrs.href (path mountPath name) ]
+            [ Attrs.href (path mount name) ]
             [ Html.text (String.toTitleCase (String.humanize name)) ]
         ]
 
@@ -656,15 +689,15 @@ mainContent model =
 
         RouteApplication ->
             case model.mountedApp of
-                Application program childModel ->
+                MountedApp program childModel ->
                     Html.map PageApplicationChanged (program.view childModel)
 
-                DecodeFailed err ->
+                MountedAppDecodeFailed err ->
                     Html.pre
                         [ Attrs.class "error" ]
                         [ Html.text (Decode.errorToString err) ]
 
-                None ->
+                NoMountedApp ->
                     Html.text "Not found"
 
         RouteNotFound ->
@@ -676,17 +709,17 @@ mainContent model =
 
 
 subscriptions : Model f m msg -> Sub (Msg f m msg)
-subscriptions { mountedApp, route, config } =
+subscriptions model =
     Sub.batch
-        [ Sub.map PageApplicationChanged (Application.subscriptions mountedApp)
-        , case route of
+        [ Sub.map PageApplicationChanged (mountedAppSubscriptions model.mountedApp)
+        , case model.route of
             RouteListing pageListing ->
                 Sub.map PageListingChanged
                     (PageListing.subscriptions pageListing)
 
             _ ->
                 Sub.none
-        , Sub.map LoggedIn (config.onExternalLogin identity)
+        , Sub.map LoggedIn (model.config.onExternalLogin identity)
         ]
 
 
@@ -846,13 +879,13 @@ initFormHelp :
     -> String
     -> Maybe String
     -> ( Route f m msg, Cmd (Msg f m msg) )
-initFormHelp { client, key, config } parent tableName id =
-    case Dict.get tableName client.schema of
+initFormHelp model parent tableName id =
+    case Dict.get tableName model.client.schema of
         Just table ->
             PageForm.init
-                { client = client
-                , navKey = key
-                , mountPath = config.mountPath
+                { client = model.client
+                , navKey = model.key
+                , mountPath = model.config.mountPath
 
                 -- , fieldNames = Dict.get tableName config.formFields |> Maybe.withDefault []
                 , parent = parent
@@ -871,22 +904,22 @@ initDetail :
     -> String
     -> String
     -> ( Route f m msg, Cmd (Msg f m msg) )
-initDetail { client, key, config } tableName id =
-    case Dict.get tableName client.schema of
+initDetail model tableName id =
+    case Dict.get tableName model.client.schema of
         Just table ->
             let
                 detailParams =
-                    { client = client
-                    , mountPath = config.mountPath
+                    { client = model.client
+                    , mountPath = model.config.mountPath
                     , table = table
                     , id = id
                     , detailActions =
-                        config.detailActions
+                        model.config.detailActions
                             |> Dict.get tableName
                             |> Maybe.withDefault []
                     }
             in
-            PageDetail.init detailParams key
+            PageDetail.init detailParams model.key
                 |> Tuple.mapFirst RouteDetail
                 |> Tuple.mapSecond (mapAppCmd PageDetailChanged)
 
@@ -898,13 +931,13 @@ initDetail { client, key, config } tableName id =
 -- UTILS
 
 
-resources : { a | client : Client, config : Config.ConfigRecord f m msg } -> List String
-resources { client, config } =
-    if List.isEmpty config.tables then
-        Dict.keys client.schema |> List.sort
+resources : { a | client : Client, config : ConfigRecord f m msg } -> List String
+resources params =
+    if List.isEmpty params.config.tables then
+        Dict.keys params.client.schema |> List.sort
 
     else
-        config.tables
+        params.config.tables
 
 
 mapAppCmd : (a -> Msg f m b) -> AppCmd.Cmd a -> Cmd (Msg f m b)
@@ -925,3 +958,637 @@ urlToPath url =
     [ Just url.path, url.query ]
         |> List.filterMap identity
         |> String.join "?"
+
+
+
+-- CONFIG
+--
+
+
+{-| PostgRestAdmin detail actions type.
+-}
+type alias DetailActions =
+    List ( String, Record -> String -> String )
+
+
+{-| [PostgRestAdmin.application](PostgRestAdmin#application) configuration
+params.
+-}
+type alias Config f m msg =
+    Decode.Decoder (ConfigRecord f m msg)
+
+
+type alias ConfigRecord flags model msg =
+    { host : Url
+    , mountPath : MountPath
+    , loginUrl : Url
+    , authScheme : AuthScheme
+    , formFields : Dict String (List String)
+    , application : Maybe ( MountedAppParams flags model msg, Parser (msg -> msg) msg )
+    , detailActions : Dict String DetailActions
+    , tables : List String
+    , menuLinks : List ( String, String )
+    , menuActions : Dict String Url
+    , onLogin : String -> Cmd msg
+    , onAuthFailed : String -> Cmd msg
+    , onExternalLogin :
+        ({ path : String, accessToken : String }
+         -> { path : String, accessToken : String }
+        )
+        -> Sub { path : String, accessToken : String }
+    , onLogout : () -> Cmd msg
+    , tableAliases : Dict String String
+    , flagsDecoder : Decode.Decoder flags
+    , clientHeaders : List Http.Header
+    }
+
+
+{-| [PostgRestAdmin.application](PostgRestAdmin#application) decoder with
+defaults.
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        PostgRestAdmin.application Config.init
+
+-}
+config : Config f m msg
+config =
+    Decode.succeed default
+
+
+default : ConfigRecord f m msg
+default =
+    let
+        defaultHost =
+            { protocol = Http
+            , host = "localhost"
+            , port_ = Just 3000
+            , path = ""
+            , query = Nothing
+            , fragment = Nothing
+            }
+    in
+    { authScheme = Client.unset
+    , host = defaultHost
+    , mountPath = MountPath.fromString ""
+    , loginUrl = { defaultHost | path = "/rpc/login" }
+    , formFields = Dict.empty
+    , application = Nothing
+    , detailActions = Dict.empty
+    , tables = []
+    , menuLinks = []
+    , menuActions = Dict.empty
+    , onLogin = always Cmd.none
+    , onAuthFailed = always Cmd.none
+    , onExternalLogin = always Sub.none
+    , onLogout = always Cmd.none
+    , tableAliases = Dict.empty
+    , flagsDecoder = Decode.fail "No flags decoder provided"
+    , clientHeaders = []
+    }
+
+
+decode : Decode.Decoder (ConfigRecord f m msg) -> Decode.Value -> Result Decode.Error (ConfigRecord f m msg)
+decode decoder =
+    Decode.decodeValue
+        (decoder
+            |> Flag.string "host" hostDecoder
+            |> Flag.string "loginUrl" loginUrlDecoder
+            |> Flag.string "mountPath" mountPathDecoder
+            |> Flag.string "jwt" jwtDecoder
+            |> Flag.stringListDict "formFields" formFieldsDecoder
+            |> Flag.stringList "tables" tablesDecoder
+            |> Flag.stringDict "tableAliases" tableAliasesDecoder
+            |> Flag.linksList "menuLinks" menuLinksDecoder
+            |> Flag.headersList "clientHeaders" clientHeadersDecoder
+        )
+
+
+{-| Specify the postgREST host.
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.host "http://localhost:3000"
+            |> PostgRestAdmin.application
+
+Alternatively the host can be specified using flags, configuring using `host`.
+Program flags take precedence.
+
+    Elm.Main.init({ "flags" : { "host" : "http://localhost:3000" }})
+
+-}
+host : String -> Config f m msg -> Config f m msg
+host urlStr =
+    Decode.andThen (hostDecoder urlStr)
+
+
+hostDecoder : String -> ConfigRecord f m msg -> Decode.Decoder (ConfigRecord f m msg)
+hostDecoder urlStr conf =
+    Url.fromString urlStr
+        |> Maybe.map
+            (\u ->
+                Decode.succeed
+                    { conf
+                        | host = u
+                        , loginUrl = { u | path = "/rpc/login" }
+                    }
+            )
+        |> Maybe.withDefault
+            (Decode.fail "`Config.host` was given an invalid URL")
+
+
+{-| Specify a path prefix for all routes, in case the app is not mounted in the
+root path.
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.mountPath "/back-office"
+            |> PostgRestAdmin.application
+
+Alternatively the host can be specified using flags, configuring using
+`mountPath`. Program flags take precedence.
+
+    Elm.Main.init({ "flags" : { "mountPath" : "/back-office" }})
+
+-}
+mountPath : String -> Config f m msg -> Config f m msg
+mountPath p =
+    Decode.andThen (mountPathDecoder p)
+
+
+mountPathDecoder : String -> ConfigRecord f m msg -> Decode.Decoder (ConfigRecord f m msg)
+mountPathDecoder p conf =
+    Decode.succeed { conf | mountPath = MountPath.fromString p }
+
+
+{-| Specify the login URL for form authentication.
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.loginUrl "http://localhost:3000/rpc/login"
+            |> PostgRestAdmin.application
+
+Alternatively the login URL can be specified using flags with `loginUrl`.
+Program flags take precedence.
+
+    Elm.Main.init({ "flags" : { "loginUrl" : "http://localhost:3000/rpc/login" }})
+
+-}
+loginUrl : String -> Config f m msg -> Config f m msg
+loginUrl urlStr =
+    Decode.andThen (loginUrlDecoder urlStr)
+
+
+loginUrlDecoder : String -> ConfigRecord f m msg -> Decode.Decoder (ConfigRecord f m msg)
+loginUrlDecoder urlStr conf =
+    Url.fromString urlStr
+        |> Maybe.map (\u -> Decode.succeed { conf | loginUrl = u })
+        |> Maybe.withDefault
+            (Decode.fail "`Config.loginUrl` was given an invalid URL")
+
+
+{-| Set a JWT to authenticate postgREST requests. Even when using
+[formAuth](#formAuth) it's possible to set an initial JWT.
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.jwt "8abf3a...9ac36d"
+            |> PostgRestAdmin.application
+
+Alternatively the token can be passed using flags, configuring using `jwt`.
+Program flags take precedence.
+
+    Elm.Main.init({
+        "flags" : { "jwt" : sessionStorage.getItem("jwt") }
+     })
+
+-}
+jwt : String -> Config f m msg -> Config f m msg
+jwt tokenStr =
+    Decode.map
+        (\conf ->
+            { conf | authScheme = Client.jwt tokenStr }
+        )
+
+
+jwtDecoder : String -> ConfigRecord f m msg -> Decode.Decoder (ConfigRecord f m msg)
+jwtDecoder tokenStr conf =
+    Decode.succeed { conf | authScheme = Client.jwt tokenStr }
+
+
+{-| Callback triggered with a JWT string on successful login.
+Tipically used to persist the JWT to session storage.
+
+    port loginSuccess : String -> Cmd msg
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.onLogin loginSuccess
+            |> PostgRestAdmin.application
+
+Then subscribe to the corresponding port.
+
+    app = Elm.Main.init({
+      flags: { jwt: sessionStorage.getItem("jwt") }
+    })
+
+    app.ports.loginSuccess.subscribe(jwt => {
+      sessionStorage.setItem("jwt", jwt)
+    });
+
+-}
+onLogin : (String -> Cmd msg) -> Config f m msg -> Config f m msg
+onLogin f =
+    Decode.map
+        (\conf -> { conf | onLogin = f })
+
+
+{-| Callback triggered when authentication fails when attempting to perform a
+request. You can use to perform external authentication.
+
+    port authFailure : String -> Cmd msg
+
+    port tokenReceiver :
+        ({ path : String, accessToken : String } -> msg)
+        -> Sub msg
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.withAuthFailed authFailed
+            |> Config.onExternalLogin tokenReceiver
+            |> PostgRestAdmin.application
+
+Then wire to the corresponding ports.
+
+    app = Elm.Main.init()
+
+    app.ports.authFailure.subscribe(requestedPath => {
+        authenticate(requestedPath).then((accessToken) => {
+            app.ports.tokenReceiver.send({
+                path : requestedPath,
+                accessToken : accessToken
+            })
+        })
+    });
+
+-}
+onAuthFailed : (String -> Cmd msg) -> Config f m msg -> Config f m msg
+onAuthFailed f =
+    Decode.map
+        (\conf -> { conf | onAuthFailed = f })
+
+
+{-| Subscribe to receive a JWT and a redirect path when login with an external
+provider.
+
+See [onAuthFailed](#onAuthFailed).
+
+-}
+onExternalLogin :
+    (({ path : String, accessToken : String }
+      -> { path : String, accessToken : String }
+     )
+     -> Sub { path : String, accessToken : String }
+    )
+    -> Config f m msg
+    -> Config f m msg
+onExternalLogin sub =
+    Decode.map
+        (\conf -> { conf | onExternalLogin = sub })
+
+
+{-| Callback triggered when authentication fails when attempting to perform a
+request. You can use to perform external authentication.
+
+    port logout : () -> Cmd msg
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.onLogout logout
+            |> PostgRestAdmin.application
+
+Then subscribe to the corresponding port.
+
+    app = Elm.Main.init()
+
+    app.ports.logout.subscribe(_ => {
+        externalLogout()
+    });
+
+-}
+onLogout : (() -> Cmd msg) -> Config f m msg -> Config f m msg
+onLogout f =
+    Decode.map
+        (\conf -> { conf | onLogout = f })
+
+
+{-| Specify which fields should be present in the the edit and create forms,
+overriding the table schema. By default a primary key field is not present in
+the forms.
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.formFields "posts" [ "id", "title", "content" ]
+            |> PostgRestAdmin.application
+
+Alternatively this parameter can be configured passing the flag `formFields`.
+Program flags take precedence.
+
+    Elm.Main.init({
+        "flags" : { "formFields" : { "posts" : [ "id", "title", "content" ] } }
+    })
+
+-}
+formFields : String -> List String -> Config f m msg -> Config f m msg
+formFields tableName fields =
+    Decode.map
+        (\conf ->
+            { conf
+                | formFields = Dict.insert tableName fields conf.formFields
+            }
+        )
+
+
+formFieldsDecoder :
+    Dict String (List String)
+    -> ConfigRecord f m msg
+    -> Decode.Decoder (ConfigRecord f m msg)
+formFieldsDecoder fields conf =
+    Decode.succeed { conf | formFields = Dict.union fields conf.formFields }
+
+
+{-| Specify a number of actions buttons to be shown in the detail page of a
+record along with Edit and Delete buttons.
+
+`detailActions` expect a dict where the keys correspond with the name of a
+table and the values are a list of tuples, the first element of the tuple
+corresponds to the button text and the second is a function that takes the id of
+the resource and returns a url string.
+
+    import Url.Builder as Url
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.detailActions "posts"
+                [ ( "View Comments"
+                  , \_ id -> Url.absolute [ "posts", id, "comments" ] []
+                  )
+                ]
+            |> PostgRestAdmin.application
+
+-}
+detailActions :
+    String
+    -> List ( String, Record -> String -> String )
+    -> Config f m msg
+    -> Config f m msg
+detailActions tableName actions =
+    Decode.map
+        (\conf ->
+            { conf
+                | detailActions =
+                    Dict.insert tableName actions conf.detailActions
+            }
+        )
+
+
+{-| Pass a list of table names to restrict the editable resources, also sets the
+order of the left resources menu.
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.tables [ "posts", "comments" ]
+            |> PostgRestAdmin.application
+
+Alternatively the host can be specified passing the flag `tables`.
+Program flags take precedence.
+
+    Elm.Main.init({ "tables" : [ "posts", "comments" ]})
+
+-}
+tables : List String -> Config f m msg -> Config f m msg
+tables tableNames =
+    Decode.andThen (tablesDecoder tableNames)
+
+
+tablesDecoder : List String -> ConfigRecord f m msg -> Decode.Decoder (ConfigRecord f m msg)
+tablesDecoder tableNames conf =
+    Decode.succeed { conf | tables = tableNames }
+
+
+{-| Pass a dict of links to display in the side menu. The list consists of a
+tuples of the link text and a url.
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.menuLinks [ ( "Api Docs", "/api/docs" ) ]
+            |> PostgRestAdmin.application
+
+Alternatively the menu links can be specified passing the flag `menuLinks`.
+Program flags take precedence.
+
+    Elm.Main.init({
+        "menuLinks" : [
+             { text : "Api Docs", url : "/api/docs" }
+        ]
+    })
+
+-}
+menuLinks : List ( String, String ) -> Config f m msg -> Config f m msg
+menuLinks links =
+    Decode.andThen (menuLinksDecoder links)
+
+
+menuLinksDecoder :
+    List ( String, String )
+    -> ConfigRecord f m msg
+    -> Decode.Decoder (ConfigRecord f m msg)
+menuLinksDecoder links conf =
+    Decode.succeed { conf | menuLinks = links }
+
+
+{-| Set default HTTP headers to be included in all Client requests. This is
+useful for setting headers like `Accept-Profile` or `Content-Profile` when
+working with PostgREST schemas.
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.clientHeaders
+                [ Http.header "Accept-Profile" "bluebox"
+                , Http.header "Content-Profile" "bluebox"
+                ]
+            |> PostgRestAdmin.application
+
+Alternatively headers can be specified using flags with `clientHeaders`.
+Program flags take precedence.
+
+    Elm.Main.init({
+        "clientHeaders" : {
+            "Accept-Profile": "bluebox",
+            "Content-Profile": "bluebox"
+        }
+    })
+
+-}
+clientHeaders : List Http.Header -> Config f m msg -> Config f m msg
+clientHeaders headers =
+    Decode.andThen (clientHeadersDecoder headers)
+
+
+clientHeadersDecoder :
+    List Http.Header
+    -> ConfigRecord f m msg
+    -> Decode.Decoder (ConfigRecord f m msg)
+clientHeadersDecoder headers conf =
+    Decode.succeed { conf | clientHeaders = headers }
+
+
+{-| Rename a table referenced in a foreign key. PostgREST OpenApi genreated docs
+confuses tables with views when describing the foreign key for a resource,
+because of this some links might be incorrectly generated.
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.tableAliases
+                (Dict.fromList [ ( "published_posts", "posts" ) ])
+            |> PostgRestAdmin.application
+
+Alternatively the host can be specified using flags, configuring using
+`tableAliases`.
+Program flags take precedence.
+
+    Elm.Main.init({
+        tableAliases: { "published_posts" : "posts "}
+    })
+
+-}
+tableAliases : Dict String String -> Config f m msg -> Config f m msg
+tableAliases aliases =
+    Decode.map (\conf -> { conf | tableAliases = aliases })
+
+
+tableAliasesDecoder :
+    Dict String String
+    -> ConfigRecord f m msg
+    -> Decode.Decoder (ConfigRecord f m msg)
+tableAliasesDecoder aliases conf =
+    Decode.succeed { conf | tableAliases = aliases }
+
+
+{-| Mount an application on a give path using
+[Url.Parser](https://package.elm-lang.org/packages/elm/url/latest/Url.Parser).
+This is usefull if you want to override an existing page or add additional
+behaviour.
+
+The component specification is similar to the specification for
+[Browser.element](https://package.elm-lang.org/packages/elm/browser/latest/Browser#element),
+with the addition of `onLogin` param for which a msg should be provided to be
+sent on successful login.
+
+Note that the type signature changes from
+`PostgRestAdmin.Program Never Nothing Nothing`.
+`Model` and `Msg` are defined by your application.
+
+The url parser should map to a Msg to be used to `update` your application when
+navigating to this route built the parameters that the parser defines, you can
+use
+[Url.Parser.oneOf](https://package.elm-lang.org/packages/elm/url/latest/Url.Parser#oneOf)
+to parse many routes.
+
+    main : PostgRestAdmin.Program Never Model Msg
+    main =
+        Config.init
+            |> Config.routes
+                { view = view
+                , update = update
+                , init = init
+                , onLogin = LoggedIn
+                }
+                (Parser.map MyPostLoadedMsg
+                    (s "posts" </> Parser.string </> s "comments")
+                )
+            |> PostgRestAdmin.application
+
+The `application` is initialized with a [Client](PostgRestAdmin-Client) you can
+use to perform requests.
+
+-}
+routes :
+    { init :
+        { flags : flags
+        , client : Client
+        , mountPath : MountPath
+        }
+        -> Nav.Key
+        -> ( model, AppCmd.Cmd msg )
+    , view : model -> Html msg
+    , update : msg -> model -> ( model, AppCmd.Cmd msg )
+    , subscriptions : model -> Sub msg
+    , onLogin : Client -> msg
+    }
+    -> Parser (msg -> msg) msg
+    -> Config flags model msg
+    -> Config flags model msg
+routes program parser =
+    Decode.map
+        (\conf ->
+            { conf | application = Just ( program, parser ) }
+        )
+
+
+
+-- MOUNTED APP
+
+
+type alias MountedAppParams flags model msg =
+    { init :
+        { flags : flags
+        , client : Client
+        , mountPath : MountPath
+        }
+        -> Nav.Key
+        -> ( model, AppCmd.Cmd msg )
+    , view : model -> Html msg
+    , update : msg -> model -> ( model, AppCmd.Cmd msg )
+    , subscriptions : model -> Sub msg
+    , onLogin : Client -> msg
+    }
+
+
+type MountedApp flags model msg
+    = MountedApp (MountedAppParams flags model msg) model
+    | MountedAppDecodeFailed Decode.Error
+    | NoMountedApp
+
+
+updateMountedApp : msg -> MountedApp f m msg -> ( MountedApp f m msg, AppCmd.Cmd msg )
+updateMountedApp msg mountedApp =
+    case mountedApp of
+        MountedApp params model ->
+            params.update msg model |> Tuple.mapFirst (MountedApp params)
+
+        _ ->
+            ( mountedApp, AppCmd.none )
+
+
+mountedAppSubscriptions : MountedApp f m msg -> Sub msg
+mountedAppSubscriptions mountedApp =
+    case mountedApp of
+        MountedApp params model ->
+            params.subscriptions model
+
+        _ ->
+            Sub.none

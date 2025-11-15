@@ -20,7 +20,6 @@ import Internal.Schema as Schema
         , Value(..)
         )
 import PostgRestAdmin.Client as Client exposing (Client, Error)
-import PostgRestAdmin.Config exposing (DetailActions)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath)
 import PostgRestAdmin.Notification as Notification
 import PostgRestAdmin.Views as Views
@@ -45,7 +44,7 @@ type alias Model =
     , table : Table
     , id : String
     , record : Maybe Record
-    , detailActions : DetailActions
+    , detailActions : List ( String, Record -> String -> String )
     , confirmDelete : Bool
     , countTotals : Dict String Int
     }
@@ -56,7 +55,7 @@ init :
     , mountPath : MountPath
     , table : Table
     , id : String
-    , detailActions : DetailActions
+    , detailActions : List ( String, Record -> String -> String )
     }
     -> Nav.Key
     -> ( Model, AppCmd.Cmd Msg )
