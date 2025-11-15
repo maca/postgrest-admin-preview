@@ -14,7 +14,7 @@
     <script type="text/javascript">
       console.log("token: ", sessionStorage.getItem("jwt"))
       const app = Elm.Main.init({
-          jwt: sessionStorage.getItem("jwt")
+          flags : { jwt: sessionStorage.getItem("jwt") }
       })
 
       app.ports.gotToken.subscribe(jwt => {

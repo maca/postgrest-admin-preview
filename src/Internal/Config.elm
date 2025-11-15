@@ -1,6 +1,9 @@
 module Internal.Config exposing
     ( Config
     , DetailActions
+    , clientHeaders
+    , clientHeadersDecoder
+    , decode
     , default
     , detailActions
     , flagsDecoder
@@ -11,6 +14,7 @@ module Internal.Config exposing
     , hostDecoder
     , init
     , jwt
+    , jwtDecoder
     , menuLinks
     , menuLinksDecoder
     , mountPath
@@ -24,8 +28,6 @@ module Internal.Config exposing
     , tableAliasesDecoder
     , tables
     , tablesDecoder
-    , clientHeaders
-    , clientHeadersDecoder
     )
 
 import Dict exposing (Dict)
@@ -34,6 +36,7 @@ import Internal.Application as Application
 import Internal.Flag as Flag
 import Internal.Schema exposing (Record)
 import Json.Decode as Decode exposing (Decoder)
+import Json.Encode
 import PostgRestAdmin.Client as Client exposing (AuthScheme)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath)
 import Url exposing (Protocol(..), Url)
@@ -79,6 +82,21 @@ init =
     Decode.succeed default
 
 
+decode : Decoder (Config f m msg) -> Decode.Value -> Result Decode.Error (Config f m msg)
+decode decoder =
+    Decode.decodeValue
+        (decoder
+            |> Flag.string "host" hostDecoder
+            |> Flag.string "mountPath" mountPathDecoder
+            |> Flag.string "jwt" jwtDecoder
+            |> Flag.stringListDict "formFields" formFieldsDecoder
+            |> Flag.stringList "tables" tablesDecoder
+            |> Flag.stringDict "tableAliases" tableAliasesDecoder
+            |> Flag.linksList "menuLinks" menuLinksDecoder
+            |> Flag.headersList "clientHeaders" clientHeadersDecoder
+        )
+
+
 host : String -> Decoder (Config f m msg) -> Decoder (Config f m msg)
 host urlStr =
     Decode.andThen (hostDecoder urlStr)
@@ -117,6 +135,12 @@ jwt tokenStr =
         (\conf ->
             { conf | authScheme = Client.jwt tokenStr }
         )
+
+
+jwtDecoder : String -> Config f m msg -> Decoder (Config f m msg)
+jwtDecoder tokenStr conf =
+    Decode.succeed { conf | authScheme = Client.jwt tokenStr }
+        |> Decode.map (Debug.log "jwt")
 
 
 onLogin :

@@ -1,6 +1,6 @@
 module PostgRestAdmin exposing
     ( Program
-    , application
+    , application, init
     )
 
 {-|
@@ -10,7 +10,7 @@ module PostgRestAdmin exposing
 
 # Init
 
-@docs application
+@docs application, init
 
 -}
 
@@ -62,10 +62,7 @@ type AuthFormStatus
 PostgRestAdmin program.
 -}
 type alias Program flags model msg =
-    Platform.Program
-        Decode.Value
-        (Model flags model msg)
-        (Msg flags model msg)
+    Platform.Program Decode.Value (Model flags model msg) (Msg flags model msg)
 
 
 type alias InitParams f m msg =
@@ -154,19 +151,8 @@ init :
     -> Nav.Key
     -> ( Model f m msg, Cmd (Msg f m msg) )
 init decoder flags url key =
-    let
-        configDecoder =
-            decoder
-                |> Flag.string "host" Config.hostDecoder
-                |> Flag.string "mountPath" Config.mountPathDecoder
-                |> Flag.stringListDict "formFields" Config.formFieldsDecoder
-                |> Flag.stringList "tables" Config.tablesDecoder
-                |> Flag.stringDict "tableAliases" Config.tableAliasesDecoder
-                |> Flag.linksList "menuLinks" Config.menuLinksDecoder
-                |> Flag.headersList "clientHeaders" Config.clientHeadersDecoder
-    in
     case
-        Decode.decodeValue configDecoder flags
+        Config.decode decoder flags
             |> Result.map (initModel flags url key)
     of
         Ok model ->
