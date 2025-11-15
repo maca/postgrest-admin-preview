@@ -9,6 +9,7 @@ import PostgRestAdmin.Client as Client
 import PostgRestAdmin.Config as Config
 import PostgRestAdmin.MountPath as MountPath
 import Test exposing (..)
+import Url
 
 
 suite : Test
@@ -16,6 +17,7 @@ suite =
     describe "PostgRestAdmin Config and Flags"
         [ hostTests
         , mountPathTests
+        , loginUrlTests
         , tablesTests
         , tableAliasesTests
         , formFieldsTests
@@ -32,24 +34,22 @@ suite =
 hostTests : Test
 hostTests =
     describe "host configuration"
-        [ test "Config.host sets the host" <|
+        [ test "default host is http://localhost:3000" <|
+            \_ ->
+                Internal.Config.decode
+                    Config.init
+                    (Encode.object [])
+                    |> Result.map (.host >> Url.toString)
+                    |> Expect.equal (Ok "http://localhost:3000")
+        , test "Config.host sets the host" <|
             \_ ->
                 Internal.Config.decode
                     (Config.init
                         |> Config.host "http://localhost:9080"
                     )
                     (Encode.object [])
-                    |> Result.map (.host >> .host)
-                    |> Expect.equal (Ok "localhost")
-        , test "Config.host sets the port" <|
-            \_ ->
-                Internal.Config.decode
-                    (Config.init
-                        |> Config.host "http://localhost:9080"
-                    )
-                    (Encode.object [])
-                    |> Result.map (.host >> .port_)
-                    |> Expect.equal (Ok (Just 9080))
+                    |> Result.map (.host >> Url.toString)
+                    |> Expect.equal (Ok "http://localhost:9080/")
         , test "host flag sets the host" <|
             \_ ->
                 Internal.Config.decode
@@ -58,8 +58,8 @@ hostTests =
                         [ ( "host", Encode.string "http://localhost:9080" )
                         ]
                     )
-                    |> Result.map (.host >> .host)
-                    |> Expect.equal (Ok "localhost")
+                    |> Result.map (.host >> Url.toString)
+                    |> Expect.equal (Ok "http://localhost:9080/")
         , test "host flag takes precedence over Config.host" <|
             \_ ->
                 Internal.Config.decode
@@ -70,8 +70,76 @@ hostTests =
                         [ ( "host", Encode.string "http://localhost:9080" )
                         ]
                     )
-                    |> Result.map (.host >> .port_)
-                    |> Expect.equal (Ok (Just 9080))
+                    |> Result.map (.host >> Url.toString)
+                    |> Expect.equal (Ok "http://localhost:9080/")
+        ]
+
+
+
+-- LOGIN URL TESTS
+
+
+loginUrlTests : Test
+loginUrlTests =
+    describe "loginUrl configuration"
+        [ test "default loginUrl is http://localhost:3000/rpc/login" <|
+            \_ ->
+                Internal.Config.decode
+                    Config.init
+                    (Encode.object [])
+                    |> Result.map (.loginUrl >> Url.toString)
+                    |> Expect.equal (Ok "http://localhost:3000/rpc/login")
+        , test "loginUrl derives from host" <|
+            \_ ->
+                Internal.Config.decode
+                    (Config.init
+                        |> Config.host "http://localhost:9080"
+                    )
+                    (Encode.object [])
+                    |> Result.map (.loginUrl >> Url.toString)
+                    |> Expect.equal (Ok "http://localhost:9080/rpc/login")
+        , test "Config.loginUrl overrides derived loginUrl" <|
+            \_ ->
+                Internal.Config.decode
+                    (Config.init
+                        |> Config.host "http://localhost:9080"
+                        |> Config.loginUrl "http://localhost:9080/rpc/authenticate"
+                    )
+                    (Encode.object [])
+                    |> Result.map (.loginUrl >> Url.toString)
+                    |> Expect.equal (Ok "http://localhost:9080/rpc/authenticate")
+        , test "Config.loginUrl can use different host than Config.host" <|
+            \_ ->
+                Internal.Config.decode
+                    (Config.init
+                        |> Config.host "http://localhost:3000"
+                        |> Config.loginUrl "http://auth.example.com/login"
+                    )
+                    (Encode.object [])
+                    |> Result.map (.loginUrl >> Url.toString)
+                    |> Expect.equal (Ok "http://auth.example.com/login")
+        , test "loginUrl flag sets the login URL" <|
+            \_ ->
+                Internal.Config.decode
+                    Config.init
+                    (Encode.object
+                        [ ( "loginUrl", Encode.string "http://localhost:9080/rpc/login" )
+                        ]
+                    )
+                    |> Result.map (.loginUrl >> Url.toString)
+                    |> Expect.equal (Ok "http://localhost:9080/rpc/login")
+        , test "loginUrl flag takes precedence over Config.loginUrl" <|
+            \_ ->
+                Internal.Config.decode
+                    (Config.init
+                        |> Config.loginUrl "http://localhost:3000/rpc/login"
+                    )
+                    (Encode.object
+                        [ ( "loginUrl", Encode.string "http://localhost:9080/rpc/login" )
+                        ]
+                    )
+                    |> Result.map (.loginUrl >> Url.toString)
+                    |> Expect.equal (Ok "http://localhost:9080/rpc/login")
         ]
 
 
@@ -82,7 +150,14 @@ hostTests =
 mountPathTests : Test
 mountPathTests =
     describe "mountPath configuration"
-        [ test "Config.mountPath sets the mount path" <|
+        [ test "default mountPath is empty string" <|
+            \_ ->
+                Internal.Config.decode
+                    Config.init
+                    (Encode.object [])
+                    |> Result.map .mountPath
+                    |> Expect.equal (Ok (MountPath.fromString ""))
+        , test "Config.mountPath sets the mount path" <|
             \_ ->
                 Internal.Config.decode
                     (Config.init
@@ -123,7 +198,14 @@ mountPathTests =
 tablesTests : Test
 tablesTests =
     describe "tables configuration"
-        [ test "Config.tables sets the tables list" <|
+        [ test "default tables is empty list" <|
+            \_ ->
+                Internal.Config.decode
+                    Config.init
+                    (Encode.object [])
+                    |> Result.map .tables
+                    |> Expect.equal (Ok [])
+        , test "Config.tables sets the tables list" <|
             \_ ->
                 Internal.Config.decode
                     (Config.init
@@ -168,7 +250,14 @@ tablesTests =
 tableAliasesTests : Test
 tableAliasesTests =
     describe "tableAliases configuration"
-        [ test "Config.tableAliases sets the table aliases" <|
+        [ test "default tableAliases is empty dict" <|
+            \_ ->
+                Internal.Config.decode
+                    Config.init
+                    (Encode.object [])
+                    |> Result.map .tableAliases
+                    |> Expect.equal (Ok Dict.empty)
+        , test "Config.tableAliases sets the table aliases" <|
             \_ ->
                 Internal.Config.decode
                     (Config.init
@@ -228,7 +317,14 @@ tableAliasesTests =
 formFieldsTests : Test
 formFieldsTests =
     describe "formFields configuration"
-        [ test "Config.formFields sets the form fields" <|
+        [ test "default formFields is empty dict" <|
+            \_ ->
+                Internal.Config.decode
+                    Config.init
+                    (Encode.object [])
+                    |> Result.map .formFields
+                    |> Expect.equal (Ok Dict.empty)
+        , test "Config.formFields sets the form fields" <|
             \_ ->
                 Internal.Config.decode
                     (Config.init
@@ -283,7 +379,14 @@ formFieldsTests =
 menuLinksTests : Test
 menuLinksTests =
     describe "menuLinks configuration"
-        [ test "Config.menuLinks sets the menu links" <|
+        [ test "default menuLinks is empty list" <|
+            \_ ->
+                Internal.Config.decode
+                    Config.init
+                    (Encode.object [])
+                    |> Result.map .menuLinks
+                    |> Expect.equal (Ok [])
+        , test "Config.menuLinks sets the menu links" <|
             \_ ->
                 Internal.Config.decode
                     (Config.init
@@ -366,7 +469,14 @@ menuLinksTests =
 clientHeadersTests : Test
 clientHeadersTests =
     describe "clientHeaders configuration"
-        [ test "Config.clientHeaders sets the client headers" <|
+        [ test "default clientHeaders is empty list" <|
+            \_ ->
+                Internal.Config.decode
+                    Config.init
+                    (Encode.object [])
+                    |> Result.map .clientHeaders
+                    |> Expect.equal (Ok [])
+        , test "Config.clientHeaders sets the client headers" <|
             \_ ->
                 Internal.Config.decode
                     (Config.init
@@ -422,7 +532,14 @@ clientHeadersTests =
 jwtTests : Test
 jwtTests =
     describe "jwt configuration"
-        [ test "Config.jwt sets the JWT token in authScheme" <|
+        [ test "default authScheme is unset" <|
+            \_ ->
+                Internal.Config.decode
+                    Config.init
+                    (Encode.object [])
+                    |> Result.map .authScheme
+                    |> Expect.equal (Ok Client.unset)
+        , test "Config.jwt sets the JWT token in authScheme" <|
             \_ ->
                 Internal.Config.decode
                     (Config.init

@@ -15,6 +15,8 @@ module Internal.Config exposing
     , init
     , jwt
     , jwtDecoder
+    , loginUrl
+    , loginUrlDecoder
     , menuLinks
     , menuLinksDecoder
     , mountPath
@@ -36,7 +38,6 @@ import Internal.Application as Application
 import Internal.Flag as Flag
 import Internal.Schema exposing (Record)
 import Json.Decode as Decode exposing (Decoder)
-import Json.Encode
 import PostgRestAdmin.Client as Client exposing (AuthScheme)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath)
 import Url exposing (Protocol(..), Url)
@@ -56,13 +57,10 @@ type alias Login =
 type alias Config flags model msg =
     { host : Url
     , mountPath : MountPath
+    , loginUrl : Url
     , authScheme : AuthScheme
     , formFields : Dict String (List String)
-    , application :
-        Maybe
-            ( Application.Params flags model msg
-            , Parser (msg -> msg) msg
-            )
+    , application : Maybe ( Application.Params flags model msg, Parser (msg -> msg) msg )
     , detailActions : Dict String DetailActions
     , tables : List String
     , menuLinks : List ( String, String )
@@ -87,6 +85,7 @@ decode decoder =
     Decode.decodeValue
         (decoder
             |> Flag.string "host" hostDecoder
+            |> Flag.string "loginUrl" loginUrlDecoder
             |> Flag.string "mountPath" mountPathDecoder
             |> Flag.string "jwt" jwtDecoder
             |> Flag.stringListDict "formFields" formFieldsDecoder
@@ -105,7 +104,14 @@ host urlStr =
 hostDecoder : String -> Config f m msg -> Decoder (Config f m msg)
 hostDecoder urlStr conf =
     Url.fromString urlStr
-        |> Maybe.map (\u -> Decode.succeed { conf | host = u })
+        |> Maybe.map
+            (\u ->
+                Decode.succeed
+                    { conf
+                        | host = u
+                        , loginUrl = { u | path = "/rpc/login" }
+                    }
+            )
         |> Maybe.withDefault
             (Decode.fail "`Config.host` was given an invalid URL")
 
@@ -118,6 +124,19 @@ mountPath p =
 mountPathDecoder : String -> Config f m msg -> Decoder (Config f m msg)
 mountPathDecoder p conf =
     Decode.succeed { conf | mountPath = MountPath.fromString p }
+
+
+loginUrl : String -> Decoder (Config f m msg) -> Decoder (Config f m msg)
+loginUrl urlStr =
+    Decode.andThen (loginUrlDecoder urlStr)
+
+
+loginUrlDecoder : String -> Config f m msg -> Decoder (Config f m msg)
+loginUrlDecoder urlStr conf =
+    Url.fromString urlStr
+        |> Maybe.map (\u -> Decode.succeed { conf | loginUrl = u })
+        |> Maybe.withDefault
+            (Decode.fail "`Config.loginUrl` was given an invalid URL")
 
 
 formAuth :
@@ -140,7 +159,6 @@ jwt tokenStr =
 jwtDecoder : String -> Config f m msg -> Decoder (Config f m msg)
 jwtDecoder tokenStr conf =
     Decode.succeed { conf | authScheme = Client.jwt tokenStr }
-        |> Decode.map (Debug.log "jwt")
 
 
 onLogin :
@@ -296,16 +314,20 @@ clientHeadersDecoder headers conf =
 
 default : Config f m msg
 default =
+    let
+        defaultHost =
+            { protocol = Http
+            , host = "localhost"
+            , port_ = Just 3000
+            , path = ""
+            , query = Nothing
+            , fragment = Nothing
+            }
+    in
     { authScheme = Client.unset
-    , host =
-        { protocol = Http
-        , host = "localhost"
-        , port_ = Just 3000
-        , path = ""
-        , query = Nothing
-        , fragment = Nothing
-        }
+    , host = defaultHost
     , mountPath = MountPath.fromString ""
+    , loginUrl = { defaultHost | path = "/rpc/login" }
     , formFields = Dict.empty
     , application = Nothing
     , detailActions = Dict.empty

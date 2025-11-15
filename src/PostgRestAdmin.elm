@@ -26,7 +26,6 @@ import Http
 import Internal.Application as Application exposing (Application(..))
 import Internal.Cmd as AppCmd
 import Internal.Config as Config exposing (Config)
-import Internal.Flag as Flag
 import Internal.Notification as Notification exposing (Notification)
 import Internal.PageDetail as PageDetail
 import Internal.PageForm as PageForm
@@ -79,10 +78,10 @@ type alias Model f m msg =
     , error : Maybe String
     , client : Client
     , onLogin : Maybe String -> Cmd (Msg f m msg)
+    , attemptedPath : String
     , mountedApp : Application.Application f m msg
     , mountedAppFlags : Result Decode.Error f
     , config : Config f m msg
-    , attemptedPath : String
     , authFormUrl : Url
     , authFormJwtDecoder : Decoder String
     , authFormJwtEncoder : Dict String String -> Encode.Value
@@ -183,18 +182,11 @@ initModel flags url key config =
         Maybe.withDefault ""
             >> config.onLogin
             >> Cmd.map (always NoOp)
+    , attemptedPath = urlToPath url
     , mountedApp = Application.none
     , mountedAppFlags = Decode.decodeValue config.flagsDecoder flags
     , config = config
-    , attemptedPath = urlToPath url
-    , authFormUrl =
-        { protocol = Http
-        , host = "localhost"
-        , port_ = Just 9080
-        , path = "/rpc/login"
-        , query = Nothing
-        , fragment = Nothing
-        }
+    , authFormUrl = config.loginUrl
     , authFormJwtDecoder = Decode.field "token" Decode.string
     , authFormJwtEncoder = Encode.dict identity Encode.string
     , authFormField = authFormField

@@ -3,6 +3,7 @@ module PostgRestAdmin.Config exposing
     , init
     , host
     , mountPath
+    , loginUrl
     , formFields
     , detailActions
     , menuLinks
@@ -41,6 +42,7 @@ module PostgRestAdmin.Config exposing
 
 @docs host
 @docs mountPath
+@docs loginUrl
 @docs formFields
 @docs detailActions
 @docs menuLinks
@@ -160,6 +162,25 @@ Alternatively the host can be specified using flags, configuring using
 mountPath : String -> Config f m msg -> Config f m msg
 mountPath =
     Config.mountPath
+
+
+{-| Specify the login URL for form authentication.
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        Config.init
+            |> Config.loginUrl "http://localhost:3000/rpc/login"
+            |> PostgRestAdmin.application
+
+Alternatively the login URL can be specified using flags with `loginUrl`.
+Program flags take precedence.
+
+    Elm.Main.init({ "flags" : { "loginUrl" : "http://localhost:3000/rpc/login" }})
+
+-}
+loginUrl : String -> Config f m msg -> Config f m msg
+loginUrl =
+    Config.loginUrl
 
 
 {-| Enable user credentials form and configure the parameters. Credentials
