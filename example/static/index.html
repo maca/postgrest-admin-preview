@@ -21,5 +21,9 @@
           console.log("got token: ", jwt)
           sessionStorage.setItem("jwt", jwt)
       });
+
+      app.ports.loggedOut.subscribe(_ => {
+          sessionStorage.removeItem("jwt")
+      });
     </script>
 <body>

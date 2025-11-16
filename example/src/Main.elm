@@ -7,6 +7,9 @@ import PostgRestAdmin
 port gotToken : String -> Cmd msg
 
 
+port loggedOut : () -> Cmd msg
+
+
 main : PostgRestAdmin.Program Never Never Never
 main =
     PostgRestAdmin.application
@@ -16,4 +19,5 @@ main =
             , Http.header "Content-Profile" "bluebox"
             ]
         , PostgRestAdmin.onLogin gotToken
+        , PostgRestAdmin.onLogout loggedOut
         ]
