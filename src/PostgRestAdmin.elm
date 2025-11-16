@@ -1014,15 +1014,41 @@ type alias Config flags model msg =
 configDecoder : List (Attribute flag model msg) -> Decoder (Config flag model msg)
 configDecoder =
     List.foldl (\(Attribute attr) -> Decode.map2 (<|) attr) (Decode.succeed default)
-        >> Flag.string "host" hostDecoder
-        >> Flag.string "loginUrl" loginUrlDecoder
-        >> Flag.string "mountPath" mountPathDecoder
-        >> Flag.string "jwt" jwtDecoder
-        >> Flag.stringListDict "formFields" formFieldsDecoder
-        >> Flag.stringList "tables" tablesDecoder
-        >> Flag.stringDict "tableAliases" tableAliasesDecoder
-        >> Flag.linksList "menuLinks" menuLinksDecoder
-        >> Flag.headersList "clientHeaders" clientHeadersDecoder
+        >> Flag.string "host"
+            (\urlStr conf ->
+                Url.fromString urlStr
+                    |> Maybe.map
+                        (\u ->
+                            Decode.succeed
+                                { conf
+                                    | host = u
+                                    , loginUrl = { u | path = "/rpc/login" }
+                                }
+                        )
+                    |> Maybe.withDefault
+                        (Decode.fail "`Config.host` was given an invalid URL")
+            )
+        >> Flag.string "loginUrl"
+            (\urlStr conf ->
+                Url.fromString urlStr
+                    |> Maybe.map (\u -> Decode.succeed { conf | loginUrl = u })
+                    |> Maybe.withDefault
+                        (Decode.fail "`Config.loginUrl` was given an invalid URL")
+            )
+        >> Flag.string "mountPath"
+            (\p conf -> Decode.succeed { conf | mountPath = MountPath.fromString p })
+        >> Flag.string "jwt"
+            (\tokenStr conf -> Decode.succeed { conf | authScheme = Client.jwt tokenStr })
+        >> Flag.stringListDict "formFields"
+            (\fields conf -> Decode.succeed { conf | formFields = Dict.union fields conf.formFields })
+        >> Flag.stringList "tables"
+            (\tableNames conf -> Decode.succeed { conf | tables = tableNames })
+        >> Flag.stringDict "tableAliases"
+            (\aliases conf -> Decode.succeed { conf | tableAliases = aliases })
+        >> Flag.linksList "menuLinks"
+            (\links conf -> Decode.succeed { conf | menuLinks = links })
+        >> Flag.headersList "clientHeaders"
+            (\headers conf -> Decode.succeed { conf | clientHeaders = headers })
 
 
 default : Config f m msg
@@ -1092,21 +1118,6 @@ host urlStr =
             Attribute (Decode.fail "`Config.host` was given an invalid URL")
 
 
-hostDecoder : String -> Config f m msg -> Decode.Decoder (Config f m msg)
-hostDecoder urlStr conf =
-    Url.fromString urlStr
-        |> Maybe.map
-            (\u ->
-                Decode.succeed
-                    { conf
-                        | host = u
-                        , loginUrl = { u | path = "/rpc/login" }
-                    }
-            )
-        |> Maybe.withDefault
-            (Decode.fail "`Config.host` was given an invalid URL")
-
-
 {-| Specify a path prefix for all routes, in case the app is not mounted in the
 root path.
 
@@ -1125,11 +1136,6 @@ Program flags take precedence.
 mountPath : String -> Attribute flags model msg
 mountPath p =
     attrDecoder (\conf -> { conf | mountPath = MountPath.fromString p })
-
-
-mountPathDecoder : String -> Config f m msg -> Decode.Decoder (Config f m msg)
-mountPathDecoder p conf =
-    Decode.succeed { conf | mountPath = MountPath.fromString p }
 
 
 {-| Specify the login URL for form authentication.
@@ -1156,14 +1162,6 @@ loginUrl urlStr =
             Attribute (Decode.fail "`Config.loginUrl` was given an invalid URL")
 
 
-loginUrlDecoder : String -> Config f m msg -> Decode.Decoder (Config f m msg)
-loginUrlDecoder urlStr conf =
-    Url.fromString urlStr
-        |> Maybe.map (\u -> Decode.succeed { conf | loginUrl = u })
-        |> Maybe.withDefault
-            (Decode.fail "`Config.loginUrl` was given an invalid URL")
-
-
 {-| Set a JWT to authenticate PostgREST requests. You can set an initial JWT
 using this attribute.
 
@@ -1184,11 +1182,6 @@ Program flags take precedence.
 jwt : String -> Attribute flags model msg
 jwt tokenStr =
     attrDecoder (\conf -> { conf | authScheme = Client.jwt tokenStr })
-
-
-jwtDecoder : String -> Config f m msg -> Decode.Decoder (Config f m msg)
-jwtDecoder tokenStr conf =
-    Decode.succeed { conf | authScheme = Client.jwt tokenStr }
 
 
 {-| Callback triggered with a JWT string on successful login.
@@ -1323,14 +1316,6 @@ formFields tableName fields =
         )
 
 
-formFieldsDecoder :
-    Dict String (List String)
-    -> Config f m msg
-    -> Decode.Decoder (Config f m msg)
-formFieldsDecoder fields conf =
-    Decode.succeed { conf | formFields = Dict.union fields conf.formFields }
-
-
 {-| Specify action buttons to be shown in the detail page of a
 record along with Edit and Delete buttons.
 
@@ -1385,11 +1370,6 @@ tables tableNames =
     attrDecoder (\conf -> { conf | tables = tableNames })
 
 
-tablesDecoder : List String -> Config f m msg -> Decode.Decoder (Config f m msg)
-tablesDecoder tableNames conf =
-    Decode.succeed { conf | tables = tableNames }
-
-
 {-| Pass a list of links to display in the side menu. The list consists of
 tuples of the link text and a url.
 
@@ -1414,14 +1394,6 @@ Program flags take precedence.
 menuLinks : List ( String, String ) -> Attribute flags model msg
 menuLinks links =
     attrDecoder (\conf -> { conf | menuLinks = links })
-
-
-menuLinksDecoder :
-    List ( String, String )
-    -> Config f m msg
-    -> Decode.Decoder (Config f m msg)
-menuLinksDecoder links conf =
-    Decode.succeed { conf | menuLinks = links }
 
 
 {-| Set default HTTP headers to be included in all Client requests. This is
@@ -1455,14 +1427,6 @@ clientHeaders headers =
     attrDecoder (\conf -> { conf | clientHeaders = headers })
 
 
-clientHeadersDecoder :
-    List Http.Header
-    -> Config f m msg
-    -> Decode.Decoder (Config f m msg)
-clientHeadersDecoder headers conf =
-    Decode.succeed { conf | clientHeaders = headers }
-
-
 {-| Rename a table referenced in a foreign key. PostgREST OpenAPI generated docs
 confuse tables with views when describing the foreign key for a resource,
 because of this some links might be incorrectly generated.
@@ -1487,14 +1451,6 @@ Program flags take precedence.
 tableAliases : Dict String String -> Attribute flags model msg
 tableAliases aliases =
     attrDecoder (\conf -> { conf | tableAliases = aliases })
-
-
-tableAliasesDecoder :
-    Dict String String
-    -> Config f m msg
-    -> Decode.Decoder (Config f m msg)
-tableAliasesDecoder aliases conf =
-    Decode.succeed { conf | tableAliases = aliases }
 
 
 {-| Mount an application on a given path using
