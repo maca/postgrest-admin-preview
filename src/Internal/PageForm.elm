@@ -15,7 +15,6 @@ import Internal.Schema as Schema exposing (Constraint(..), Table, Value(..))
 import Json.Decode as Decode
 import PostgRestAdmin.Client as Client exposing (Client)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
-import PostgRestAdmin.Notification as Notification
 import Postgrest.Client as PG
 import String.Extra as String
 import Task
@@ -188,12 +187,12 @@ update msg model =
 
                 Err err ->
                     ( model
-                    , Notification.error (FormToolkit.Error.toEnglish err)
+                    , AppCmd.error (FormToolkit.Error.toEnglish err)
                     )
 
         Fetched (Err err) ->
             ( model
-            , Notification.error (Client.errorToString err)
+            , AppCmd.error (Client.errorToString err)
             )
 
         ParentLabelFetched (Ok label) ->
@@ -203,7 +202,7 @@ update msg model =
 
         ParentLabelFetched (Err err) ->
             ( model
-            , Notification.error (Client.errorToString err)
+            , AppCmd.error (Client.errorToString err)
             )
 
         AutocompleteValuesFetched colName (Ok values) ->
@@ -217,7 +216,7 @@ update msg model =
 
         AutocompleteValuesFetched _ (Err err) ->
             ( model
-            , Notification.error (Client.errorToString err)
+            , AppCmd.error (Client.errorToString err)
             )
 
         Saved (Ok id) ->
@@ -227,18 +226,18 @@ update msg model =
                     (Nav.pushUrl model.key
                         (Url.absolute [ model.table.name, id ] [])
                     )
-                , Notification.confirm "The record was saved"
+                , AppCmd.confirm "The record was saved"
                 ]
             )
 
         Saved (Err err) ->
             ( model
-            , Notification.error (Client.errorToString err)
+            , AppCmd.error (Client.errorToString err)
             )
 
         FormChanged innerMsg ->
             ( { model | form = Field.update innerMsg model.form }
-            , Notification.dismiss
+            , AppCmd.dismiss
             )
 
         Submitted ->
@@ -262,7 +261,7 @@ update msg model =
                         |> AppCmd.wrap
 
                 Err _ ->
-                    Notification.error "Please check the form errors"
+                    AppCmd.error "Please check the form errors"
             )
 
 

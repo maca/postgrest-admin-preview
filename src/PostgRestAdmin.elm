@@ -54,7 +54,6 @@ import Html.Events as Events
 import Http
 import Internal.Cmd as AppCmd
 import Internal.Flag as Flag
-import Internal.Notification as Notification exposing (Notification)
 import Internal.PageDetail as PageDetail
 import Internal.PageForm as PageForm
 import Internal.PageListing as PageListing exposing (Model)
@@ -64,6 +63,7 @@ import Json.Encode as Encode exposing (Value)
 import PostgRestAdmin.Client as Client exposing (AuthScheme, Client)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
 import Postgrest.Client as PG
+import Process
 import String.Extra as String
 import Task
 import Url exposing (Protocol(..), Url)
@@ -118,6 +118,12 @@ type alias Model f m msg =
     }
 
 
+type Notification
+    = Confirmation String
+    | Error String
+    | NoNotification
+
+
 type Msg f m msg
     = ApplicationInit ( MountedAppParams f m msg, msg )
     | AuthFieldsChanged (Field.Msg Never)
@@ -128,7 +134,9 @@ type Msg f m msg
     | PageDetailChanged PageDetail.Msg
     | PageFormChanged PageForm.Msg
     | PageApplicationChanged msg
-    | NotificationChanged Notification.Msg
+    | NotificationDismiss
+    | NotificationConfirm String
+    | NotificationAlert String
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
     | LoggedIn { path : String, accessToken : String }
@@ -201,7 +209,7 @@ initModel : Value -> Url -> Nav.Key -> Config f m msg -> Model f m msg
 initModel flags url key configRec =
     { route = RouteRoot
     , key = key
-    , notification = Notification.none
+    , notification = NoNotification
     , error = Nothing
     , client = Client.init configRec.host configRec.authScheme configRec.clientHeaders
     , onLogin =
@@ -411,8 +419,8 @@ update msg model =
         --     )
         ( SchemaFetched (Err err), _ ) ->
             ( model
-            , Notification.error (Client.errorToString err)
-                |> Task.perform NotificationChanged
+            , Task.succeed (NotificationAlert (Client.errorToString err))
+                |> Task.perform identity
             )
 
         ( PageListingChanged childMsg, RouteListing listing ) ->
@@ -461,21 +469,28 @@ update msg model =
             , mapAppCmd PageApplicationChanged cmd
             )
 
-        ( NotificationChanged childMsg, _ ) ->
-            let
-                ( notification, cmd ) =
-                    Notification.update childMsg
-            in
-            ( { model | notification = notification }
-            , Cmd.map NotificationChanged cmd
+        ( NotificationDismiss, _ ) ->
+            ( { model | notification = NoNotification }
+            , Cmd.none
+            )
+
+        ( NotificationConfirm message, _ ) ->
+            ( { model | notification = Confirmation message }
+            , Process.sleep 5000
+                |> Task.perform (always NotificationDismiss)
+            )
+
+        ( NotificationAlert message, _ ) ->
+            ( { model | notification = Error message }
+            , Cmd.none
             )
 
         ( LinkClicked (Browser.Internal url), _ ) ->
             ( model
             , Cmd.batch
                 [ Nav.pushUrl model.key (Url.toString url)
-                , Notification.dismiss
-                    |> Task.perform NotificationChanged
+                , Task.succeed NotificationDismiss
+                    |> Task.perform identity
                 ]
             )
 
@@ -552,8 +567,7 @@ view model =
                                 [ sideMenu model
                                 , Html.div
                                     [ Attrs.class "main-area" ]
-                                    [ Notification.view model.notification
-                                        |> Html.map NotificationChanged
+                                    [ viewNotification model.notification
                                     , mainContent model
                                     ]
                                 ]
@@ -659,6 +673,31 @@ extraMenuItem ( linkText, url ) =
         [ Html.a
             [ Attrs.href url ]
             [ Html.text (String.toTitleCase linkText) ]
+        ]
+
+
+viewNotification : Notification -> Html (Msg f m msg)
+viewNotification notification =
+    case notification of
+        Confirmation text ->
+            viewNotificationHelp "confirmation" text
+
+        Error text ->
+            viewNotificationHelp "error" text
+
+        NoNotification ->
+            Html.text ""
+
+
+viewNotificationHelp : String -> String -> Html (Msg f m msg)
+viewNotificationHelp notificationType message =
+    Html.div
+        [ Attrs.class "notification"
+        , Attrs.class notificationType
+        ]
+        [ Html.pre [] [ Html.text message ]
+        , Html.div [ Attrs.class "close" ]
+            [ Html.i [ Attrs.class "icono-cross", Events.onClick NotificationDismiss ] [] ]
         ]
 
 
@@ -942,8 +981,17 @@ mapAppCmd tagger appCmd =
         AppCmd.Batch cmds ->
             Cmd.batch (List.map (mapAppCmd tagger) cmds)
 
-        AppCmd.ChangeNotification cmd ->
-            Cmd.map NotificationChanged cmd
+        AppCmd.NotificationError message ->
+            Task.succeed message
+                |> Task.perform NotificationAlert
+
+        AppCmd.NotificationConfirm message ->
+            Task.succeed message
+                |> Task.perform NotificationConfirm
+
+        AppCmd.NotificationDismiss ->
+            Task.succeed NotificationDismiss
+                |> Task.perform identity
 
 
 urlToPath : Url -> String
@@ -1049,7 +1097,7 @@ attrDecoder f =
 Alternatively the host can be specified using flags.
 Program flags take precedence.
 
-    Elm.Main.init({ flags: { host: "http://localhost:3000" }})
+    Elm.Main.init { flags = { host = "http://localhost:3000" } }
 
 -}
 host : String -> Attribute flags model msg
@@ -1095,7 +1143,7 @@ root path.
 Alternatively the mount path can be specified using flags.
 Program flags take precedence.
 
-    Elm.Main.init({ flags: { mountPath: "/back-office" }})
+    Elm.Main.init { flags = { mountPath = "/back-office" } }
 
 -}
 mountPath : String -> Attribute flags model msg
@@ -1119,7 +1167,7 @@ mountPathDecoder p conf =
 Alternatively the login URL can be specified using flags.
 Program flags take precedence.
 
-    Elm.Main.init({ flags: { loginUrl: "http://localhost:3000/rpc/login" }})
+    Elm.Main.init { flags = { loginUrl = "http://localhost:3000/rpc/login" } }
 
 -}
 loginUrl : String -> Attribute flags model msg
@@ -1152,9 +1200,9 @@ using this attribute.
 Alternatively the token can be passed using flags.
 Program flags take precedence.
 
-    Elm.Main.init({
-        flags: { jwt: sessionStorage.getItem("jwt") }
-     })
+    Elm.Main.init
+        { flags = { jwt = sessionStorage.getItem "jwt" }
+        }
 
 -}
 jwt : String -> Attribute flags model msg
@@ -1284,9 +1332,9 @@ the forms.
 Alternatively this parameter can be configured using flags.
 Program flags take precedence.
 
-    Elm.Main.init({
-        flags: { formFields: { posts: [ "id", "title", "content" ] } }
-    })
+    Elm.Main.init
+        { flags = { formFields = { posts = [ "id", "title", "content" ] } }
+        }
 
 -}
 formFields : String -> List String -> Attribute flags model msg
@@ -1353,7 +1401,7 @@ order of the left resources menu.
 Alternatively the tables can be specified using flags.
 Program flags take precedence.
 
-    Elm.Main.init({ flags: { tables: [ "posts", "comments" ] }})
+    Elm.Main.init { flags = { tables = [ "posts", "comments" ] } }
 
 -}
 tables : List String -> Attribute flags model msg
@@ -1378,13 +1426,13 @@ tuples of the link text and a url.
 Alternatively the menu links can be specified using flags.
 Program flags take precedence.
 
-    Elm.Main.init({
-        flags: {
-            menuLinks: [
-                { text: "Api Docs", url: "/api/docs" }
-            ]
+    Elm.Main.init
+        { flags =
+            { menuLinks =
+                [ { text = "Api Docs", url = "/api/docs" }
+                ]
+            }
         }
-    })
 
 -}
 menuLinks : List ( String, String ) -> Attribute flags model msg

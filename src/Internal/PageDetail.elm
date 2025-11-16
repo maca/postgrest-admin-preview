@@ -19,7 +19,6 @@ import Internal.Schema as Schema
         )
 import PostgRestAdmin.Client as Client exposing (Client, Error)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath)
-import PostgRestAdmin.Notification as Notification
 import PostgRestAdmin.Views as Views
 import String.Extra as String
 import Task
@@ -109,7 +108,7 @@ update msg model =
 
         Fetched (Err err) ->
             ( model
-            , Notification.error (Client.errorToString err)
+            , AppCmd.error (Client.errorToString err)
             )
 
         Deleted (Ok _) ->
@@ -118,13 +117,13 @@ update msg model =
                 [ Url.absolute [ model.table.name ] []
                     |> Nav.pushUrl model.key
                     |> AppCmd.wrap
-                , Notification.confirm "The record was deleted"
+                , AppCmd.confirm "The record was deleted"
                 ]
             )
 
         Deleted (Err err) ->
             ( model
-            , Notification.error (Client.errorToString err)
+            , AppCmd.error (Client.errorToString err)
             )
 
         DeleteModalOpened ->

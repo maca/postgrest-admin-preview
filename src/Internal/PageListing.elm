@@ -54,7 +54,6 @@ import List.Split as List
 import Markdown
 import PostgRestAdmin.Client as Client exposing (Client, Count, Error, errorToString)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath)
-import PostgRestAdmin.Notification as Notification
 import PostgRestAdmin.Views as Views
 import Postgrest.Client as PG
 import Set
@@ -288,7 +287,7 @@ update msg listing =
             case listing.order of
                 Unordered ->
                     ( listing
-                    , Notification.error (errorToString err)
+                    , AppCmd.error (errorToString err)
                     )
 
                 _ ->
@@ -302,7 +301,7 @@ update msg listing =
             )
 
         ParentLabelFetched (Err err) ->
-            ( listing, Notification.error (Client.errorToString err) )
+            ( listing, AppCmd.error (Client.errorToString err) )
 
         ApplyFilters ->
             ( listing, reload listing.table )
@@ -355,7 +354,7 @@ update msg listing =
 
                 Err _ ->
                     ( listing
-                    , Notification.error "Dom element not found"
+                    , AppCmd.error "Dom element not found"
                     )
 
         SearchChanged searchMsg ->
@@ -415,7 +414,7 @@ update msg listing =
             )
 
         Downloaded _ (Err err) ->
-            ( listing, Notification.error (Client.errorToString err) )
+            ( listing, AppCmd.error (Client.errorToString err) )
 
         CsvUploadRequested ->
             ( listing
@@ -475,7 +474,7 @@ update msg listing =
 
                 Err _ ->
                     ( listing
-                    , Notification.error "This CSV file cound not be parsed."
+                    , AppCmd.error "This CSV file cound not be parsed."
                     )
 
         CsvProcessed csv (Ok existing) ->
@@ -496,7 +495,7 @@ update msg listing =
 
         CsvProcessed _ (Err err) ->
             ( listing
-            , Notification.error (errorToString err)
+            , AppCmd.error (errorToString err)
             )
 
         CsvUploadPosted (Ok ()) ->
@@ -505,12 +504,12 @@ update msg listing =
                 [ Dom.setViewportOf listing.table.name 0 0
                     |> Task.attempt (always Reload)
                     |> AppCmd.wrap
-                , Notification.confirm "The upload was succesful."
+                , AppCmd.confirm "The upload was succesful."
                 ]
             )
 
         CsvUploadPosted (Err err) ->
-            ( listing, Notification.error (Client.errorToString err) )
+            ( listing, AppCmd.error (Client.errorToString err) )
 
         CsvUploadAccepted ->
             ( listing
