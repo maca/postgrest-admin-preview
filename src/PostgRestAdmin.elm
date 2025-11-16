@@ -146,10 +146,7 @@ type Msg flags model msg
 
 type Route flags model msg
     = RouteRoot
-    | RouteLoadingSchema
-        (InitParams flags model msg
-         -> ( Route flags model msg, Cmd (Msg flags model msg) )
-        )
+    | RouteLoadingSchema Url
     | RouteListing PageListing.Model
     | RouteDetail PageDetail.Model
     | RouteForm PageForm.Model
@@ -302,8 +299,8 @@ update msg model =
         client =
             model.client
     in
-    case ( msg, model.route ) of
-        ( ApplicationInit ( params, childMsg ), _ ) ->
+    case msg of
+        ApplicationInit ( params, childMsg ) ->
             let
                 ( app, initCmd ) =
                     case model.mountedApp of
@@ -339,7 +336,7 @@ update msg model =
                 ]
             )
 
-        ( AuthFieldsChanged innerMsg, _ ) ->
+        AuthFieldsChanged innerMsg ->
             ( { model
                 | authFormField = Field.update innerMsg model.authFormField
                 , authFormStatus = Active
@@ -347,73 +344,53 @@ update msg model =
             , Cmd.none
             )
 
-        ( AuthFormSubmitted, _ ) ->
+        AuthFormSubmitted ->
             ( { model | authFormStatus = Submitting }
             , requestToken model
             )
 
-        ( GotToken (Ok tokenStr), RouteLoadingSchema func ) ->
-            let
-                updatedClient =
-                    { client | authScheme = Client.Jwt (PG.jwt tokenStr) }
-
-                ( route, cmd ) =
-                    if Client.schemaIsLoaded updatedClient then
-                        func
-                            { client = updatedClient
-                            , key = model.key
-                            , config = model.config
-                            }
-
-                    else
-                        ( model.route
-                        , Task.attempt SchemaFetched
-                            (Client.fetchSchema model.config updatedClient)
-                        )
-            in
-            ( { model
-                | client = updatedClient
-                , route = route
-              }
-            , Cmd.batch [ loginCmd model updatedClient, cmd ]
-            )
-
-        ( GotToken (Ok tokenStr), _ ) ->
+        GotToken (Ok tokenStr) ->
             let
                 updatedClient =
                     { client | authScheme = Client.Jwt (PG.jwt tokenStr) }
             in
             ( { model | client = updatedClient }
-            , loginCmd model updatedClient
+            , Cmd.batch
+                [ loginCmd model updatedClient
+                , Client.fetchSchema model.config updatedClient
+                    |> Task.attempt SchemaFetched
+                ]
             )
 
-        ( GotToken (Err error), _ ) ->
+        GotToken (Err error) ->
             ( { model | authFormStatus = Failure error }
             , Cmd.none
             )
 
-        ( SchemaFetched (Ok schema), RouteLoadingSchema func ) ->
-            let
-                updatedClient =
-                    { client | schema = schema }
+        SchemaFetched (Ok schema) ->
+            case model.route of
+                RouteLoadingSchema url ->
+                    let
+                        updatedClient =
+                            { client | schema = schema }
 
-                ( route, cmd ) =
-                    func
-                        { client = updatedClient
-                        , key = model.key
-                        , config = model.config
-                        }
-            in
-            ( { model | client = updatedClient, route = route }
-            , cmd
-            )
+                        ( route, cmd ) =
+                            routeCons url
+                                { client = updatedClient
+                                , key = model.key
+                                , config = model.config
+                                }
+                    in
+                    ( { model | client = updatedClient, route = route }
+                    , cmd
+                    )
 
-        ( SchemaFetched (Ok schema), _ ) ->
-            ( { model | client = { client | schema = schema } }
-            , Cmd.none
-            )
+                _ ->
+                    ( { model | client = { client | schema = schema } }
+                    , Cmd.none
+                    )
 
-        ( SchemaFetched (Err err), _ ) ->
+        SchemaFetched (Err err) ->
             ( { model
                 | client = Client.logout model.client
                 , authFormStatus = Failure err
@@ -421,44 +398,50 @@ update msg model =
             , Cmd.none
             )
 
-        ( PageListingChanged childMsg, RouteListing listing ) ->
-            let
-                ( route, appCmd ) =
-                    PageListing.update childMsg listing
-                        |> Tuple.mapFirst RouteListing
-            in
-            ( { model | route = route }
-            , mapAppCmd PageListingChanged appCmd
-            )
+        PageListingChanged childMsg ->
+            case model.route of
+                RouteListing listing ->
+                    let
+                        ( route, appCmd ) =
+                            PageListing.update childMsg listing
+                                |> Tuple.mapFirst RouteListing
+                    in
+                    ( { model | route = route }
+                    , mapAppCmd PageListingChanged appCmd
+                    )
 
-        ( PageListingChanged _, _ ) ->
-            ( model, Cmd.none )
+                _ ->
+                    ( model, Cmd.none )
 
-        ( PageDetailChanged childMsg, RouteDetail prevDetail ) ->
-            let
-                ( detail, cmd ) =
-                    PageDetail.update childMsg prevDetail
-            in
-            ( { model | route = RouteDetail detail }
-            , mapAppCmd PageDetailChanged cmd
-            )
+        PageDetailChanged childMsg ->
+            case model.route of
+                RouteDetail prevDetail ->
+                    let
+                        ( detail, cmd ) =
+                            PageDetail.update childMsg prevDetail
+                    in
+                    ( { model | route = RouteDetail detail }
+                    , mapAppCmd PageDetailChanged cmd
+                    )
 
-        ( PageDetailChanged _, _ ) ->
-            ( model, Cmd.none )
+                _ ->
+                    ( model, Cmd.none )
 
-        ( PageFormChanged childMsg, RouteForm prevForm ) ->
-            let
-                ( form, cmd ) =
-                    PageForm.update childMsg prevForm
-            in
-            ( { model | route = RouteForm form }
-            , mapAppCmd PageFormChanged cmd
-            )
+        PageFormChanged childMsg ->
+            case model.route of
+                RouteForm prevForm ->
+                    let
+                        ( form, cmd ) =
+                            PageForm.update childMsg prevForm
+                    in
+                    ( { model | route = RouteForm form }
+                    , mapAppCmd PageFormChanged cmd
+                    )
 
-        ( PageFormChanged _, _ ) ->
-            ( model, Cmd.none )
+                _ ->
+                    ( model, Cmd.none )
 
-        ( PageApplicationChanged childMsg, _ ) ->
+        PageApplicationChanged childMsg ->
             let
                 ( app, cmd ) =
                     updateMountedApp childMsg model.mountedApp
@@ -467,23 +450,23 @@ update msg model =
             , mapAppCmd PageApplicationChanged cmd
             )
 
-        ( NotificationDismiss, _ ) ->
+        NotificationDismiss ->
             ( { model | notification = NoNotification }
             , Cmd.none
             )
 
-        ( NotificationConfirm message, _ ) ->
+        NotificationConfirm message ->
             ( { model | notification = Confirmation message }
             , Process.sleep 5000
                 |> Task.perform (always NotificationDismiss)
             )
 
-        ( NotificationAlert message, _ ) ->
+        NotificationAlert message ->
             ( { model | notification = Error message }
             , Cmd.none
             )
 
-        ( LinkClicked (Browser.Internal url), _ ) ->
+        LinkClicked (Browser.Internal url) ->
             ( model
             , Cmd.batch
                 [ Nav.pushUrl model.key (Url.toString url)
@@ -492,10 +475,10 @@ update msg model =
                 ]
             )
 
-        ( LinkClicked (Browser.External href), _ ) ->
+        LinkClicked (Browser.External href) ->
             ( model, Nav.load href )
 
-        ( UrlChanged url, _ ) ->
+        UrlChanged url ->
             let
                 ( route, cmd ) =
                     parseRoute url model
@@ -504,17 +487,17 @@ update msg model =
             , cmd
             )
 
-        ( LoggedIn params, _ ) ->
+        LoggedIn params ->
             ( { model | client = Client.updateJwt params.accessToken model.client }
             , Nav.pushUrl model.key params.path
             )
 
-        ( LoggedOut, _ ) ->
+        LoggedOut ->
             ( { model | client = Client.logout model.client }
             , Cmd.map (always NoOp) (model.config.onLogout ())
             )
 
-        ( NoOp, _ ) ->
+        NoOp ->
             ( model, Cmd.none )
 
 
@@ -767,7 +750,7 @@ parseRoute url model =
             }
 
     else
-        ( RouteLoadingSchema (routeCons url)
+        ( RouteLoadingSchema url
         , Task.attempt SchemaFetched
             (Client.fetchSchema model.config model.client)
         )
@@ -807,9 +790,10 @@ routeParser url params =
                     []
     in
     Parser.oneOf
-        (appRoutes
-            ++ [ -- /
-                 Parser.map
+        (List.concat
+            [ appRoutes
+            , [ -- /
+                Parser.map
                     ( RouteRoot
                     , resources params
                         |> List.head
@@ -822,41 +806,40 @@ routeParser url params =
                     )
                     Parser.top
 
-               -- /posts/new
-               , Parser.map (initNewForm params Nothing)
+              -- /posts/new
+              , Parser.map (\tableName -> initForm params Nothing tableName Nothing)
                     (Parser.string </> s "new")
 
-               -- /posts/edit
-               , Parser.map (initForm params)
+              -- /posts/edit
+              , Parser.map (\tableName id -> initForm params Nothing tableName (Just id))
                     (Parser.string </> Parser.string </> s "edit")
 
-               -- /posts
-               , Parser.map (initListing params url Nothing) Parser.string
+              -- /posts
+              , Parser.map (initListing params url Nothing) Parser.string
 
-               -- /posts/1
-               , Parser.map (initDetail params)
+              -- /posts/1
+              , Parser.map (initDetail params)
                     (Parser.string </> Parser.string)
 
-               -- /posts/1/comments
-               , Parser.map
+              -- /posts/1/comments
+              , Parser.map
                     (\parentTable parentId ->
                         Just { tableName = parentTable, id = parentId }
                             |> initListing params url
                     )
                     (Parser.string </> Parser.string </> Parser.string)
 
-               -- /posts/1/comments/new
-               , Parser.map
-                    (\parentTable parentId ->
-                        Just { tableName = parentTable, id = parentId }
-                            |> initNewForm params
+              -- /posts/1/comments/new
+              , Parser.map
+                    (\parentTable parentId tableName ->
+                        initForm params
+                            (Just { tableName = parentTable, id = parentId })
+                            tableName
+                            Nothing
                     )
-                    (Parser.string
-                        </> Parser.string
-                        </> Parser.string
-                        </> s "new"
-                    )
-               ]
+                    (Parser.string </> Parser.string </> Parser.string </> s "new")
+              ]
+            ]
         )
 
 
@@ -885,31 +868,13 @@ initListing params url parent tableName =
             ( RouteNotFound, Cmd.none )
 
 
-initNewForm :
-    InitParams f m msg
-    -> Maybe { tableName : String, id : String }
-    -> String
-    -> ( Route f m msg, Cmd (Msg f m msg) )
-initNewForm params parent tableName =
-    initFormHelp params parent tableName Nothing
-
-
 initForm :
-    InitParams f m msg
-    -> String
-    -> String
-    -> ( Route f m msg, Cmd (Msg f m msg) )
-initForm params tableName id =
-    initFormHelp params Nothing tableName (Just id)
-
-
-initFormHelp :
     InitParams f m msg
     -> Maybe { tableName : String, id : String }
     -> String
     -> Maybe String
     -> ( Route f m msg, Cmd (Msg f m msg) )
-initFormHelp model parent tableName id =
+initForm model parent tableName id =
     case Dict.get tableName model.client.schema of
         Just table ->
             PageForm.init
