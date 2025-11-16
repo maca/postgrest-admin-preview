@@ -36,7 +36,7 @@ import Html.Events as Events
         )
 import Http
 import Inflect
-import Internal.Cmd as AppCmd
+import Internal.Cmd as AppCmd exposing (AppCmd)
 import Internal.Schema as Schema
     exposing
         ( Column
@@ -146,7 +146,7 @@ init :
     }
     -> Url.Url
     -> Nav.Key
-    -> ( Model, AppCmd.Cmd Msg )
+    -> ( Model, AppCmd Msg )
 init { client, mountPath, table, parent } url key =
     let
         order =
@@ -229,7 +229,7 @@ descendingBy column listing =
     { listing | order = Desc column }
 
 
-fetch : Model -> AppCmd.Cmd Msg
+fetch : Model -> AppCmd Msg
 fetch model =
     Client.fetchRecords
         { client = model.client
@@ -246,7 +246,7 @@ fetch model =
         |> AppCmd.wrap
 
 
-update : Msg -> Model -> ( Model, AppCmd.Cmd Msg )
+update : Msg -> Model -> ( Model, AppCmd Msg )
 update msg listing =
     case msg of
         LoggedIn client ->
@@ -545,7 +545,7 @@ update msg listing =
             ( listing, AppCmd.none )
 
 
-reload : Table -> AppCmd.Cmd Msg
+reload : Table -> AppCmd Msg
 reload table =
     Dom.setViewportOf table.name 0 0
         |> Task.attempt (always Reload)
@@ -562,12 +562,12 @@ closeToBottom { scene, viewport } =
     scene.height - viewport.y < (viewport.height * 2)
 
 
-fetchListing : Model -> ( Model, AppCmd.Cmd Msg )
+fetchListing : Model -> ( Model, AppCmd Msg )
 fetchListing listing =
     ( listing, fetch listing )
 
 
-searchChanged : Search.Msg -> Cmd Search.Msg -> AppCmd.Cmd Msg
+searchChanged : Search.Msg -> Cmd Search.Msg -> AppCmd Msg
 searchChanged msg cmd =
     if Search.isApplyMsg msg then
         Time.now
@@ -712,7 +712,7 @@ setAssociationValidation foreignKey record =
     record
 
 
-processCsv : Model -> Csv -> AppCmd.Cmd Msg
+processCsv : Model -> Csv -> AppCmd Msg
 processCsv { table, client } csv =
     let
         primaryKeyName =

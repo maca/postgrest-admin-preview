@@ -52,7 +52,7 @@ import Html exposing (Html)
 import Html.Attributes as Attrs
 import Html.Events as Events
 import Http
-import Internal.Cmd as AppCmd
+import Internal.Cmd as AppCmd exposing (AppCmd)
 import Internal.Flag as Flag
 import Internal.PageDetail as PageDetail
 import Internal.PageForm as PageForm
@@ -972,7 +972,7 @@ resources params =
         params.config.tables
 
 
-mapAppCmd : (a -> Msg f m b) -> AppCmd.Cmd a -> Cmd (Msg f m b)
+mapAppCmd : (a -> Msg f m b) -> AppCmd a -> Cmd (Msg f m b)
 mapAppCmd tagger appCmd =
     case appCmd of
         AppCmd.ChildCmd cmd ->
@@ -1568,9 +1568,9 @@ routes :
         , mountPath : MountPath
         }
         -> Nav.Key
-        -> ( model, AppCmd.Cmd msg )
+        -> ( model, AppCmd msg )
     , view : model -> Html msg
-    , update : msg -> model -> ( model, AppCmd.Cmd msg )
+    , update : msg -> model -> ( model, AppCmd msg )
     , subscriptions : model -> Sub msg
     , onLogin : Client -> msg
     }
@@ -1591,9 +1591,9 @@ type alias MountedAppParams flags model msg =
         , mountPath : MountPath
         }
         -> Nav.Key
-        -> ( model, AppCmd.Cmd msg )
+        -> ( model, AppCmd msg )
     , view : model -> Html msg
-    , update : msg -> model -> ( model, AppCmd.Cmd msg )
+    , update : msg -> model -> ( model, AppCmd msg )
     , subscriptions : model -> Sub msg
     , onLogin : Client -> msg
     }
@@ -1605,7 +1605,7 @@ type MountedApp flags model msg
     | NoMountedApp
 
 
-updateMountedApp : msg -> MountedApp f m msg -> ( MountedApp f m msg, AppCmd.Cmd msg )
+updateMountedApp : msg -> MountedApp f m msg -> ( MountedApp f m msg, AppCmd msg )
 updateMountedApp msg mountedApp =
     case mountedApp of
         MountedApp params model ->

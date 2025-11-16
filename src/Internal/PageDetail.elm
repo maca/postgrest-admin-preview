@@ -11,7 +11,7 @@ import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes as Attrs
 import Html.Events as Events
-import Internal.Cmd as AppCmd
+import Internal.Cmd as AppCmd exposing (AppCmd)
 import Internal.Schema as Schema
     exposing
         ( Record
@@ -55,7 +55,7 @@ init :
     , detailActions : List ( String, Record -> String -> String )
     }
     -> Nav.Key
-    -> ( Model, AppCmd.Cmd Msg )
+    -> ( Model, AppCmd Msg )
 init { client, mountPath, table, id, detailActions } key =
     ( { client = client
       , mountPath = mountPath
@@ -77,7 +77,7 @@ init { client, mountPath, table, id, detailActions } key =
     )
 
 
-update : Msg -> Model -> ( Model, AppCmd.Cmd Msg )
+update : Msg -> Model -> ( Model, AppCmd Msg )
 update msg model =
     case msg of
         Fetched (Ok record) ->

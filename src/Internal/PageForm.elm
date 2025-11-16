@@ -10,7 +10,7 @@ import Html exposing (Html)
 import Html.Attributes as Attrs
 import Html.Events as Events
 import Http
-import Internal.Cmd as AppCmd
+import Internal.Cmd as AppCmd exposing (AppCmd)
 import Internal.Schema as Schema exposing (Constraint(..), Table, Value(..))
 import Json.Decode as Decode
 import PostgRestAdmin.Client as Client exposing (Client)
@@ -56,7 +56,7 @@ init :
     , id : Maybe String
     , parent : Maybe { tableName : String, id : String }
     }
-    -> ( Model, AppCmd.Cmd Msg )
+    -> ( Model, AppCmd Msg )
 init { client, navKey, mountPath, table, id, parent } =
     ( { client = client
       , table = table
@@ -90,7 +90,7 @@ init { client, navKey, mountPath, table, id, parent } =
     )
 
 
-fetchAutcompleteValues : Client -> ( String, Schema.Reference ) -> AppCmd.Cmd Msg
+fetchAutcompleteValues : Client -> ( String, Schema.Reference ) -> AppCmd Msg
 fetchAutcompleteValues client ( colName, ref ) =
     Client.count
         { client = client
@@ -142,7 +142,7 @@ fetchAutcompleteValues client ( colName, ref ) =
         |> AppCmd.wrap
 
 
-fetch : Client -> Table -> ( String, String ) -> AppCmd.Cmd Msg
+fetch : Client -> Table -> ( String, String ) -> AppCmd Msg
 fetch client table ( primaryKeyName, recordId ) =
     let
         selectedCols =
@@ -175,7 +175,7 @@ fetch client table ( primaryKeyName, recordId ) =
 -- Update
 
 
-update : Msg -> Model -> ( Model, AppCmd.Cmd Msg )
+update : Msg -> Model -> ( Model, AppCmd Msg )
 update msg model =
     case msg of
         Fetched (Ok response) ->

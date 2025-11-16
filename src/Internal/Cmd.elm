@@ -1,47 +1,45 @@
-module Internal.Cmd exposing (Cmd(..), batch, confirm, dismiss, error, none, wrap)
-
-import Platform.Cmd as Platform
+module Internal.Cmd exposing (AppCmd(..), batch, confirm, dismiss, error, none, wrap)
 
 
-type Cmd msg
-    = ChildCmd (Platform.Cmd msg)
-    | Batch (List (Cmd msg))
+type AppCmd msg
+    = ChildCmd (Cmd msg)
+    | Batch (List (AppCmd msg))
     | NotificationError String
     | NotificationConfirm String
     | NotificationDismiss
 
 
-wrap : Platform.Cmd msg -> Cmd msg
+wrap : Cmd msg -> AppCmd msg
 wrap =
     ChildCmd
 
 
-none : Cmd msg
+none : AppCmd msg
 none =
     wrap Cmd.none
 
 
-batch : List (Cmd msg) -> Cmd msg
+batch : List (AppCmd msg) -> AppCmd msg
 batch =
     Batch
 
 
 {-| Display an error.
 -}
-error : String -> Cmd msg
+error : String -> AppCmd msg
 error message =
     NotificationError message
 
 
 {-| Display a confirmation notification.
 -}
-confirm : String -> Cmd msg
+confirm : String -> AppCmd msg
 confirm message =
     NotificationConfirm message
 
 
 {-| Dismiss notification.
 -}
-dismiss : Cmd msg
+dismiss : AppCmd msg
 dismiss =
     NotificationDismiss
