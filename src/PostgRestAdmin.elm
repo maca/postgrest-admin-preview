@@ -60,7 +60,7 @@ import Internal.PageListing as PageListing exposing (Model)
 import Internal.Schema exposing (Record, Schema)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
-import PostgRestAdmin.Client as Client exposing (AuthScheme, Client)
+import PostgRestAdmin.Client as Client exposing (AuthScheme, Client, Error(..))
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
 import Postgrest.Client as PG
 import Process
@@ -92,24 +92,24 @@ type alias Program flags model msg =
     Platform.Program Decode.Value (Model flags model msg) (Msg flags model msg)
 
 
-type alias InitParams f m msg =
+type alias InitParams flags model msg =
     { client : Client
     , key : Nav.Key
-    , config : Config f m msg
+    , config : Config flags model msg
     }
 
 
-type alias Model f m msg =
-    { route : Route f m msg
+type alias Model flags model msg =
+    { route : Route flags model msg
     , key : Nav.Key
     , notification : Notification
     , error : Maybe String
     , client : Client
-    , onLogin : Maybe String -> Cmd (Msg f m msg)
+    , onLogin : Maybe String -> Cmd (Msg flags model msg)
     , attemptedPath : String
-    , mountedApp : MountedApp f m msg
-    , mountedAppFlags : Result Decode.Error f
-    , config : Config f m msg
+    , mountedApp : MountedApp flags model msg
+    , mountedAppFlags : Result Decode.Error flags
+    , config : Config flags model msg
     , authFormUrl : Url
     , authFormJwtDecoder : Decoder String
     , authFormJwtEncoder : Dict String String -> Encode.Value
@@ -124,8 +124,8 @@ type Notification
     | NoNotification
 
 
-type Msg f m msg
-    = ApplicationInit ( MountedAppParams f m msg, msg )
+type Msg flags model msg
+    = ApplicationInit ( MountedAppParams flags model msg, msg )
     | AuthFieldsChanged (Field.Msg Never)
     | AuthFormSubmitted
     | GotToken (Result Client.Error String)
@@ -144,11 +144,11 @@ type Msg f m msg
     | NoOp
 
 
-type Route f m msg
+type Route flags model msg
     = RouteRoot
     | RouteLoadingSchema
-        (InitParams f m msg
-         -> ( Route f m msg, Cmd (Msg f m msg) )
+        (InitParams flags model msg
+         -> ( Route flags model msg, Cmd (Msg flags model msg) )
         )
     | RouteListing PageListing.Model
     | RouteDetail PageDetail.Model
@@ -413,14 +413,12 @@ update msg model =
             , Cmd.none
             )
 
-        -- ( SchemaFetched (Err Internal.Http.AuthError), _ ) ->
-        --     ( { model | client = Client.authFailed model.client }
-        --     , Cmd.none
-        --     )
         ( SchemaFetched (Err err), _ ) ->
-            ( model
-            , Task.succeed (NotificationAlert (Client.errorToString err))
-                |> Task.perform identity
+            ( { model
+                | client = Client.logout model.client
+                , authFormStatus = Failure err
+              }
+            , Cmd.none
             )
 
         ( PageListingChanged childMsg, RouteListing listing ) ->
@@ -981,8 +979,21 @@ mapAppCmd tagger appCmd =
         AppCmd.Batch cmds ->
             Cmd.batch (List.map (mapAppCmd tagger) cmds)
 
-        AppCmd.NotificationError message ->
-            Task.succeed message
+        AppCmd.ClientError error ->
+            Cmd.batch
+                [ Task.succeed (Client.errorToString error)
+                    |> Task.perform NotificationAlert
+                , case error of
+                    Unauthorized ->
+                        Task.succeed LoggedOut
+                            |> Task.perform identity
+
+                    _ ->
+                        Cmd.none
+                ]
+
+        AppCmd.Error error ->
+            Task.succeed error
                 |> Task.perform NotificationAlert
 
         AppCmd.NotificationConfirm message ->

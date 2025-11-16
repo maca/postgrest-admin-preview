@@ -52,7 +52,7 @@ import Json.Encode as Encode
 import List.Extra as List
 import List.Split as List
 import Markdown
-import PostgRestAdmin.Client as Client exposing (Client, Count, Error, errorToString)
+import PostgRestAdmin.Client as Client exposing (Client, Count, Error)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath)
 import PostgRestAdmin.Views as Views
 import Postgrest.Client as PG
@@ -287,7 +287,7 @@ update msg listing =
             case listing.order of
                 Unordered ->
                     ( listing
-                    , AppCmd.error (errorToString err)
+                    , AppCmd.clientError err
                     )
 
                 _ ->
@@ -301,7 +301,7 @@ update msg listing =
             )
 
         ParentLabelFetched (Err err) ->
-            ( listing, AppCmd.error (Client.errorToString err) )
+            ( listing, AppCmd.clientError err )
 
         ApplyFilters ->
             ( listing, reload listing.table )
@@ -414,7 +414,7 @@ update msg listing =
             )
 
         Downloaded _ (Err err) ->
-            ( listing, AppCmd.error (Client.errorToString err) )
+            ( listing, AppCmd.clientError err )
 
         CsvUploadRequested ->
             ( listing
@@ -495,7 +495,7 @@ update msg listing =
 
         CsvProcessed _ (Err err) ->
             ( listing
-            , AppCmd.error (errorToString err)
+            , AppCmd.clientError err
             )
 
         CsvUploadPosted (Ok ()) ->
@@ -509,7 +509,7 @@ update msg listing =
             )
 
         CsvUploadPosted (Err err) ->
-            ( listing, AppCmd.error (Client.errorToString err) )
+            ( listing, AppCmd.clientError err )
 
         CsvUploadAccepted ->
             ( listing

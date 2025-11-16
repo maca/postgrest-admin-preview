@@ -1,10 +1,13 @@
-module Internal.Cmd exposing (AppCmd(..), batch, confirm, dismiss, error, none, wrap)
+module Internal.Cmd exposing (AppCmd(..), batch, clientError, confirm, dismiss, error, none, wrap)
+
+import PostgRestAdmin.Client exposing (Error)
 
 
 type AppCmd msg
     = ChildCmd (Cmd msg)
     | Batch (List (AppCmd msg))
-    | NotificationError String
+    | ClientError Error
+    | Error String
     | NotificationConfirm String
     | NotificationDismiss
 
@@ -26,16 +29,23 @@ batch =
 
 {-| Display an error.
 -}
+clientError : Error -> AppCmd msg
+clientError =
+    ClientError
+
+
+{-| Display an error.
+-}
 error : String -> AppCmd msg
-error message =
-    NotificationError message
+error =
+    Error
 
 
 {-| Display a confirmation notification.
 -}
 confirm : String -> AppCmd msg
-confirm message =
-    NotificationConfirm message
+confirm =
+    NotificationConfirm
 
 
 {-| Dismiss notification.

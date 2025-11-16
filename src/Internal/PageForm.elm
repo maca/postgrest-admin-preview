@@ -192,7 +192,7 @@ update msg model =
 
         Fetched (Err err) ->
             ( model
-            , AppCmd.error (Client.errorToString err)
+            , AppCmd.clientError err
             )
 
         ParentLabelFetched (Ok label) ->
@@ -202,7 +202,7 @@ update msg model =
 
         ParentLabelFetched (Err err) ->
             ( model
-            , AppCmd.error (Client.errorToString err)
+            , AppCmd.clientError err
             )
 
         AutocompleteValuesFetched colName (Ok values) ->
@@ -216,7 +216,7 @@ update msg model =
 
         AutocompleteValuesFetched _ (Err err) ->
             ( model
-            , AppCmd.error (Client.errorToString err)
+            , AppCmd.clientError err
             )
 
         Saved (Ok id) ->
@@ -232,7 +232,7 @@ update msg model =
 
         Saved (Err err) ->
             ( model
-            , AppCmd.error (Client.errorToString err)
+            , AppCmd.clientError err
             )
 
         FormChanged innerMsg ->

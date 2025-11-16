@@ -108,7 +108,7 @@ update msg model =
 
         Fetched (Err err) ->
             ( model
-            , AppCmd.error (Client.errorToString err)
+            , AppCmd.clientError err
             )
 
         Deleted (Ok _) ->
@@ -123,7 +123,7 @@ update msg model =
 
         Deleted (Err err) ->
             ( model
-            , AppCmd.error (Client.errorToString err)
+            , AppCmd.clientError err
             )
 
         DeleteModalOpened ->

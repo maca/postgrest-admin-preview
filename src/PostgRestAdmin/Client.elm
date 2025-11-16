@@ -7,6 +7,7 @@ module PostgRestAdmin.Client exposing
     , AuthScheme(..), jwt, unset, toJwtString, authHeader, updateJwt, logout
     , fetchSchema, schemaIsLoaded
     , associationJoin
+    , resetToken
     )
 
 {-| PostgREST client for Elm applications.
@@ -138,6 +139,11 @@ jwt tokenStr =
 unset : AuthScheme
 unset =
     Unset
+
+
+resetToken : Client -> Client
+resetToken client =
+    { client | authScheme = Unset }
 
 
 
