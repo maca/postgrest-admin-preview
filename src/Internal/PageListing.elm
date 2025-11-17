@@ -98,6 +98,7 @@ type Msg
     | Reload
     | Scrolled
     | ScrollInfo (Result Dom.Error Viewport)
+    | JumpToPage Int
     | SearchChanged Search.Msg
     | DownloadRequested Format
     | Downloaded Format (Result Error Bytes)
@@ -123,6 +124,8 @@ type alias Model =
     , scrollPosition : Float
     , pages : List Page
     , page : Int
+    , currentVisiblePage : Int
+    , rowHeight : Maybe Float
     , total : Maybe Int
     , order : SortOrder
     , search : Search
@@ -163,6 +166,8 @@ init { client, mountPath, table, parent, recordsPerPage } url key =
             , parent = parent
             , parentLabel = Nothing
             , page = 0
+            , currentVisiblePage = 1
+            , rowHeight = Nothing
             , total = Nothing
             , scrollPosition = 0
             , pages = []
@@ -301,13 +306,60 @@ update msg model =
         ScrollInfo result ->
             case result of
                 Ok viewport ->
+                    let
+                        -- Calculate row height if we don't have it yet and we have records
+                        newRowHeight =
+                            case model.rowHeight of
+                                Just h ->
+                                    Just h
+
+                                Nothing ->
+                                    case model.pages of
+                                        (Page records) :: _ ->
+                                            let
+                                                recordCount =
+                                                    List.length records
+                                            in
+                                            if recordCount > 0 && viewport.scene.height > 0 then
+                                                Just (viewport.scene.height / toFloat recordCount)
+
+                                            else
+                                                Nothing
+
+                                        _ ->
+                                            Nothing
+
+                        -- Calculate which page is currently visible based on scroll position
+                        visiblePage =
+                            case newRowHeight of
+                                Nothing ->
+                                    1
+
+                                Just height ->
+                                    let
+                                        scrolledRecords =
+                                            floor (viewport.viewport.y / height)
+
+                                        pageNumber =
+                                            (scrolledRecords // model.recordsPerPage) + 1
+
+                                        totalPages =
+                                            List.length model.pages
+                                                |> (\count -> if count == 0 then 1 else count)
+                                    in
+                                    max 1 (min pageNumber totalPages)
+                    in
                     if
                         scrollingDown viewport model
                             && closeToBottom viewport
                     then
                         case model.pages of
                             Blank :: _ ->
-                                ( { model | scrollPosition = viewport.viewport.y }
+                                ( { model
+                                    | scrollPosition = viewport.viewport.y
+                                    , rowHeight = newRowHeight
+                                    , currentVisiblePage = visiblePage
+                                  }
                                 , AppCmd.none
                                 )
 
@@ -315,17 +367,43 @@ update msg model =
                                 fetchListing
                                     { model
                                         | scrollPosition = viewport.viewport.y
+                                        , rowHeight = newRowHeight
+                                        , currentVisiblePage = visiblePage
                                         , pages = Blank :: model.pages
                                     }
 
                     else
-                        ( { model | scrollPosition = viewport.viewport.y }
+                        ( { model
+                            | scrollPosition = viewport.viewport.y
+                            , rowHeight = newRowHeight
+                            , currentVisiblePage = visiblePage
+                          }
                         , AppCmd.none
                         )
 
                 Err _ ->
                     ( model
                     , AppCmd.error "Dom element not found"
+                    )
+
+        JumpToPage pageNum ->
+            case model.rowHeight of
+                Nothing ->
+                    ( model, AppCmd.none )
+
+                Just height ->
+                    let
+                        -- Calculate scroll position for the target page
+                        targetRecord =
+                            (pageNum - 1) * model.recordsPerPage
+
+                        scrollY =
+                            toFloat targetRecord * height
+                    in
+                    ( model
+                    , Dom.setViewportOf model.table.name 0 scrollY
+                        |> Task.attempt (always NoOp)
+                        |> AppCmd.wrap
                     )
 
         SearchChanged searchMsg ->
@@ -579,6 +657,8 @@ closeToBottom { scene, viewport } =
     scene.height - viewport.y < (viewport.height * 2)
 
 
+
+
 fetchListing : Model -> ( Model, AppCmd Msg )
 fetchListing listing =
     ( listing, fetch listing )
@@ -763,8 +843,18 @@ viewPageHeader ({ mountPath, table } as model) =
                     Nothing ->
                         [ ( table.name, Nothing ) ]
                 )
-            , Maybe.map (String.fromInt >> Html.text) model.total
-                |> Maybe.withDefault (Html.text "")
+            , Html.div
+                []
+                [ viewPageSelect model
+                , Maybe.map
+                    (\total ->
+                        Html.span
+                            [ Attrs.class "total-records" ]
+                            [ Html.text (String.fromInt total ++ " records") ]
+                    )
+                    model.total
+                    |> Maybe.withDefault (Html.text "")
+                ]
             ]
         , Html.div
             []
@@ -931,6 +1021,43 @@ toggleSearchButton model =
             Html.text "Show"
         , Html.text " Filters"
         ]
+
+
+viewPageSelect : Model -> Html Msg
+viewPageSelect model =
+    let
+        totalPages =
+            List.length model.pages
+                |> (\count -> if count == 0 then 1 else count)
+
+        currentPage =
+            model.currentVisiblePage
+    in
+    Html.select
+        [ Attrs.class "page-select"
+        , Events.on "change"
+            (Decode.at [ "target", "value" ] Decode.string
+                |> Decode.andThen
+                    (\value ->
+                        case String.toInt value of
+                            Just pageNum ->
+                                Decode.succeed (JumpToPage pageNum)
+
+                            Nothing ->
+                                Decode.fail "Invalid page number"
+                    )
+            )
+        ]
+        (List.range 1 totalPages
+            |> List.map
+                (\pageNum ->
+                    Html.option
+                        [ Attrs.value (String.fromInt pageNum)
+                        , Attrs.selected (pageNum == currentPage)
+                        ]
+                        [ Html.text ("Page " ++ String.fromInt pageNum) ]
+                )
+        )
 
 
 modalDialog : String -> List (Html Msg) -> List (Html Msg) -> Html Msg
