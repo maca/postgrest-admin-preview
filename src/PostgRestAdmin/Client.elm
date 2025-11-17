@@ -7,7 +7,7 @@ module PostgRestAdmin.Client exposing
     , AuthScheme(..), jwt, unset, toJwtString, authHeader, updateJwt, logout
     , fetchSchema, schemaIsLoaded
     , associationJoin
-    , resetToken, resolve, task
+    , jsonResolver, resetToken, task
     )
 
 {-| PostgREST client for Elm applications.
@@ -64,7 +64,7 @@ type Error
     = BadUrl String
     | Timeout
     | NetworkError
-    | BadStatus Int
+    | BadStatus Int (Maybe String)
     | BadHeader String
     | DecodeError Decode.Error
     | RequestError String
@@ -215,8 +215,9 @@ errorToString error =
         NetworkError ->
             "Network Error: do you have an internet connection?"
 
-        BadStatus status ->
-            "Bad status: " ++ String.fromInt status
+        BadStatus status body ->
+            "The server responded with an error: "
+                ++ (body |> Maybe.withDefault (String.fromInt status))
 
         DecodeError err ->
             Decode.errorToString err
@@ -253,6 +254,10 @@ jsonResolver decoder =
                 Decode.decodeString decoder body
                     |> Result.mapError DecodeError
             )
+            (\body ->
+                Decode.decodeString badStatusDecoder body
+                    |> Result.withDefault Nothing
+            )
         )
 
 
@@ -274,11 +279,19 @@ countResolver decoder =
                     _ ->
                         Err (BadHeader "content-range")
             )
+            (\body ->
+                Decode.decodeString badStatusDecoder body
+                    |> Result.withDefault Nothing
+            )
         )
 
 
-resolve : (Http.Metadata -> body -> Result Error value) -> Http.Response body -> Result Error value
-resolve fn response =
+resolve :
+    (Http.Metadata -> body -> Result Error value)
+    -> (body -> Maybe String)
+    -> Http.Response body
+    -> Result Error value
+resolve fn parseError response =
     case response of
         Http.BadUrl_ url ->
             Err (BadUrl url)
@@ -289,7 +302,7 @@ resolve fn response =
         Http.NetworkError_ ->
             Err NetworkError
 
-        Http.BadStatus_ { statusCode } _ ->
+        Http.BadStatus_ { statusCode } body ->
             case statusCode of
                 401 ->
                     Err Unauthorized
@@ -298,10 +311,29 @@ resolve fn response =
                     Err Forbidden
 
                 _ ->
-                    Err (BadStatus statusCode)
+                    Err (BadStatus statusCode (parseError body))
 
         Http.GoodStatus_ metadata body ->
             fn metadata body
+
+
+badStatusDecoder : Decoder (Maybe String)
+badStatusDecoder =
+    Decode.map4
+        (\code details hint message ->
+            List.filterMap identity
+                [ code
+                , details
+                , hint
+                , message
+                ]
+                |> String.join "\n"
+                |> Just
+        )
+        (Decode.maybe (Decode.field "code" Decode.string))
+        (Decode.maybe (Decode.field "details" Decode.string))
+        (Decode.maybe (Decode.field "hint" Decode.string))
+        (Decode.maybe (Decode.field "message" Decode.string))
 
 
 {-| Fetches a record for a given table.
@@ -598,7 +630,7 @@ bytesRequest { client, method, headers, path, body } =
         , headers = headers
         , path = path
         , body = body
-        , resolver = Http.bytesResolver (resolve (always Ok))
+        , resolver = Http.bytesResolver (resolve (always Ok) (always Nothing))
         }
 
 
@@ -624,6 +656,7 @@ count { client, path } =
                             _ ->
                                 Err (BadHeader "content-range")
                     )
+                    (always Nothing)
                 )
         }
 

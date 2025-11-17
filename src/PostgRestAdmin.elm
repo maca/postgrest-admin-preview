@@ -255,36 +255,10 @@ requestToken model =
                     (Parse.parse Parse.json model.authFormField
                         |> Result.withDefault Encode.null
                     )
-            , resolver = Http.stringResolver (handleAuthResponse model.authFormJwtDecoder)
+            , resolver = Client.jsonResolver model.authFormJwtDecoder
             , timeout = Nothing
             }
         )
-
-
-handleAuthResponse : Decoder a -> Http.Response String -> Result Client.Error a
-handleAuthResponse aDecoder response =
-    case response of
-        Http.BadStatus_ { statusCode } _ ->
-            if statusCode == 401 then
-                Err Client.Unauthorized
-
-            else if statusCode == 403 then
-                Err Client.Forbidden
-
-            else
-                Err (Client.BadStatus statusCode)
-
-        Http.GoodStatus_ _ body ->
-            case Decode.decodeString aDecoder body of
-                Err err ->
-                    -- Decode error during auth
-                    Err (Client.DecodeError err)
-
-                Ok result ->
-                    Ok result
-
-        _ ->
-            Err Client.NetworkError
 
 
 
@@ -587,9 +561,12 @@ errorMessage status =
                     Client.Unauthorized ->
                         [ Html.text "Please sign in to continue." ]
 
-                    Client.BadStatus statusCode ->
+                    Client.BadStatus statusCode err ->
                         [ Html.text "The server responded with an error: "
-                        , Html.pre [] [ Html.text (String.fromInt statusCode) ]
+                        , Html.pre []
+                            [ Html.text
+                                (err |> Maybe.withDefault (String.fromInt statusCode))
+                            ]
                         ]
 
                     Client.NetworkError ->

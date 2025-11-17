@@ -47,7 +47,7 @@ import Internal.Schema as Schema
         , Value(..)
         )
 import Internal.Search as Search exposing (Search)
-import Json.Decode as Decode
+import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 import List.Extra as List
 import List.Split as List
@@ -95,7 +95,8 @@ type UploadState
     = Idle
     | Fetching
     | BadCsvSchema CsvUpload
-    | UploadReady (List CsvRow)
+    | UploadWithoutPreview File
+    | UploadWithPreview File (List CsvRow)
     | UploadWithErrors (List CsvRow)
 
 
@@ -119,10 +120,10 @@ type Msg
     | ToggleSearchOpen
     | CsvUploadRequested
     | CsvUploadSelected File
-    | CsvUploadLoaded String
-    | CsvProcessed (Result Error (List CsvRow))
+    | CsvUploadLoaded File String
+    | CsvProcessed File (Result Error (List CsvRow))
     | CsvUploadPosted (Result Error ())
-    | CsvUploadAccepted
+    | CsvUploadAccepted File
     | CsvUploadCanceled
     | NoOp
 
@@ -434,12 +435,17 @@ update msg model =
             )
 
         CsvUploadSelected file ->
+            -- let
+            --     _ =
+            --         Debug.log "filesize" (File.size file)
+            -- in
+            -- ( model, AppCmd.none )
             ( model
-            , Task.perform CsvUploadLoaded (File.toString file)
+            , Task.perform (CsvUploadLoaded file) (File.toString file)
                 |> AppCmd.wrap
             )
 
-        CsvUploadLoaded string ->
+        CsvUploadLoaded file string ->
             case Csv.parse string of
                 Ok rawCsv ->
                     let
@@ -475,11 +481,7 @@ update msg model =
 
                                         Nothing ->
                                             idsAcc
-                                    , { id = id
-                                      , record = record
-                                      , rowNum = idx
-                                      , persisted = False
-                                      }
+                                    , { id = id, record = record, rowNum = idx, persisted = False }
                                         :: recsAcc
                                     )
                                 )
@@ -489,7 +491,7 @@ update msg model =
                     if Set.isEmpty extra && Set.isEmpty missing then
                         ( { model | uploadState = Fetching }
                         , (if List.isEmpty ids then
-                            CsvProcessed (Ok records)
+                            CsvProcessed file (Ok records)
                                 |> Task.succeed
                                 |> Task.perform identity
 
@@ -512,7 +514,7 @@ update msg model =
                                             )
                                             records
                                     )
-                                |> Task.attempt CsvProcessed
+                                |> Task.attempt (CsvProcessed file)
                           )
                             |> AppCmd.wrap
                         )
@@ -535,10 +537,10 @@ update msg model =
                     , AppCmd.error "This CSV file cound not be parsed."
                     )
 
-        CsvProcessed (Ok records) ->
+        CsvProcessed file (Ok records) ->
             case List.filter hasErrors records of
                 [] ->
-                    ( { model | uploadState = UploadReady records }
+                    ( { model | uploadState = UploadWithPreview file records }
                     , AppCmd.none
                     )
 
@@ -547,7 +549,7 @@ update msg model =
                     , AppCmd.none
                     )
 
-        CsvProcessed (Err err) ->
+        CsvProcessed _ (Err err) ->
             ( model
             , AppCmd.clientError err
             )
@@ -565,35 +567,29 @@ update msg model =
         CsvUploadPosted (Err err) ->
             ( model, AppCmd.clientError err )
 
-        CsvUploadAccepted ->
-            ( model
-            , case model.uploadState of
-                UploadReady records ->
-                    Client.task
-                        { client = model.client
-                        , method = "POST"
-                        , headers = [ Http.header "Prefer" "resolution=merge-duplicates" ]
-                        , path = "/" ++ model.table.name
-                        , body =
-                            Http.jsonBody
-                                (Encode.list
-                                    (\rec ->
-                                        Encode.dict identity
-                                            (String.nonBlank
-                                                >> Maybe.map Encode.string
-                                                >> Maybe.withDefault Encode.null
-                                            )
-                                            rec.record
-                                    )
-                                    records
-                                )
-                        , resolver = Http.bytesResolver (Client.resolve (\_ _ -> Ok ()))
-                        }
-                        |> Task.attempt CsvUploadPosted
-                        |> AppCmd.wrap
-
-                _ ->
-                    AppCmd.none
+        CsvUploadAccepted file ->
+            ( { model | uploadState = Fetching }
+            , Client.jsonRequest
+                { client = model.client
+                , method = "POST"
+                , headers =
+                    [ Http.header "Prefer" "resolution=merge-duplicates"
+                    , Http.header "Content-Type" "text/csv"
+                    , Http.header "Accept" "application/json"
+                    ]
+                , path = "/" ++ model.table.name
+                , body = Http.fileBody file
+                , decoder =
+                    Decode.value
+                        |> Decode.map
+                            (\resp ->
+                                Encode.encode 0 resp
+                                    |> Debug.log "body"
+                            )
+                        |> Decode.andThen (\_ -> Decode.succeed ())
+                }
+                |> Task.attempt CsvUploadPosted
+                |> AppCmd.wrap
             )
 
         CsvUploadCanceled ->
@@ -960,12 +956,12 @@ toggleSearchButton model =
 uploadModal : Model -> Html Msg
 uploadModal model =
     case model.uploadState of
-        UploadReady records ->
+        UploadWithPreview file records ->
             Html.div
                 [ class "modal-background"
                 , class "upload-preview"
                 ]
-                [ uploadPreview model records ]
+                [ uploadPreview model file records ]
 
         UploadWithErrors records ->
             Html.div
@@ -973,6 +969,14 @@ uploadModal model =
                 , class "upload-preview"
                 ]
                 [ uploadWithErrorsPreview model records
+                ]
+
+        UploadWithoutPreview _ ->
+            Html.div
+                [ class "modal-background"
+                , class "upload-preview"
+                ]
+                [ Html.text "the file is to big to be displayed"
                 ]
 
         BadCsvSchema csvUpload ->
@@ -989,8 +993,8 @@ uploadModal model =
             Html.text ""
 
 
-uploadPreview : Model -> List CsvRow -> Html Msg
-uploadPreview model records =
+uploadPreview : Model -> File -> List CsvRow -> Html Msg
+uploadPreview model file records =
     let
         fieldNames =
             List.map Tuple.first model.columns
@@ -1045,7 +1049,7 @@ uploadPreview model records =
                 [ Html.text "Cancel" ]
             , Html.button
                 [ class "button button"
-                , onClick CsvUploadAccepted
+                , onClick (CsvUploadAccepted file)
                 ]
                 [ Html.text "Save" ]
             ]
@@ -1260,8 +1264,11 @@ subscriptions model =
                             UploadWithErrors _ ->
                                 Decode.succeed CsvUploadCanceled
 
-                            UploadReady _ ->
-                                Decode.succeed CsvUploadAccepted
+                            UploadWithPreview file _ ->
+                                Decode.succeed (CsvUploadAccepted file)
+
+                            UploadWithoutPreview file ->
+                                Decode.succeed (CsvUploadAccepted file)
 
                             Idle ->
                                 Decode.fail "upload not ready"
