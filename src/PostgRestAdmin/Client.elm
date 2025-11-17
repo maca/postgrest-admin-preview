@@ -7,7 +7,7 @@ module PostgRestAdmin.Client exposing
     , AuthScheme(..), jwt, unset, toJwtString, authHeader, updateJwt, logout
     , fetchSchema, schemaIsLoaded
     , associationJoin
-    , resetToken
+    , resetToken, resolve, task
     )
 
 {-| PostgREST client for Elm applications.
@@ -54,7 +54,6 @@ import Regex
 import String.Extra as String
 import Task exposing (Task)
 import Url exposing (Url)
-import Url.Builder
 
 
 
@@ -537,33 +536,50 @@ task { client, method, headers, path, body, resolver } =
         }
 
 
-chunk : Client -> Table -> Maybe String -> List String -> Task.Task Error (List Schema.Record)
-chunk client table primaryKeyName ids =
+chunk : Client -> Table -> List String -> Task.Task Error (List String)
+chunk client table ids =
     let
-        existenceQuery =
-            List.filterMap identity
-                [ primaryKeyName
-                    |> Maybe.map
-                        (\pkn ->
-                            let
-                                conds =
-                                    ids
-                                        |> List.map (\id -> pkn ++ ".eq." ++ id)
-                                        |> String.join ","
-                            in
-                            Url.Builder.string "or" <| "(" ++ conds ++ ")"
+        primaryKeyName =
+            Schema.tablePrimaryKeyName table
+
+        queryStr =
+            PG.toQueryString
+                [ PG.or
+                    (List.filterMap
+                        (\id ->
+                            primaryKeyName
+                                |> Maybe.map (\key -> PG.param key (PG.eq (PG.string id)))
                         )
+                        ids
+                    )
+                , PG.select
+                    (List.filterMap identity [ Maybe.map PG.attribute primaryKeyName ])
                 ]
     in
     task
         { client = client
         , method = "GET"
         , headers = []
-        , path =
-            Url.Builder.absolute [ table.name ] existenceQuery
+        , path = "/" ++ table.name ++ "?" ++ queryStr
         , body = Http.emptyBody
-        , resolver = jsonResolver (Decode.list (Decode.dict Schema.valueDecoder))
+        , resolver =
+            jsonResolver
+                (case primaryKeyName of
+                    Just key ->
+                        Decode.list (Decode.field key idDecoder)
+
+                    Nothing ->
+                        Decode.fail ""
+                )
         }
+
+
+idDecoder : Decoder String
+idDecoder =
+    Decode.oneOf
+        [ Decode.string
+        , Decode.float |> Decode.map String.fromFloat
+        ]
 
 
 bytesRequest :
@@ -675,13 +691,6 @@ columnDecoder : String -> Schema.Column -> Decoder Value
 columnDecoder name col =
     case ( col.constraint, col ) of
         ( ForeignKey ref, _ ) ->
-            let
-                idDecoder =
-                    Decode.oneOf
-                        [ Decode.string
-                        , Decode.float |> Decode.map String.fromFloat
-                        ]
-            in
             Decode.oneOf
                 [ Decode.field ref.tableName
                     (Decode.map2 Tuple.pair

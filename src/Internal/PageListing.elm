@@ -15,8 +15,8 @@ import Browser.Dom as Dom exposing (Viewport)
 import Browser.Events exposing (onKeyDown)
 import Browser.Navigation as Nav
 import Bytes exposing (Bytes)
-import Csv exposing (Csv)
-import Dict
+import Csv
+import Dict exposing (Dict)
 import File exposing (File)
 import File.Download as Download
 import File.Select as Select
@@ -75,11 +75,19 @@ type SortOrder
     | Unordered
 
 
+type alias CsvRow =
+    { id : Maybe String
+    , record : Dict String String
+    , rowNum : Int
+    , persisted : Bool
+    }
+
+
 type alias CsvUpload =
     { missingColumns : List String
     , extraColumns : List String
     , headers : List String
-    , records : List ( Int, Record )
+    , records : List CsvRow
     }
 
 
@@ -87,8 +95,8 @@ type UploadState
     = Idle
     | Fetching
     | BadCsvSchema CsvUpload
-    | UploadReady (List ( Int, Record ))
-    | UploadWithErrors (List ( Int, Record ))
+    | UploadReady (List CsvRow)
+    | UploadWithErrors (List CsvRow)
 
 
 type Format
@@ -112,7 +120,7 @@ type Msg
     | CsvUploadRequested
     | CsvUploadSelected File
     | CsvUploadLoaded String
-    | CsvProcessed Csv (Result Error (List Record))
+    | CsvProcessed (Result Error (List CsvRow))
     | CsvUploadPosted (Result Error ())
     | CsvUploadAccepted
     | CsvUploadCanceled
@@ -127,10 +135,10 @@ type alias Model =
     , columns : List ( String, Column )
     , parent : Maybe { tableName : String, id : String }
     , parentLabel : Maybe String
-    , foreignKey : Maybe ( String, String )
     , scrollPosition : Float
     , pages : List Page
     , page : Int
+    , total : Maybe Int
     , order : SortOrder
     , search : Search
     , searchOpen : Bool
@@ -167,8 +175,8 @@ init { client, mountPath, table, parent } url key =
                     |> List.filter isColumnVisible
             , parent = parent
             , parentLabel = Nothing
-            , foreignKey = parentReference table parent
             , page = 0
+            , total = Nothing
             , scrollPosition = 0
             , pages = []
             , order = order
@@ -247,21 +255,21 @@ fetch model =
 
 
 update : Msg -> Model -> ( Model, AppCmd Msg )
-update msg listing =
+update msg model =
     case msg of
         LoggedIn client ->
             fetchListing
-                { listing | client = client }
+                { model | client = client }
 
         Fetched (Ok ( records, count )) ->
             let
                 recordCount =
                     List.length records
             in
-            ( { listing
-                | page = listing.page + 1
+            ( { model
+                | page = model.page + 1
                 , pages =
-                    case listing.pages of
+                    case model.pages of
                         Blank :: pages ->
                             if recordCount < perPage then
                                 Blank :: Page records :: pages
@@ -279,48 +287,49 @@ update msg listing =
 
                             else
                                 Page records :: pages
+                , total = Just count.total
               }
             , AppCmd.none
             )
 
         Fetched (Err err) ->
-            case listing.order of
+            case model.order of
                 Unordered ->
-                    ( listing
+                    ( model
                     , AppCmd.clientError err
                     )
 
                 _ ->
-                    ( { listing | order = Unordered }
-                    , reload listing.table
+                    ( { model | order = Unordered }
+                    , reload model.table
                     )
 
         ParentLabelFetched (Ok parentLabel) ->
-            ( { listing | parentLabel = Just parentLabel }
+            ( { model | parentLabel = Just parentLabel }
             , AppCmd.none
             )
 
         ParentLabelFetched (Err err) ->
-            ( listing, AppCmd.clientError err )
+            ( model, AppCmd.clientError err )
 
         ApplyFilters ->
-            ( listing, reload listing.table )
+            ( model, reload model.table )
 
         Sort order ->
-            ( { listing | order = order }, reload listing.table )
+            ( { model | order = order }, reload model.table )
 
         Reload ->
-            ( listing
-            , listing
+            ( model
+            , model
                 |> listingPath { limit = False, selectAll = True, nest = True }
-                |> MountPath.path listing.mountPath
-                |> Nav.replaceUrl listing.key
+                |> MountPath.path model.mountPath
+                |> Nav.replaceUrl model.key
                 |> AppCmd.wrap
             )
 
         Scrolled ->
-            ( listing
-            , Dom.getViewportOf listing.table.name
+            ( model
+            , Dom.getViewportOf model.table.name
                 |> Task.attempt ScrollInfo
                 |> AppCmd.wrap
             )
@@ -329,41 +338,39 @@ update msg listing =
             case result of
                 Ok viewport ->
                     if
-                        scrollingDown viewport listing
+                        scrollingDown viewport model
                             && closeToBottom viewport
                     then
-                        case listing.pages of
+                        case model.pages of
                             Blank :: _ ->
-                                ( { listing
-                                    | scrollPosition = viewport.viewport.y
-                                  }
+                                ( { model | scrollPosition = viewport.viewport.y }
                                 , AppCmd.none
                                 )
 
                             _ ->
                                 fetchListing
-                                    { listing
+                                    { model
                                         | scrollPosition = viewport.viewport.y
-                                        , pages = Blank :: listing.pages
+                                        , pages = Blank :: model.pages
                                     }
 
                     else
-                        ( { listing | scrollPosition = viewport.viewport.y }
+                        ( { model | scrollPosition = viewport.viewport.y }
                         , AppCmd.none
                         )
 
                 Err _ ->
-                    ( listing
+                    ( model
                     , AppCmd.error "Dom element not found"
                     )
 
         SearchChanged searchMsg ->
-            Search.update searchMsg listing.search
-                |> Tuple.mapFirst (\search -> { listing | search = search })
+            Search.update searchMsg model.search
+                |> Tuple.mapFirst (\search -> { model | search = search })
                 |> Tuple.mapSecond (searchChanged searchMsg)
 
         ToggleSearchOpen ->
-            ( { listing | searchOpen = not listing.searchOpen }
+            ( { model | searchOpen = not model.searchOpen }
             , AppCmd.none
             )
 
@@ -375,11 +382,11 @@ update msg listing =
                         , selectAll = True
                         , nest = False
                         }
-                        listing
+                        model
             in
-            ( listing
+            ( model
             , Client.bytesRequest
-                { client = listing.client
+                { client = model.client
                 , method = "GET"
                 , headers =
                     [ case format of
@@ -399,10 +406,10 @@ update msg listing =
         Downloaded format (Ok body) ->
             let
                 download ext =
-                    (listing.table.name ++ "-list." ++ ext)
+                    (model.table.name ++ "-list." ++ ext)
                         |> Download.bytes
             in
-            ( listing
+            ( model
             , AppCmd.wrap
                 (case format of
                     CSV ->
@@ -414,10 +421,10 @@ update msg listing =
             )
 
         Downloaded _ (Err err) ->
-            ( listing, AppCmd.clientError err )
+            ( model, AppCmd.clientError err )
 
         CsvUploadRequested ->
-            ( listing
+            ( model
             , AppCmd.batch
                 [ Task.attempt (always NoOp) (Dom.blur "upload-csv-button")
                     |> AppCmd.wrap
@@ -427,7 +434,7 @@ update msg listing =
             )
 
         CsvUploadSelected file ->
-            ( listing
+            ( model
             , Task.perform CsvUploadLoaded (File.toString file)
                 |> AppCmd.wrap
             )
@@ -437,71 +444,118 @@ update msg listing =
                 Ok rawCsv ->
                     let
                         csv =
-                            { rawCsv
-                                | headers = List.map String.trim rawCsv.headers
-                            }
+                            { rawCsv | headers = List.map String.trim rawCsv.headers }
 
                         headers =
                             Set.fromList csv.headers
 
                         columnNames =
-                            Set.fromList (Dict.keys listing.table.columns)
+                            Set.fromList (Dict.keys model.table.columns)
 
                         missing =
                             Set.diff columnNames headers
 
                         extra =
                             Set.diff headers columnNames
+
+                        ( ids, records ) =
+                            List.indexedFoldl
+                                (\idx row ( idsAcc, recsAcc ) ->
+                                    let
+                                        record =
+                                            List.zip csv.headers row |> Dict.fromList
+
+                                        id =
+                                            Schema.tablePrimaryKeyName model.table
+                                                |> Maybe.andThen (\n -> Dict.get n record)
+                                    in
+                                    ( case id of
+                                        Just i ->
+                                            i :: idsAcc
+
+                                        Nothing ->
+                                            idsAcc
+                                    , { id = id
+                                      , record = record
+                                      , rowNum = idx
+                                      , persisted = False
+                                      }
+                                        :: recsAcc
+                                    )
+                                )
+                                ( [], [] )
+                                csv.records
                     in
                     if Set.isEmpty extra && Set.isEmpty missing then
-                        ( { listing | uploadState = Fetching }
-                        , processCsv listing csv
+                        ( { model | uploadState = Fetching }
+                        , (if List.isEmpty ids then
+                            CsvProcessed (Ok records)
+                                |> Task.succeed
+                                |> Task.perform identity
+
+                           else
+                            List.chunksOfLeft 1000 ids
+                                |> List.map (Client.chunk model.client model.table)
+                                |> Task.sequence
+                                |> Task.map (List.concat >> Set.fromList)
+                                |> Task.map
+                                    (\fetchIds ->
+                                        List.map
+                                            (\rec ->
+                                                { rec
+                                                    | persisted =
+                                                        rec.id
+                                                            |> Maybe.map
+                                                                (\id -> Set.member id fetchIds)
+                                                            |> Maybe.withDefault False
+                                                }
+                                            )
+                                            records
+                                    )
+                                |> Task.attempt CsvProcessed
+                          )
+                            |> AppCmd.wrap
                         )
 
                     else
-                        ( { listing
+                        ( { model
                             | uploadState =
                                 BadCsvSchema
                                     { extraColumns = Set.toList extra
                                     , missingColumns = Set.toList missing
                                     , headers = csv.headers
-                                    , records =
-                                        buildImportedRecords listing [] csv
+                                    , records = records
                                     }
                           }
                         , AppCmd.none
                         )
 
                 Err _ ->
-                    ( listing
+                    ( model
                     , AppCmd.error "This CSV file cound not be parsed."
                     )
 
-        CsvProcessed csv (Ok existing) ->
-            let
-                records =
-                    buildImportedRecords listing existing csv
-            in
-            case List.filter (\( _, rec ) -> hasErrors rec) records of
+        CsvProcessed (Ok records) ->
+            case List.filter hasErrors records of
                 [] ->
-                    ( { listing | uploadState = UploadReady records }
+                    ( { model | uploadState = UploadReady records }
                     , AppCmd.none
                     )
 
                 withErrors ->
-                    ( { listing | uploadState = UploadWithErrors withErrors }
+                    ( { model | uploadState = UploadWithErrors withErrors }
                     , AppCmd.none
                     )
 
-        CsvProcessed _ (Err err) ->
-            ( listing
+        CsvProcessed (Err err) ->
+            ( model
             , AppCmd.clientError err
             )
 
         CsvUploadPosted (Ok ()) ->
-            ( listing
+            ( model
             , AppCmd.batch
-                [ Dom.setViewportOf listing.table.name 0 0
+                [ Dom.setViewportOf model.table.name 0 0
                     |> Task.attempt (always Reload)
                     |> AppCmd.wrap
                 , AppCmd.confirm "The upload was succesful."
@@ -509,27 +563,31 @@ update msg listing =
             )
 
         CsvUploadPosted (Err err) ->
-            ( listing, AppCmd.clientError err )
+            ( model, AppCmd.clientError err )
 
         CsvUploadAccepted ->
-            ( listing
-            , case listing.uploadState of
+            ( model
+            , case model.uploadState of
                 UploadReady records ->
-                    Client.jsonRequest
-                        { client = listing.client
+                    Client.task
+                        { client = model.client
                         , method = "POST"
-                        , headers =
-                            [ Http.header "Prefer"
-                                "resolution=merge-duplicates"
-                            ]
-                        , path = Url.absolute [ listing.table.name ] []
+                        , headers = [ Http.header "Prefer" "resolution=merge-duplicates" ]
+                        , path = "/" ++ model.table.name
                         , body =
                             Http.jsonBody
                                 (Encode.list
-                                    (\_ -> Debug.todo "crash")
+                                    (\rec ->
+                                        Encode.dict identity
+                                            (String.nonBlank
+                                                >> Maybe.map Encode.string
+                                                >> Maybe.withDefault Encode.null
+                                            )
+                                            rec.record
+                                    )
                                     records
                                 )
-                        , decoder = Decode.succeed ()
+                        , resolver = Http.bytesResolver (Client.resolve (\_ _ -> Ok ()))
                         }
                         |> Task.attempt CsvUploadPosted
                         |> AppCmd.wrap
@@ -539,10 +597,10 @@ update msg listing =
             )
 
         CsvUploadCanceled ->
-            ( { listing | uploadState = Idle }, AppCmd.none )
+            ( { model | uploadState = Idle }, AppCmd.none )
 
         NoOp ->
-            ( listing, AppCmd.none )
+            ( model, AppCmd.none )
 
 
 reload : Table -> AppCmd Msg
@@ -601,7 +659,7 @@ listingPath { limit, selectAll, nest } model =
                 ]
 
         parentQuery =
-            model.foreignKey
+            parentReference model.table model.parent
                 |> Maybe.map
                     (\( colName, id ) ->
                         [ PG.param colName (PG.eq (PG.string id)) ]
@@ -654,112 +712,6 @@ listingPath { limit, selectAll, nest } model =
 
 
 -- UPLOAD
-
-
-buildImportedRecords : Model -> List Record -> Csv -> List ( Int, Record )
-buildImportedRecords { table, foreignKey } persistedRecords csv =
-    let
-        primaryKeyName =
-            Schema.tablePrimaryKeyName table
-
-        persisted =
-            persistedRecords
-                |> List.map
-                    (\rec ->
-                        ( primaryKey table rec
-                            |> Maybe.andThen
-                                (\{ value } -> valueToString value)
-                            |> Maybe.withDefault ""
-                        , rec
-                        )
-                    )
-                |> Dict.fromList
-    in
-    csv.records
-        |> List.indexedMap
-            (\idx row ->
-                let
-                    blank =
-                        Dict.fromList (List.zip csv.headers row)
-
-                    dict =
-                        foreignKey
-                            |> Maybe.map
-                                (\( colName, fkVal ) ->
-                                    Dict.get colName blank
-                                        |> Maybe.andThen String.nonBlank
-                                        |> Maybe.map (always blank)
-                                        |> Maybe.withDefault
-                                            (Dict.insert colName fkVal blank)
-                                )
-                            |> Maybe.withDefault blank
-
-                    record =
-                        primaryKeyName
-                            |> Maybe.andThen (\pkName -> Dict.get pkName dict)
-                            |> Maybe.andThen (\id -> Dict.get id persisted)
-                            |> Maybe.withDefault Dict.empty
-                            |> setAssociationValidation foreignKey
-                in
-                ( idx + 1
-                , Dict.foldl updateWithString record dict
-                )
-            )
-
-
-setAssociationValidation : Maybe ( String, String ) -> Record -> Record
-setAssociationValidation foreignKey record =
-    record
-
-
-processCsv : Model -> Csv -> AppCmd Msg
-processCsv { table, client } csv =
-    let
-        primaryKeyName =
-            Schema.tablePrimaryKeyName table
-
-        ids =
-            primaryKeyName
-                |> Maybe.map
-                    (\pkName ->
-                        let
-                            blank =
-                                Dict.empty
-                        in
-                        List.filterMap
-                            (List.zip csv.headers
-                                >> Dict.fromList
-                                >> Dict.get pkName
-                                >> Maybe.andThen
-                                    (\id ->
-                                        updateWithString pkName id blank
-                                            |> primaryKey table
-                                    )
-                                >> Maybe.andThen
-                                    (\{ value } -> valueToString value)
-                            )
-                            csv.records
-                            |> List.chunksOfLeft 100
-                    )
-                |> Maybe.withDefault []
-    in
-    if List.isEmpty ids then
-        CsvProcessed csv (Ok [])
-            |> Task.succeed
-            |> Task.perform identity
-            |> AppCmd.wrap
-
-    else
-        ids
-            |> List.map (Client.chunk client table primaryKeyName)
-            |> Task.sequence
-            |> Task.map List.concat
-            |> Task.attempt (CsvProcessed csv)
-            |> AppCmd.wrap
-
-
-
--- VIEW
 
 
 view : Model -> Html Msg
@@ -821,18 +773,23 @@ viewPageHeader : Model -> Html Msg
 viewPageHeader ({ mountPath, table } as model) =
     Html.header
         []
-        [ MountPath.breadcrumbs mountPath
-            table.name
-            (case model.parent of
-                Just parent ->
-                    [ ( parent.tableName, Nothing )
-                    , ( parent.id, model.parentLabel )
-                    , ( table.name, Nothing )
-                    ]
+        [ Html.div
+            []
+            [ MountPath.breadcrumbs mountPath
+                table.name
+                (case model.parent of
+                    Just parent ->
+                        [ ( parent.tableName, Nothing )
+                        , ( parent.id, model.parentLabel )
+                        , ( table.name, Nothing )
+                        ]
 
-                Nothing ->
-                    [ ( table.name, Nothing ) ]
-            )
+                    Nothing ->
+                        [ ( table.name, Nothing ) ]
+                )
+            , Maybe.map (String.fromInt >> Html.text) model.total
+                |> Maybe.withDefault (Html.text "")
+            ]
         , Html.div
             []
             [ Html.button
@@ -1002,24 +959,20 @@ toggleSearchButton model =
 
 uploadModal : Model -> Html Msg
 uploadModal model =
-    let
-        fieldNames =
-            List.map Tuple.first model.columns
-    in
     case model.uploadState of
         UploadReady records ->
             Html.div
                 [ class "modal-background"
                 , class "upload-preview"
                 ]
-                [ uploadPreview (Debug.todo "crash") fieldNames records ]
+                [ uploadPreview model records ]
 
         UploadWithErrors records ->
             Html.div
                 [ class "modal-background"
                 , class "upload-preview"
                 ]
-                [ uploadWithErrorsPreview (Debug.todo "crash") fieldNames records
+                [ uploadWithErrorsPreview model records
                 ]
 
         BadCsvSchema csvUpload ->
@@ -1036,19 +989,21 @@ uploadModal model =
             Html.text ""
 
 
-uploadPreview : Maybe Record -> List String -> List ( Int, Record ) -> Html Msg
-uploadPreview parent fieldNames records =
+uploadPreview : Model -> List CsvRow -> Html Msg
+uploadPreview model records =
     let
+        fieldNames =
+            List.map Tuple.first model.columns
+
         ( toUpdate, toCreate ) =
-            -- TODO: persisted field no longer exists in simplified Record type
-            ( [], records )
+            List.partition .persisted records
     in
     Html.div
         [ class "modal-dialog" ]
         [ Html.h2
             []
             [ Html.text "CSV Upload" ]
-        , case parent of
+        , case model.parent of
             Just _ ->
                 Html.p
                     []
@@ -1064,8 +1019,12 @@ uploadPreview parent fieldNames records =
                 Html.text ""
         , Html.div
             [ class "csv-records-preview" ]
-            [ previewUploadTable "Records to create" fieldNames toCreate
-            , previewUploadTable "Records to update" fieldNames toUpdate
+            [ toCreate
+                |> previewUploadTable "Records to create"
+                    fieldNames
+            , toUpdate
+                |> previewUploadTable "Records to update"
+                    fieldNames
             ]
         , Markdown.toHtml [ class "disclaimer" ] <|
             "Please review the following changes: "
@@ -1093,7 +1052,7 @@ uploadPreview parent fieldNames records =
         ]
 
 
-previewUploadCopy : String -> List ( Int, Record ) -> Maybe String
+previewUploadCopy : String -> List CsvRow -> Maybe String
 previewUploadCopy action records =
     if List.isEmpty records then
         Nothing
@@ -1117,7 +1076,7 @@ previewUploadCopy action records =
             )
 
 
-previewUploadTable : String -> List String -> List ( Int, Record ) -> Html Msg
+previewUploadTable : String -> List String -> List CsvRow -> Html Msg
 previewUploadTable action fieldNames records =
     if List.isEmpty records then
         Html.text ""
@@ -1190,19 +1149,19 @@ badSchemaPreview { extraColumns, missingColumns, headers, records } =
         ]
 
 
-uploadWithErrorsPreview :
-    Maybe Record
-    -> List String
-    -> List ( Int, Record )
-    -> Html Msg
-uploadWithErrorsPreview parent fieldNames records =
+uploadWithErrorsPreview : Model -> List CsvRow -> Html Msg
+uploadWithErrorsPreview model records =
+    let
+        fieldNames =
+            List.map Tuple.first model.columns
+    in
     Html.div
         [ class "modal-dialog" ]
         [ Html.h2
             []
             [ Html.text "Validation failed" ]
         , Html.p []
-            [ case parent of
+            [ case model.parent of
                 Just _ ->
                     Html.text <|
                         "There where some errors validating the records. "
@@ -1221,8 +1180,7 @@ uploadWithErrorsPreview parent fieldNames records =
             ]
         , Html.div
             [ class "csv-records-preview" ]
-            [ previewTable fieldNames
-                (List.filter (\( _, rec ) -> hasErrors rec) records)
+            [ previewTable fieldNames (List.filter hasErrors records)
             ]
         , Html.div
             [ class "actions" ]
@@ -1235,7 +1193,7 @@ uploadWithErrorsPreview parent fieldNames records =
         ]
 
 
-previewTable : List String -> List ( Int, Record ) -> Html Msg
+previewTable : List String -> List CsvRow -> Html Msg
 previewTable fieldNames records =
     Html.table
         []
@@ -1248,7 +1206,7 @@ previewTable fieldNames records =
         , Html.tbody
             []
             (List.map
-                (\( idx, record ) ->
+                (\{ rowNum, record } ->
                     Html.tr
                         [ if hasErrors record then
                             class "with-errors"
@@ -1256,7 +1214,7 @@ previewTable fieldNames records =
                           else
                             class ""
                         ]
-                        (Html.td [] [ Html.text (String.fromInt idx) ]
+                        (Html.td [] [ Html.text (String.fromInt rowNum) ]
                             :: List.map (previewListCell record) fieldNames
                         )
                 )
@@ -1265,15 +1223,12 @@ previewTable fieldNames records =
         ]
 
 
-previewListCell : Record -> String -> Html Msg
+previewListCell : Dict String String -> String -> Html Msg
 previewListCell record fieldName =
     Html.td
         []
         (Dict.get fieldName record
-            |> Maybe.map
-                (\value ->
-                    [ Html.span [] [ fieldValueToHtml value ] ]
-                )
+            |> Maybe.map (\value -> [ Html.span [] [ Html.text value ] ])
             |> Maybe.withDefault [ Html.text "" ]
         )
 
@@ -1465,22 +1420,3 @@ valueToString val =
 
         _ ->
             Nothing
-
-
-fieldValueToHtml : Value -> Html Msg
-fieldValueToHtml value =
-    -- Stub: just display the value as text
-    Html.text (valueToString value |> Maybe.withDefault "")
-
-
-updateWithString : String -> String -> Record -> Record
-updateWithString fieldName stringValue record =
-    -- Stub: just insert as string value
-    Dict.insert fieldName (String stringValue) record
-
-
-primaryKey : Table -> Record -> Maybe { value : Value }
-primaryKey table record =
-    Schema.tablePrimaryKeyName table
-        |> Maybe.andThen (\pkName -> Dict.get pkName record)
-        |> Maybe.map (\value -> { value = value })
