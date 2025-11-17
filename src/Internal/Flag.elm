@@ -1,5 +1,6 @@
 module Internal.Flag exposing
     ( headersList
+    , int
     , linksList
     , string
     , stringDict
@@ -15,6 +16,11 @@ import Json.Decode as Decode exposing (Decoder)
 string : String -> (String -> c -> Decoder c) -> Decoder c -> Decoder c
 string =
     custom Decode.string
+
+
+int : String -> (Int -> c -> Decoder c) -> Decoder c -> Decoder c
+int =
+    custom Decode.int
 
 
 stringDict :

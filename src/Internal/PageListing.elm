@@ -19,9 +19,6 @@ import File.Select as Select
 import Html exposing (Html)
 import Html.Attributes as Attrs
 import Html.Events as Events
-    exposing
-        ( onClick
-        )
 import Http
 import Inflect
 import Internal.Cmd as AppCmd exposing (AppCmd)
@@ -131,6 +128,7 @@ type alias Model =
     , search : Search
     , searchOpen : Bool
     , uploadState : UploadState
+    , recordsPerPage : Int
     }
 
 
@@ -139,11 +137,12 @@ init :
     , mountPath : MountPath
     , table : Table
     , parent : Maybe { tableName : String, id : String }
+    , recordsPerPage : Int
     }
     -> Url.Url
     -> Nav.Key
     -> ( Model, AppCmd Msg )
-init { client, mountPath, table, parent } url key =
+init { client, mountPath, table, parent, recordsPerPage } url key =
     let
         order =
             Maybe.map parseQuery url.query
@@ -171,6 +170,7 @@ init { client, mountPath, table, parent } url key =
             , search = Search.init table (url.query |> Maybe.withDefault "")
             , searchOpen = False
             , uploadState = Idle
+            , recordsPerPage = recordsPerPage
             }
     in
     ( model
@@ -235,7 +235,7 @@ update msg model =
                 , pages =
                     case model.pages of
                         Blank :: pages ->
-                            if recordCount < perPage then
+                            if recordCount < model.recordsPerPage then
                                 Blank :: Page records :: pages
 
                             else
@@ -244,7 +244,7 @@ update msg model =
                         pages ->
                             let
                                 loadedRecords =
-                                    (List.length pages * perPage) + recordCount
+                                    (List.length pages * model.recordsPerPage) + recordCount
                             in
                             if loadedRecords >= count.total then
                                 Blank :: Page records :: pages
@@ -627,7 +627,7 @@ listingPath { limit, selectAll, nest } model =
 
         limitQuery =
             if limit then
-                [ PG.limit perPage, PG.offset (perPage * model.page) ]
+                [ PG.limit model.recordsPerPage, PG.offset (model.recordsPerPage * model.page) ]
 
             else
                 []
@@ -716,12 +716,12 @@ view model =
                     [ Attrs.class "downloads" ]
                     [ Html.button
                         [ Attrs.class "button-clear"
-                        , onClick (DownloadRequested JSON)
+                        , Events.onClick (DownloadRequested JSON)
                         ]
                         [ Html.text "Download JSON" ]
                     , Html.button
                         [ Attrs.class "button-clear"
-                        , onClick (DownloadRequested CSV)
+                        , Events.onClick (DownloadRequested CSV)
                         ]
                         [ Html.text "Download CSV" ]
                     ]
@@ -733,7 +733,7 @@ view model =
                       else
                         toggleSearchButton model
                     , Html.button
-                        [ onClick ApplyFilters
+                        [ Events.onClick ApplyFilters
                         , Attrs.disabled (Search.isBlank model.search)
                         ]
                         [ Html.text "Apply Filters" ]
@@ -772,7 +772,7 @@ viewPageHeader ({ mountPath, table } as model) =
                 [ Attrs.id "upload-csv-button"
                 , Attrs.class "button"
                 , Attrs.class ("button-upload-csv-" ++ table.name)
-                , onClick CsvUploadRequested
+                , Events.onClick CsvUploadRequested
                 ]
                 [ Html.text "Upload CSV" ]
             , Html.a
@@ -809,7 +809,7 @@ viewRecordsTable model =
                             case page of
                                 Page records ->
                                     Html.tbody
-                                        [ Attrs.id (pageId pageNum) ]
+                                        [ Attrs.id ("page-" ++ String.fromInt pageNum) ]
                                         (List.map
                                             (\record ->
                                                 Html.tr
@@ -835,7 +835,7 @@ viewHeaderCell { order } ( name, _ ) =
             Html.span
                 [ Attrs.class "sort"
                 , Attrs.attribute "aria-sort" "other"
-                , onClick <| Sort <| Asc name
+                , Events.onClick <| Sort <| Asc name
                 ]
                 [ Html.text <| String.humanize name
                 , Html.i [ Attrs.class "icono-play" ] []
@@ -849,7 +849,7 @@ viewHeaderCell { order } ( name, _ ) =
                     Html.span
                         [ Attrs.class "sort"
                         , Attrs.attribute "aria-sort" "ascending"
-                        , onClick <| Sort <| Desc name
+                        , Events.onClick <| Sort <| Desc name
                         ]
                         [ Html.text <| String.humanize name
                         , Html.i [ Attrs.class "asc icono-play" ] []
@@ -863,7 +863,7 @@ viewHeaderCell { order } ( name, _ ) =
                     Html.span
                         [ Attrs.class "sort"
                         , Attrs.attribute "aria-sort" "descending"
-                        , onClick <| Sort <| Asc name
+                        , Events.onClick <| Sort <| Asc name
                         ]
                         [ Html.text <| String.humanize name
                         , Html.i [ Attrs.class "desc icono-play" ] []
@@ -921,7 +921,7 @@ toggleSearchButton model =
         [ Attrs.class "toggle-button"
         , Attrs.class "button-clear"
         , Attrs.classList [ ( "open", isSearchVisible model ) ]
-        , onClick ToggleSearchOpen
+        , Events.onClick ToggleSearchOpen
         ]
         [ Html.i [ Attrs.class "icono-play" ] []
         , if isSearchVisible model then
@@ -989,12 +989,12 @@ uploadPreview model file records =
             [ Html.button
                 [ Attrs.class "button"
                 , Attrs.class "button-clear"
-                , onClick CsvUploadCanceled
+                , Events.onClick CsvUploadCanceled
                 ]
                 [ Html.text "Cancel" ]
             , Html.button
                 [ Attrs.class "button button"
-                , onClick (CsvUploadAccepted file)
+                , Events.onClick (CsvUploadAccepted file)
                 ]
                 [ Html.text "Save" ]
             ]
@@ -1089,7 +1089,7 @@ badSchemaPreview { extraColumns, missingColumns, headers, records } =
         actions =
             [ Html.button
                 [ Attrs.class "button button"
-                , onClick CsvUploadCanceled
+                , Events.onClick CsvUploadCanceled
                 ]
                 [ Html.text "Ok" ]
             ]
@@ -1118,7 +1118,7 @@ uploadWithErrorsPreview model records =
         actions =
             [ Html.button
                 [ Attrs.class "button button"
-                , onClick CsvUploadCanceled
+                , Events.onClick CsvUploadCanceled
                 ]
                 [ Html.text "Ok" ]
             ]
@@ -1149,12 +1149,12 @@ uploadWithoutPreview file =
             [ Html.button
                 [ Attrs.class "button"
                 , Attrs.class "button-clear"
-                , onClick CsvUploadCanceled
+                , Events.onClick CsvUploadCanceled
                 ]
                 [ Html.text "Cancel" ]
             , Html.button
                 [ Attrs.class "button button"
-                , onClick (CsvUploadAccepted file)
+                , Events.onClick (CsvUploadAccepted file)
                 ]
                 [ Html.text "Upload" ]
             ]
@@ -1200,16 +1200,6 @@ previewListCell record fieldName =
             |> Maybe.map (\value -> [ Html.span [] [ Html.text value ] ])
             |> Maybe.withDefault [ Html.text "" ]
         )
-
-
-pageId : Int -> String
-pageId pageNum =
-    "page-" ++ String.fromInt pageNum
-
-
-perPage : Int
-perPage =
-    50
 
 
 subscriptions : Model -> Sub Msg

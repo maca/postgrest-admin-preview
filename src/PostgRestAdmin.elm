@@ -7,6 +7,7 @@ module PostgRestAdmin exposing
     , tables, tableAliases
     , routes
     , configDecoder
+    , recordsPerPage
     )
 
 {-|
@@ -828,6 +829,7 @@ initListing params url parent tableName =
                     , mountPath = params.config.mountPath
                     , table = table
                     , parent = parent
+                    , recordsPerPage = params.config.recordsPerPage
                     }
             in
             PageListing.init listingParams url params.key
@@ -978,6 +980,7 @@ type alias Config flags model msg =
     , tableAliases : Dict String String
     , flagsDecoder : Decode.Decoder flags
     , clientHeaders : List Http.Header
+    , recordsPerPage : Int
     }
 
 
@@ -1021,6 +1024,8 @@ configDecoder =
             (\links conf -> Decode.succeed { conf | menuLinks = links })
         >> Flag.headersList "clientHeaders"
             (\headers conf -> Decode.succeed { conf | clientHeaders = headers })
+        >> Flag.int "recordsPerPage"
+            (\count conf -> Decode.succeed { conf | recordsPerPage = count })
 
 
 default : Config f m msg
@@ -1052,6 +1057,7 @@ default =
     , tableAliases = Dict.empty
     , flagsDecoder = Decode.fail "No flags decoder provided"
     , clientHeaders = []
+    , recordsPerPage = 50
     }
 
 
@@ -1366,6 +1372,22 @@ Program flags take precedence.
 menuLinks : List ( String, String ) -> Attribute flags model msg
 menuLinks links =
     attrDecoder (\conf -> { conf | menuLinks = links })
+
+
+{-| Set the number of records to display per page in listing views.
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        PostgRestAdmin.application
+            [ PostgRestAdmin.recordsPerPage 100
+            ]
+
+Alternatively this can be specified using flags. Program flags take precedence.
+
+-}
+recordsPerPage : Int -> Attribute flags model msg
+recordsPerPage count =
+    attrDecoder (\conf -> { conf | recordsPerPage = count })
 
 
 {-| Set default HTTP headers to be included in all Client requests. This is
