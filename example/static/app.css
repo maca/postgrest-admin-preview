@@ -7,13 +7,17 @@
 .main-area {
     grid-area: main-area;
     height: 100%;
+    overflow: hidden;
+    min-width: 0;
 }
 
 .main-container {
     display: grid;
-    grid-template-columns: max(10%, 200px) auto;
+    grid-template-columns: max(10%, 200px) 1fr;
     grid-template-rows: auto;
     grid-template-areas: "menu main-area";
+    height: 100vh;
+    overflow: hidden;
 }
 /* Layout       */
 /* ------------ */
@@ -24,32 +28,17 @@
 .side-menu {
     grid-area: menu;
     background: gray;
-    min-height: 100vh;
-    padding: 4rem 0;
+    height: 100vh;
+    position: sticky;
+    top: 0;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
 }
 
-.account-management {
-    margin: 0 2rem 10%;
-}
-
-.account-management button.button {
-    display: flex;
-    background: #444;
-    color: #ccc;
-}
-
-.account-management button.button:hover {
-    background: #222;
-    color: #eee;
-}
-
-
-.account-management button i {
-    margin-top: 10px;
-    margin-right: 2.5rem;
+.resources-menu {
+    flex: 1;
+    overflow-y: auto;
+    padding-top: 4rem;
 }
 
 .resources-menu ul {
@@ -71,6 +60,27 @@
     color: gray;
     background: #333;
     display: block;
+}
+
+.account-management {
+    margin: 2rem;
+    flex-shrink: 0;
+}
+
+.account-management button.button {
+    display: flex;
+    background: #444;
+    color: #ccc;
+}
+
+.account-management button.button:hover {
+    background: #222;
+    color: #eee;
+}
+
+.account-management button i {
+    margin-top: 10px;
+    margin-right: 2.5rem;
 }
 /* Menu         */
 /* ------------ */
@@ -124,9 +134,15 @@
     padding-bottom: 4rem;
 }
 
+.resources-listing .resources-listing-results {
+    overflow-x: auto;
+}
+
 .resources-listing table {
     position: relative;
-    table-layout: fixed;
+    table-layout: auto;
+    width: max-content;
+    min-width: 100%;
 }
 
 .resources-listing th {
