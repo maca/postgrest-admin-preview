@@ -476,6 +476,7 @@ update msg model =
             ( { model
                 | client = Client.logout model.client
                 , authFormStatus = Failure err
+                , notification = NoNotification
               }
             , Cmd.map (always NoOp)
                 (model.config.onAuthFailed (urlToPath model.currentUrl))

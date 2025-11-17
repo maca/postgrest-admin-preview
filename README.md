@@ -60,7 +60,7 @@ resources**.
 ### **Basic**
 
 The most basic way use is just to define your main function as a
-[PostgRestAdmin.Program](PostgRestAdmin#Program), the admin interface is built
+[PostgRestAdmin.Program](https://package.elm-lang.org/packages/maca/postgrest-admin-preview/14.0.3/PostgRestAdmin#Program), the admin interface is built
 from PostgREST Open API description.
 
 
@@ -91,11 +91,11 @@ Then flags can be passed on `Elm.init`
 Configuration params are passed to the PostgRestAdmin program as attributes
 in the example below.
 
-- [host](PostgRestAdmin#host) sets the PostgREST instance host
-- [loginUrl](PostgRestAdmin#loginUrl) specifies the URL to POST credentials,
+- [host](https://package.elm-lang.org/packages/maca/postgrest-admin-preview/14.0.3/PostgRestAdmin#host) sets the PostgREST instance host
+- [loginUrl](https://package.elm-lang.org/packages/maca/postgrest-admin-preview/14.0.3/PostgRestAdmin#loginUrl) specifies the URL to POST credentials,
   which can be a PostgREST function or an external service if CORS is
   configured correctly
-- [onLogin](PostgRestAdmin#onLogin) is a callback triggered with a JWT string
+- [onLogin](https://package.elm-lang.org/packages/maca/postgrest-admin-preview/14.0.3/PostgRestAdmin#onLogin) is a callback triggered with a JWT string
   on successful login
 
 
@@ -145,4 +145,4 @@ You can override some listing, the detail for a resource, a form or add
 additional behaviour by *mounting your own application* in as many routes as you
 want.
 
-See [PostgRestAdmin.routes](PostgRestAdmin#routes).
+See [PostgRestAdmin.routes](https://package.elm-lang.org/packages/maca/postgrest-admin-preview/14.0.3/PostgRestAdmin#routes).

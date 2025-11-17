@@ -8,11 +8,6 @@ module Internal.Filter.Operand exposing
     , enum
     , float
     , int
-    , isDate
-    , isFloat
-    , isInt
-    , isText
-    , isTime
     , rawValue
     , text
     , time

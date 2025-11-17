@@ -3,14 +3,13 @@ module FilterTest exposing (suite)
 import Dict
 import Expect
 import Internal.Filter as Filter exposing (..)
-import Internal.Schema as Table
+import Internal.Schema
     exposing
         ( ColumnType(..)
         , Constraint(..)
         , Table
         , Value(..)
         )
-import Json.Decode
 import Test exposing (..)
 
 

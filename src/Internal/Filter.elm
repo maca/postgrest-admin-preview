@@ -3,7 +3,6 @@ module Internal.Filter exposing
     , between
     , columnName
     , contains
-    , date
     , date2
     , endsWith
     , equals
@@ -14,7 +13,6 @@ module Internal.Filter exposing
     , greaterThan
     , inDate
     , init
-    , int
     , int2
     , isFalse
     , isInTheFuture
@@ -23,8 +21,6 @@ module Internal.Filter exposing
     , isTrue
     , lesserOrEqual
     , lesserThan
-    , noneOf
-    , oneOf
     , operation
     , parse
     , startsWith

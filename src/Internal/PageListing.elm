@@ -1,11 +1,7 @@
 module Internal.PageListing exposing
     ( Model
     , Msg
-    , ascendingBy
-    , descendingBy
-    , hideSearch
     , init
-    , onLogin
     , subscriptions
     , update
     , view
@@ -21,15 +17,7 @@ import File exposing (File)
 import File.Download as Download
 import File.Select as Select
 import Html exposing (Html)
-import Html.Attributes
-    exposing
-        ( attribute
-        , class
-        , classList
-        , disabled
-        , href
-        , id
-        )
+import Html.Attributes as Attrs
 import Html.Events as Events
     exposing
         ( onClick
@@ -44,10 +32,10 @@ import Internal.Schema as Schema
         , Constraint(..)
         , Record
         , Table
-        , Value(..)
+        , Value
         )
 import Internal.Search as Search exposing (Search)
-import Json.Decode as Decode exposing (Decoder)
+import Json.Decode as Decode
 import Json.Encode as Encode
 import List.Extra as List
 import List.Split as List
@@ -106,8 +94,7 @@ type Format
 
 
 type Msg
-    = LoggedIn Client
-    | Fetched (Result Error ( List Record, Count ))
+    = Fetched (Result Error ( List Record, Count ))
     | ParentLabelFetched (Result Client.Error String)
     | ApplyFilters
     | Sort SortOrder
@@ -213,29 +200,9 @@ init { client, mountPath, table, parent } url key =
     )
 
 
-onLogin : Client -> Msg
-onLogin =
-    LoggedIn
-
-
 isSearchVisible : Model -> Bool
 isSearchVisible { searchOpen, search } =
     searchOpen || Search.isBlank search
-
-
-hideSearch : Model -> Model
-hideSearch listing =
-    { listing | searchOpen = False }
-
-
-ascendingBy : String -> Model -> Model
-ascendingBy column listing =
-    { listing | order = Asc column }
-
-
-descendingBy : String -> Model -> Model
-descendingBy column listing =
-    { listing | order = Desc column }
 
 
 fetch : Model -> AppCmd Msg
@@ -258,10 +225,6 @@ fetch model =
 update : Msg -> Model -> ( Model, AppCmd Msg )
 update msg model =
     case msg of
-        LoggedIn client ->
-            fetchListing
-                { model | client = client }
-
         Fetched (Ok ( records, count )) ->
             let
                 recordCount =
@@ -435,15 +398,16 @@ update msg model =
             )
 
         CsvUploadSelected file ->
-            -- let
-            --     _ =
-            --         Debug.log "filesize" (File.size file)
-            -- in
-            -- ( model, AppCmd.none )
-            ( model
-            , Task.perform (CsvUploadLoaded file) (File.toString file)
-                |> AppCmd.wrap
-            )
+            if File.size file < 500000 then
+                ( model
+                , Task.perform (CsvUploadLoaded file) (File.toString file)
+                    |> AppCmd.wrap
+                )
+
+            else
+                ( { model | uploadState = UploadWithoutPreview file }
+                , AppCmd.none
+                )
 
         CsvUploadLoaded file string ->
             case Csv.parse string of
@@ -584,9 +548,8 @@ update msg model =
                         |> Decode.map
                             (\resp ->
                                 Encode.encode 0 resp
-                                    |> Debug.log "body"
                             )
-                        |> Decode.andThen (\_ -> Decode.succeed ())
+                        |> Decode.map (\_ -> ())
                 }
                 |> Task.attempt CsvUploadPosted
                 |> AppCmd.wrap
@@ -713,34 +676,51 @@ listingPath { limit, selectAll, nest } model =
 view : Model -> Html Msg
 view model =
     Html.section
-        [ class "resources-listing" ]
+        [ Attrs.class "resources-listing" ]
         [ viewPageHeader model
         , Html.div
-            [ id model.table.name
-            , class "resources-listing-results"
+            [ Attrs.id model.table.name
+            , Attrs.class "resources-listing-results"
             , case model.pages of
                 Blank :: _ ->
-                    class ""
+                    Attrs.class ""
 
                 _ ->
                     Events.on "scroll" (Decode.succeed Scrolled)
             ]
-            [ uploadModal model
+            [ case model.uploadState of
+                UploadWithPreview file records ->
+                    uploadPreview model file records
+
+                UploadWithErrors records ->
+                    uploadWithErrorsPreview model records
+
+                UploadWithoutPreview file ->
+                    uploadWithoutPreview file
+
+                BadCsvSchema csvUpload ->
+                    badSchemaPreview csvUpload
+
+                Idle ->
+                    Html.text ""
+
+                Fetching ->
+                    Html.text ""
             , viewRecordsTable model
             ]
         , Html.aside
-            [ class "listing-controls" ]
+            [ Attrs.class "listing-controls" ]
             [ Html.div
-                [ class "controls" ]
+                [ Attrs.class "controls" ]
                 [ Html.div
-                    [ class "downloads" ]
+                    [ Attrs.class "downloads" ]
                     [ Html.button
-                        [ class "button-clear"
+                        [ Attrs.class "button-clear"
                         , onClick (DownloadRequested JSON)
                         ]
                         [ Html.text "Download JSON" ]
                     , Html.button
-                        [ class "button-clear"
+                        [ Attrs.class "button-clear"
                         , onClick (DownloadRequested CSV)
                         ]
                         [ Html.text "Download CSV" ]
@@ -754,7 +734,7 @@ view model =
                         toggleSearchButton model
                     , Html.button
                         [ onClick ApplyFilters
-                        , disabled (Search.isBlank model.search)
+                        , Attrs.disabled (Search.isBlank model.search)
                         ]
                         [ Html.text "Apply Filters" ]
                     ]
@@ -789,16 +769,16 @@ viewPageHeader ({ mountPath, table } as model) =
         , Html.div
             []
             [ Html.button
-                [ id "upload-csv-button"
-                , class "button"
-                , class ("button-upload-csv-" ++ table.name)
+                [ Attrs.id "upload-csv-button"
+                , Attrs.class "button"
+                , Attrs.class ("button-upload-csv-" ++ table.name)
                 , onClick CsvUploadRequested
                 ]
                 [ Html.text "Upload CSV" ]
             , Html.a
-                [ class "button"
-                , class ("button-new-" ++ table.name)
-                , href
+                [ Attrs.class "button"
+                , Attrs.class ("button-new-" ++ table.name)
+                , Attrs.href
                     (MountPath.path mountPath <|
                         Url.absolute
                             (List.filterMap identity
@@ -829,11 +809,11 @@ viewRecordsTable model =
                             case page of
                                 Page records ->
                                     Html.tbody
-                                        [ id (pageId pageNum) ]
+                                        [ Attrs.id (pageId pageNum) ]
                                         (List.map
                                             (\record ->
                                                 Html.tr
-                                                    [ class "listing-row" ]
+                                                    [ Attrs.class "listing-row" ]
                                                     (viewRowCells model record
                                                         ++ [ viewActions model record ]
                                                     )
@@ -853,12 +833,12 @@ viewHeaderCell { order } ( name, _ ) =
     let
         defaultHeader =
             Html.span
-                [ class "sort"
-                , attribute "aria-sort" "other"
+                [ Attrs.class "sort"
+                , Attrs.attribute "aria-sort" "other"
                 , onClick <| Sort <| Asc name
                 ]
                 [ Html.text <| String.humanize name
-                , Html.i [ class "icono-play" ] []
+                , Html.i [ Attrs.class "icono-play" ] []
                 ]
     in
     Html.th
@@ -867,12 +847,12 @@ viewHeaderCell { order } ( name, _ ) =
             Asc col ->
                 if col == name then
                     Html.span
-                        [ class "sort"
-                        , attribute "aria-sort" "ascending"
+                        [ Attrs.class "sort"
+                        , Attrs.attribute "aria-sort" "ascending"
                         , onClick <| Sort <| Desc name
                         ]
                         [ Html.text <| String.humanize name
-                        , Html.i [ class "asc icono-play" ] []
+                        , Html.i [ Attrs.class "asc icono-play" ] []
                         ]
 
                 else
@@ -881,12 +861,12 @@ viewHeaderCell { order } ( name, _ ) =
             Desc col ->
                 if col == name then
                     Html.span
-                        [ class "sort"
-                        , attribute "aria-sort" "descending"
+                        [ Attrs.class "sort"
+                        , Attrs.attribute "aria-sort" "descending"
                         , onClick <| Sort <| Asc name
                         ]
                         [ Html.text <| String.humanize name
-                        , Html.i [ class "desc icono-play" ] []
+                        , Html.i [ Attrs.class "desc icono-play" ] []
                         ]
 
                 else
@@ -923,8 +903,8 @@ viewActions model record =
             |> Maybe.map
                 (\id ->
                     Html.a
-                        [ class "button button-clear button-small"
-                        , href
+                        [ Attrs.class "button button-clear button-small"
+                        , Attrs.href
                             (MountPath.path model.mountPath
                                 (Url.absolute [ model.table.name, id ] [])
                             )
@@ -938,12 +918,12 @@ viewActions model record =
 toggleSearchButton : Model -> Html Msg
 toggleSearchButton model =
     Html.button
-        [ class "toggle-button"
-        , class "button-clear"
-        , classList [ ( "open", isSearchVisible model ) ]
+        [ Attrs.class "toggle-button"
+        , Attrs.class "button-clear"
+        , Attrs.classList [ ( "open", isSearchVisible model ) ]
         , onClick ToggleSearchOpen
         ]
-        [ Html.i [ class "icono-play" ] []
+        [ Html.i [ Attrs.class "icono-play" ] []
         , if isSearchVisible model then
             Html.text "Hide"
 
@@ -953,44 +933,20 @@ toggleSearchButton model =
         ]
 
 
-uploadModal : Model -> Html Msg
-uploadModal model =
-    case model.uploadState of
-        UploadWithPreview file records ->
-            Html.div
-                [ class "modal-background"
-                , class "upload-preview"
+modalDialog : String -> List (Html Msg) -> List (Html Msg) -> Html Msg
+modalDialog title content actions =
+    Html.div
+        [ Attrs.class "modal-background"
+        , Attrs.class "upload-preview"
+        ]
+        [ Html.div
+            [ Attrs.class "modal-dialog" ]
+            (List.concat
+                [ Html.h2 [] [ Html.text title ] :: content
+                , [ Html.div [ Attrs.class "actions" ] actions ]
                 ]
-                [ uploadPreview model file records ]
-
-        UploadWithErrors records ->
-            Html.div
-                [ class "modal-background"
-                , class "upload-preview"
-                ]
-                [ uploadWithErrorsPreview model records
-                ]
-
-        UploadWithoutPreview _ ->
-            Html.div
-                [ class "modal-background"
-                , class "upload-preview"
-                ]
-                [ Html.text "the file is to big to be displayed"
-                ]
-
-        BadCsvSchema csvUpload ->
-            Html.div
-                [ class "modal-background"
-                , class "upload-preview"
-                ]
-                [ badSchemaPreview csvUpload ]
-
-        Idle ->
-            Html.text ""
-
-        Fetching ->
-            Html.text ""
+            )
+        ]
 
 
 uploadPreview : Model -> File -> List CsvRow -> Html Msg
@@ -1001,59 +957,49 @@ uploadPreview model file records =
 
         ( toUpdate, toCreate ) =
             List.partition .persisted records
-    in
-    Html.div
-        [ class "modal-dialog" ]
-        [ Html.h2
-            []
-            [ Html.text "CSV Upload" ]
-        , case model.parent of
-            Just _ ->
-                Html.p
-                    []
-                    [ Html.text "Upload records for "
 
-                    -- , text <| String.humanize (.name (Record.getTable record))
-                    -- , Record.id record
-                    --     |> Maybe.map (\id -> text (" with id of " ++ id ++ "."))
-                    --     |> Maybe.withDefault (text "")
-                    ]
+        content =
+            [ case model.parent of
+                Just _ ->
+                    Html.p
+                        []
+                        [ Html.text "Upload records for " ]
 
-            Nothing ->
-                Html.text ""
-        , Html.div
-            [ class "csv-records-preview" ]
-            [ toCreate
-                |> previewUploadTable "Records to create"
-                    fieldNames
-            , toUpdate
-                |> previewUploadTable "Records to update"
-                    fieldNames
+                Nothing ->
+                    Html.text ""
+            , Html.div
+                [ Attrs.class "csv-records-preview" ]
+                [ toCreate
+                    |> previewUploadTable "Records to create" fieldNames
+                , toUpdate
+                    |> previewUploadTable "Records to update" fieldNames
+                ]
+            , Markdown.toHtml [ Attrs.class "disclaimer" ] <|
+                "Please review the following changes: "
+                    ++ (List.filterMap identity
+                            [ previewUploadCopy "created" toCreate
+                            , previewUploadCopy "updated" toUpdate
+                            ]
+                            |> String.toSentence
+                       )
+                    ++ ".\n This action cannot be undone."
             ]
-        , Markdown.toHtml [ class "disclaimer" ] <|
-            "Please review the following changes: "
-                ++ (List.filterMap identity
-                        [ previewUploadCopy "created" toCreate
-                        , previewUploadCopy "updated" toUpdate
-                        ]
-                        |> String.toSentence
-                   )
-                ++ ".\n This action cannot be undone."
-        , Html.div
-            [ class "actions" ]
+
+        actions =
             [ Html.button
-                [ class "button"
-                , class "button-clear"
+                [ Attrs.class "button"
+                , Attrs.class "button-clear"
                 , onClick CsvUploadCanceled
                 ]
                 [ Html.text "Cancel" ]
             , Html.button
-                [ class "button button"
+                [ Attrs.class "button button"
                 , onClick (CsvUploadAccepted file)
                 ]
                 [ Html.text "Save" ]
             ]
-        ]
+    in
+    modalDialog "CSV Upload" content actions
 
 
 previewUploadCopy : String -> List CsvRow -> Maybe String
@@ -1106,51 +1052,49 @@ badSchemaPreview { extraColumns, missingColumns, headers, records } =
     let
         displayColumns =
             List.map (String.surround "**") >> String.toSentence
-    in
-    Html.div
-        [ class "modal-dialog" ]
-        [ Html.h2 [] [ Html.text "Wrong columns" ]
-        , Html.p []
-            [ ("The CSV file "
-                ++ (List.filterMap identity
-                        [ if not (List.isEmpty missingColumns) then
-                            Just
-                                ("is missing the following columns: "
-                                    ++ displayColumns missingColumns
-                                )
 
-                          else
-                            Nothing
-                        , if not (List.isEmpty extraColumns) then
-                            Just
-                                ("should not contain the following columns: "
-                                    ++ displayColumns extraColumns
-                                )
+        content =
+            [ Html.p []
+                [ ("The CSV file "
+                    ++ (List.filterMap identity
+                            [ if not (List.isEmpty missingColumns) then
+                                Just
+                                    ("is missing the following columns: "
+                                        ++ displayColumns missingColumns
+                                    )
 
-                          else
-                            Nothing
-                        ]
-                        |> String.join ", and it"
-                   )
-                ++ "."
-              )
-                |> Markdown.toHtml []
-            , Html.p
-                []
-                [ Html.text "Please update the CSV and try again." ]
+                              else
+                                Nothing
+                            , if not (List.isEmpty extraColumns) then
+                                Just
+                                    ("should not contain the following columns: "
+                                        ++ displayColumns extraColumns
+                                    )
+
+                              else
+                                Nothing
+                            ]
+                            |> String.join ", and it"
+                       )
+                    ++ "."
+                  )
+                    |> Markdown.toHtml []
+                , Html.p [] [ Html.text "Please update the CSV and try again." ]
+                ]
+            , Html.div
+                [ Attrs.class "csv-records-preview" ]
+                [ previewTable headers records ]
             ]
-        , Html.div
-            [ class "csv-records-preview" ]
-            [ previewTable headers records ]
-        , Html.div
-            [ class "actions" ]
+
+        actions =
             [ Html.button
-                [ class "button button"
+                [ Attrs.class "button button"
                 , onClick CsvUploadCanceled
                 ]
                 [ Html.text "Ok" ]
             ]
-        ]
+    in
+    modalDialog "Wrong columns" content actions
 
 
 uploadWithErrorsPreview : Model -> List CsvRow -> Html Msg
@@ -1158,43 +1102,64 @@ uploadWithErrorsPreview model records =
     let
         fieldNames =
             List.map Tuple.first model.columns
-    in
-    Html.div
-        [ class "modal-dialog" ]
-        [ Html.h2
-            []
-            [ Html.text "Validation failed" ]
-        , Html.p []
-            [ case model.parent of
-                Just _ ->
-                    Html.text <|
-                        "There where some errors validating the records. "
 
-                -- ++ String.humanize (.name (Record.getTable record))
-                -- ++ (Record.id record
-                --         |> Maybe.map
-                --             (\id -> " with id of " ++ id ++ ". ")
-                --         |> Maybe.withDefault ""
-                --    )
-                Nothing ->
-                    Html.text "There where some errors validating the records. "
-            , Html.br [] []
-            , Html.text "Please update the CSV and try again."
-            , Html.br [] []
+        content =
+            [ Html.p []
+                [ Html.text "There where some errors validating the records. "
+                , Html.br [] []
+                , Html.text "Please update the CSV and try again."
+                , Html.br [] []
+                ]
+            , Html.div
+                [ Attrs.class "csv-records-preview" ]
+                [ previewTable fieldNames (List.filter hasErrors records) ]
             ]
-        , Html.div
-            [ class "csv-records-preview" ]
-            [ previewTable fieldNames (List.filter hasErrors records)
-            ]
-        , Html.div
-            [ class "actions" ]
+
+        actions =
             [ Html.button
-                [ class "button button"
+                [ Attrs.class "button button"
                 , onClick CsvUploadCanceled
                 ]
                 [ Html.text "Ok" ]
             ]
-        ]
+    in
+    modalDialog "Validation failed" content actions
+
+
+uploadWithoutPreview : File -> Html Msg
+uploadWithoutPreview file =
+    let
+        fileSizeMB =
+            toFloat (File.size file) / 1024 / 1024
+
+        fileSizeText =
+            String.fromFloat (toFloat (round (fileSizeMB * 100)) / 100) ++ " MB"
+
+        content =
+            [ Html.p []
+                [ Html.text "The file is too large to preview ("
+                , Html.text fileSizeText
+                , Html.text ")."
+                ]
+            , Html.p []
+                [ Html.text "Would you like to upload it without preview?" ]
+            ]
+
+        actions =
+            [ Html.button
+                [ Attrs.class "button"
+                , Attrs.class "button-clear"
+                , onClick CsvUploadCanceled
+                ]
+                [ Html.text "Cancel" ]
+            , Html.button
+                [ Attrs.class "button button"
+                , onClick (CsvUploadAccepted file)
+                ]
+                [ Html.text "Upload" ]
+            ]
+    in
+    modalDialog "Large File" content actions
 
 
 previewTable : List String -> List CsvRow -> Html Msg
@@ -1213,10 +1178,10 @@ previewTable fieldNames records =
                 (\{ rowNum, record } ->
                     Html.tr
                         [ if hasErrors record then
-                            class "with-errors"
+                            Attrs.class "with-errors"
 
                           else
-                            class ""
+                            Attrs.class ""
                         ]
                         (Html.td [] [ Html.text (String.fromInt rowNum) ]
                             :: List.map (previewListCell record) fieldNames
@@ -1378,16 +1343,6 @@ isColumnVisible ( _, column ) =
 
         _ ->
             True
-
-
-
--- Dict.values table.columns
---     |> List.filterMap Client.associationJoin
---     |> (++)
---         (isColumnVisible table
---             |> Dict.keys
---             |> List.map PG.attribute
---         )
 
 
 hasErrors _ =
