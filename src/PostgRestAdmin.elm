@@ -105,8 +105,8 @@ type alias Model flags model msg =
     , notification : Notification
     , error : Maybe String
     , client : Client
-    , onLogin : Maybe String -> Cmd (Msg flags model msg)
-    , attemptedPath : String
+    , onLogin : String -> Cmd (Msg flags model msg)
+    , currentUrl : Url
     , mountedApp : MountedApp flags model msg
     , mountedAppFlags : Result Decode.Error flags
     , config : Config flags model msg
@@ -141,6 +141,7 @@ type Msg flags model msg
     | UrlChanged Url
     | LoggedIn { path : String, accessToken : String }
     | LoggedOut
+    | AuthRequired Error
     | NoOp
 
 
@@ -209,11 +210,8 @@ initModel flags url key configRec =
     , notification = NoNotification
     , error = Nothing
     , client = Client.init configRec.host configRec.authScheme configRec.clientHeaders
-    , onLogin =
-        Maybe.withDefault ""
-            >> configRec.onLogin
-            >> Cmd.map (always NoOp)
-    , attemptedPath = urlToPath url
+    , onLogin = configRec.onLogin >> Cmd.map (always NoOp)
+    , currentUrl = url
     , mountedApp = NoMountedApp
     , mountedAppFlags = Decode.decodeValue configRec.flagsDecoder flags
     , config = configRec
@@ -331,8 +329,8 @@ update msg model =
                 , route = RouteApplication
               }
             , Cmd.batch
-                [ mapAppCmd PageApplicationChanged initCmd
-                , mapAppCmd PageApplicationChanged cmd
+                [ mapCmd PageApplicationChanged initCmd
+                , mapCmd PageApplicationChanged cmd
                 ]
             )
 
@@ -354,9 +352,19 @@ update msg model =
                 updatedClient =
                     { client | authScheme = Client.Jwt (PG.jwt tokenStr) }
             in
-            ( { model | client = updatedClient }
+            ( { model
+                | client = updatedClient
+                , authFormField = authFormField
+              }
             , Cmd.batch
-                [ loginCmd model updatedClient
+                [ model.onLogin tokenStr
+                , case model.mountedApp of
+                    MountedApp params _ ->
+                        Task.succeed (params.onLogin updatedClient)
+                            |> Task.perform PageApplicationChanged
+
+                    _ ->
+                        Cmd.none
                 , Client.fetchSchema model.config updatedClient
                     |> Task.attempt SchemaFetched
                 ]
@@ -368,27 +376,20 @@ update msg model =
             )
 
         SchemaFetched (Ok schema) ->
-            case model.route of
-                RouteLoadingSchema url ->
-                    let
-                        updatedClient =
-                            { client | schema = schema }
+            let
+                updatedClient =
+                    { client | schema = schema }
 
-                        ( route, cmd ) =
-                            routeCons url
-                                { client = updatedClient
-                                , key = model.key
-                                , config = model.config
-                                }
-                    in
-                    ( { model | client = updatedClient, route = route }
-                    , cmd
-                    )
-
-                _ ->
-                    ( { model | client = { client | schema = schema } }
-                    , Cmd.none
-                    )
+                ( route, cmd ) =
+                    routeCons model.currentUrl
+                        { client = updatedClient
+                        , key = model.key
+                        , config = model.config
+                        }
+            in
+            ( { model | client = updatedClient, route = route }
+            , cmd
+            )
 
         SchemaFetched (Err err) ->
             ( { model
@@ -407,7 +408,7 @@ update msg model =
                                 |> Tuple.mapFirst RouteListing
                     in
                     ( { model | route = route }
-                    , mapAppCmd PageListingChanged appCmd
+                    , mapCmd PageListingChanged appCmd
                     )
 
                 _ ->
@@ -421,7 +422,7 @@ update msg model =
                             PageDetail.update childMsg prevDetail
                     in
                     ( { model | route = RouteDetail detail }
-                    , mapAppCmd PageDetailChanged cmd
+                    , mapCmd PageDetailChanged cmd
                     )
 
                 _ ->
@@ -435,7 +436,7 @@ update msg model =
                             PageForm.update childMsg prevForm
                     in
                     ( { model | route = RouteForm form }
-                    , mapAppCmd PageFormChanged cmd
+                    , mapCmd PageFormChanged cmd
                     )
 
                 _ ->
@@ -447,7 +448,7 @@ update msg model =
                     updateMountedApp childMsg model.mountedApp
             in
             ( { model | mountedApp = app }
-            , mapAppCmd PageApplicationChanged cmd
+            , mapCmd PageApplicationChanged cmd
             )
 
         NotificationDismiss ->
@@ -483,7 +484,7 @@ update msg model =
                 ( route, cmd ) =
                     parseRoute url model
             in
-            ( { model | route = route, attemptedPath = urlToPath url }
+            ( { model | route = route, currentUrl = url }
             , cmd
             )
 
@@ -497,26 +498,17 @@ update msg model =
             , Cmd.map (always NoOp) (model.config.onLogout ())
             )
 
+        AuthRequired err ->
+            ( { model
+                | client = Client.logout model.client
+                , authFormStatus = Failure err
+              }
+            , Cmd.map (always NoOp)
+                (model.config.onAuthFailed (urlToPath model.currentUrl))
+            )
+
         NoOp ->
             ( model, Cmd.none )
-
-
-
---
-
-
-loginCmd : Model f m msg -> Client -> Cmd (Msg f m msg)
-loginCmd model client =
-    Cmd.batch
-        [ model.onLogin (Client.toJwtString client)
-        , case model.mountedApp of
-            MountedApp params _ ->
-                Task.succeed (params.onLogin client)
-                    |> Task.perform PageApplicationChanged
-
-            _ ->
-                Cmd.none
-        ]
 
 
 
@@ -862,7 +854,7 @@ initListing params url parent tableName =
             in
             PageListing.init listingParams url params.key
                 |> Tuple.mapFirst RouteListing
-                |> Tuple.mapSecond (mapAppCmd PageListingChanged)
+                |> Tuple.mapSecond (mapCmd PageListingChanged)
 
         Nothing ->
             ( RouteNotFound, Cmd.none )
@@ -888,7 +880,7 @@ initForm model parent tableName id =
                 , id = id
                 }
                 |> Tuple.mapFirst RouteForm
-                |> Tuple.mapSecond (mapAppCmd PageFormChanged)
+                |> Tuple.mapSecond (mapCmd PageFormChanged)
 
         Nothing ->
             ( RouteNotFound, Cmd.none )
@@ -916,7 +908,7 @@ initDetail model tableName id =
             in
             PageDetail.init detailParams model.key
                 |> Tuple.mapFirst RouteDetail
-                |> Tuple.mapSecond (mapAppCmd PageDetailChanged)
+                |> Tuple.mapSecond (mapCmd PageDetailChanged)
 
         Nothing ->
             ( RouteNotFound, Cmd.none )
@@ -935,14 +927,14 @@ resources params =
         params.config.tables
 
 
-mapAppCmd : (a -> Msg f m b) -> AppCmd a -> Cmd (Msg f m b)
-mapAppCmd tagger appCmd =
+mapCmd : (a -> Msg f m b) -> AppCmd a -> Cmd (Msg f m b)
+mapCmd tagger appCmd =
     case appCmd of
         AppCmd.ChildCmd cmd ->
             Cmd.map tagger cmd
 
         AppCmd.Batch cmds ->
-            Cmd.batch (List.map (mapAppCmd tagger) cmds)
+            Cmd.batch (List.map (mapCmd tagger) cmds)
 
         AppCmd.ClientError error ->
             Cmd.batch
@@ -950,7 +942,7 @@ mapAppCmd tagger appCmd =
                     |> Task.perform NotificationAlert
                 , case error of
                     Unauthorized ->
-                        Task.succeed LoggedOut
+                        Task.succeed (AuthRequired error)
                             |> Task.perform identity
 
                     _ ->
@@ -1040,7 +1032,9 @@ configDecoder =
         >> Flag.string "jwt"
             (\tokenStr conf -> Decode.succeed { conf | authScheme = Client.jwt tokenStr })
         >> Flag.stringListDict "formFields"
-            (\fields conf -> Decode.succeed { conf | formFields = Dict.union fields conf.formFields })
+            (\fields conf ->
+                Decode.succeed { conf | formFields = Dict.union fields conf.formFields }
+            )
         >> Flag.stringList "tables"
             (\tableNames conf -> Decode.succeed { conf | tables = tableNames })
         >> Flag.stringDict "tableAliases"
