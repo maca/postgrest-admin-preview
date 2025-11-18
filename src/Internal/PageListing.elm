@@ -125,7 +125,7 @@ type alias Model =
     , scrollPosition : Float
     , pages : List Page
     , pageHeight : Float
-    , total : Int
+    , total : Maybe Int
     , order : SortOrder
     , search : Search
     , searchOpen : Bool
@@ -164,7 +164,7 @@ init { client, mountPath, table, parent, recordsPerPage } url key =
             , parent = parent
             , parentLabel = Nothing
             , pageHeight = 0
-            , total = 0
+            , total = Nothing
             , scrollPosition = 0
             , pages = [ Unloaded 0 ]
             , order = order
@@ -228,7 +228,7 @@ update msg model =
                                     _ ->
                                         page
                             )
-                , total = count.total
+                , total = Just count.total
               }
             , if model.pageHeight == 0 then
                 Dom.getElement "page-0"
@@ -303,14 +303,14 @@ update msg model =
                     let
                         scrolledToBottom =
                             (model.scrollPosition < viewport.y)
-                                && (scene.height - viewport.y < (viewport.height * 2))
+                                && (scene.height - viewport.y < viewport.height * 2)
 
                         offset =
                             model.recordsPerPage * currentPage model viewport.y
                     in
                     if
                         (scrolledToBottom && unloadedMissing model offset)
-                            && (offset <= model.total)
+                            && (offset <= Maybe.withDefault 0 model.total)
                     then
                         ( { model
                             | scrollPosition = viewport.y
@@ -364,16 +364,6 @@ update msg model =
             )
 
         DownloadRequested format ->
-            let
-                path =
-                    listingPath
-                        { limit = False
-                        , selectAll = True
-                        , nest = False
-                        , offset = 0
-                        }
-                        model
-            in
             ( model
             , Client.bytesRequest
                 { client = model.client
@@ -386,7 +376,14 @@ update msg model =
                         JSON ->
                             Http.header "Accept" "application/json"
                     ]
-                , path = path
+                , path =
+                    listingPath
+                        { limit = False
+                        , selectAll = True
+                        , nest = False
+                        , offset = 0
+                        }
+                        model
                 , body = Http.emptyBody
                 }
                 |> Task.attempt (Downloaded format)
@@ -825,7 +822,10 @@ viewPageHeader ({ mountPath, table } as model) =
                 , Html.span
                     [ Attrs.class "total-records" ]
                     [ Html.text
-                        (String.fromInt model.total ++ " records")
+                        (model.total
+                            |> Maybe.map (\num -> String.fromInt num ++ " records")
+                            |> Maybe.withDefault ""
+                        )
                     ]
                 ]
             ]
@@ -1021,36 +1021,41 @@ toggleSearchButton model =
 
 viewPageSelect : Model -> Html Msg
 viewPageSelect model =
-    let
-        totalPagesCount =
-            ceiling (toFloat model.total / toFloat model.recordsPerPage)
-    in
-    Html.select
-        [ Attrs.class "page-select"
-        , Events.on "change"
-            (Decode.at [ "target", "value" ] Decode.string
-                |> Decode.andThen
-                    (\value ->
-                        case String.toInt value of
-                            Just pageNum ->
-                                Decode.succeed (JumpToPage pageNum)
+    case model.total of
+        Just total ->
+            let
+                totalPagesCount =
+                    ceiling (toFloat total / toFloat model.recordsPerPage)
+            in
+            Html.select
+                [ Attrs.class "page-select"
+                , Events.on "change"
+                    (Decode.at [ "target", "value" ] Decode.string
+                        |> Decode.andThen
+                            (\value ->
+                                case String.toInt value of
+                                    Just pageNum ->
+                                        Decode.succeed (JumpToPage pageNum)
 
-                            Nothing ->
-                                Decode.fail "Invalid page number"
+                                    Nothing ->
+                                        Decode.fail "Invalid page number"
+                            )
                     )
-            )
-        ]
-        (List.range 1 totalPagesCount
-            |> List.map
-                (\pageNum ->
-                    Html.option
-                        [ Attrs.value (String.fromInt pageNum)
-                        , Attrs.selected
-                            (pageNum == currentPage model model.scrollPosition)
-                        ]
-                        [ Html.text ("Page " ++ String.fromInt pageNum) ]
+                ]
+                (List.range 1 totalPagesCount
+                    |> List.map
+                        (\pageNum ->
+                            Html.option
+                                [ Attrs.value (String.fromInt pageNum)
+                                , Attrs.selected
+                                    (pageNum == currentPage model model.scrollPosition)
+                                ]
+                                [ Html.text ("Page " ++ String.fromInt pageNum) ]
+                        )
                 )
-        )
+
+        _ ->
+            Html.text ""
 
 
 modalDialog : String -> List (Html Msg) -> List (Html Msg) -> Html Msg
