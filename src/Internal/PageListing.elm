@@ -332,7 +332,7 @@ update msg model =
                     List.length model.pages
 
                 scrollTo =
-                    toFloat (pageNum - 1) * model.pageHeight
+                    toFloat ((pageNum - 1) * ceiling model.pageHeight)
             in
             ( if pageNum <= loadedCount then
                 model
@@ -609,7 +609,7 @@ unloadedPageInView model { viewport } =
             (\index page ->
                 let
                     pageTop =
-                        toFloat index * model.pageHeight
+                        toFloat (index * ceiling model.pageHeight)
 
                     isInViewPort =
                         (pageTop <= (viewport.y + viewport.height))
