@@ -124,7 +124,7 @@ type alias Model =
     , parentLabel : Maybe String
     , scrollPosition : Float
     , pages : List Page
-    , pageHeight : Float
+    , pageHeight : Int
     , total : Maybe Int
     , order : SortOrder
     , search : Search
@@ -246,7 +246,7 @@ update msg model =
             )
 
         PageHeightCalculated result ->
-            ( { model | pageHeight = result |> Result.withDefault 0 }
+            ( { model | pageHeight = Result.map ceiling result |> Result.withDefault 0 }
             , AppCmd.none
             )
 
@@ -332,7 +332,7 @@ update msg model =
                     List.length model.pages
 
                 scrollTo =
-                    toFloat ((pageNum - 1) * ceiling model.pageHeight)
+                    toFloat ((pageNum - 1) * model.pageHeight)
             in
             ( if pageNum <= loadedCount then
                 model
@@ -585,11 +585,11 @@ update msg model =
             ( model, AppCmd.none )
 
 
-currentPage : { a | pageHeight : Float, pages : List b } -> Float -> Int
+currentPage : { a | pageHeight : Int, pages : List b } -> Float -> Int
 currentPage { pageHeight, pages } scrollPosition =
     let
         pageNumber =
-            floor (scrollPosition / pageHeight) + 1
+            floor (scrollPosition / toFloat pageHeight) + 1
     in
     max 1 (min pageNumber (max 1 (List.length pages)))
 
@@ -609,11 +609,11 @@ unloadedPageInView model { viewport } =
             (\index page ->
                 let
                     pageTop =
-                        toFloat (index * ceiling model.pageHeight)
+                        toFloat (index * model.pageHeight)
 
                     isInViewPort =
                         (pageTop <= (viewport.y + viewport.height))
-                            && ((pageTop + model.pageHeight) >= viewport.y)
+                            && ((pageTop + toFloat model.pageHeight) >= viewport.y)
                 in
                 case ( page, isInViewPort ) of
                     ( Unloaded offset, True ) ->
@@ -865,7 +865,7 @@ viewRecordsTable : Model -> Html Msg
 viewRecordsTable model =
     let
         pageHeight =
-            String.fromInt (round model.pageHeight) ++ "px"
+            String.fromInt model.pageHeight ++ "px"
     in
     Html.table []
         (Html.thead []
