@@ -51,7 +51,6 @@ import Url.Builder as Url exposing (QueryParameter)
 
 type Page
     = Page (List Record)
-    | LastPage
     | Unloaded Int
 
 
@@ -92,8 +91,7 @@ type Format
 
 
 type Msg
-    = Fetched (Result Error ( List Record, Count ))
-    | FetchedOffset Int (Result Error ( List Record, Count ))
+    = Fetched Int (Result Error ( List Record, Count ))
     | ParentLabelFetched (Result Client.Error String)
     | ApplyFilters
     | Sort SortOrder
@@ -126,7 +124,6 @@ type alias Model =
     , parentLabel : Maybe String
     , scrollPosition : Float
     , pages : List Page
-    , currentVisiblePage : Int
     , pageHeight : Float
     , total : Maybe Int
     , order : SortOrder
@@ -165,11 +162,10 @@ init { client, mountPath, table, parent, recordsPerPage } url key =
             , columns = Schema.tableToSortedColumnList table |> List.filter isColumnVisible
             , parent = parent
             , parentLabel = Nothing
-            , currentVisiblePage = 1
             , pageHeight = 0
             , total = Nothing
             , scrollPosition = 0
-            , pages = []
+            , pages = [ Unloaded 0 ]
             , order = order
             , search = Search.init table (url.query |> Maybe.withDefault "")
             , searchOpen = False
@@ -179,20 +175,7 @@ init { client, mountPath, table, parent, recordsPerPage } url key =
     in
     ( model
     , AppCmd.batch
-        [ Client.fetchRecords
-            { client = client
-            , path =
-                listingPath
-                    { limit = True
-                    , selectAll = False
-                    , nest = False
-                    , offset = 0
-                    }
-                    model
-            , table = table
-            }
-            |> Task.attempt Fetched
-            |> AppCmd.wrap
+        [ fetchOffset model 0
         , parent
             |> Maybe.andThen (Schema.buildParentReference client.schema table)
             |> Maybe.map
@@ -219,41 +202,30 @@ fetchOffset model offset =
                 model
         , table = model.table
         }
-        |> Task.attempt (FetchedOffset offset)
+        |> Task.attempt (Fetched offset)
         |> AppCmd.wrap
 
 
 update : Msg -> Model -> ( Model, AppCmd Msg )
 update msg model =
     case msg of
-        Fetched (Ok ( records, count )) ->
-            let
-                _ =
-                    Debug.log "fetched by scolling" "fetched"
-
-                recordCount =
-                    List.length records
-            in
+        Fetched offset (Ok ( records, count )) ->
             ( { model
                 | pages =
-                    case model.pages of
-                        LastPage :: pages ->
-                            if recordCount < model.recordsPerPage then
-                                LastPage :: Page records :: pages
+                    model.pages
+                        |> List.map
+                            (\page ->
+                                case page of
+                                    Unloaded pageOffset ->
+                                        if pageOffset == offset then
+                                            Page records
 
-                            else
-                                Page records :: pages
+                                        else
+                                            page
 
-                        pages ->
-                            let
-                                loadedRecords =
-                                    (List.length pages * model.recordsPerPage) + recordCount
-                            in
-                            if loadedRecords >= count.total then
-                                LastPage :: Page records :: pages
-
-                            else
-                                Page records :: pages
+                                    _ ->
+                                        page
+                            )
                 , total = Just count.total
               }
             , if model.pageHeight == 0 then
@@ -266,27 +238,7 @@ update msg model =
                 AppCmd.none
             )
 
-        Fetched (Err err) ->
-            case model.order of
-                Unordered ->
-                    ( model, AppCmd.clientError err )
-
-                _ ->
-                    ( { model | order = Unordered }, reload model.table )
-
-        FetchedOffset offset (Ok ( records, count )) ->
-            let
-                _ =
-                    Debug.log "fetched by offset" "fetched"
-            in
-            ( { model
-                | pages = loadUnloadedPage model offset records count
-                , total = Just count.total
-              }
-            , AppCmd.none
-            )
-
-        FetchedOffset _ (Err err) ->
+        Fetched _ (Err err) ->
             ( model, AppCmd.clientError err )
 
         PageHeightCalculated result ->
@@ -331,18 +283,8 @@ update msg model =
 
         ScrollInfo (Ok ({ scene, viewport } as viewPortRec)) ->
             let
-                visiblePage =
-                    let
-                        pageNumber =
-                            floor (viewport.y / model.pageHeight) + 1
-                    in
-                    max 1 (min pageNumber (max 1 (List.length model.pages)))
-
                 newModel =
-                    { model
-                        | scrollPosition = viewport.y
-                        , currentVisiblePage = visiblePage
-                    }
+                    { model | scrollPosition = viewport.y }
             in
             case getUnloadedInView model viewPortRec of
                 Just offset ->
@@ -353,31 +295,17 @@ update msg model =
                         scrolledToBottom =
                             (model.scrollPosition < viewport.y)
                                 && (scene.height - viewport.y < (viewport.height * 2))
+
+                        offset =
+                            model.recordsPerPage * currentPage model viewport.y
                     in
-                    case ( scrolledToBottom, model.pages ) of
-                        ( False, _ ) ->
-                            ( newModel, AppCmd.none )
+                    if scrolledToBottom && unloadedMissing model offset then
+                        ( { newModel | pages = Unloaded offset :: model.pages }
+                        , fetchOffset model offset
+                        )
 
-                        ( True, LastPage :: _ ) ->
-                            ( newModel, AppCmd.none )
-
-                        ( True, _ ) ->
-                            ( { newModel | pages = LastPage :: model.pages }
-                            , Client.fetchRecords
-                                { client = model.client
-                                , path =
-                                    listingPath
-                                        { limit = True
-                                        , selectAll = False
-                                        , nest = False
-                                        , offset = model.recordsPerPage * visiblePage
-                                        }
-                                        model
-                                , table = model.table
-                                }
-                                |> Task.attempt Fetched
-                                |> AppCmd.wrap
-                            )
+                    else
+                        ( newModel, AppCmd.none )
 
         ScrollInfo (Err _) ->
             ( model, AppCmd.none )
@@ -400,7 +328,6 @@ update msg model =
                             |> List.foldl
                                 (\num -> (::) (Unloaded ((num - 1) * model.recordsPerPage)))
                                 model.pages
-                    , currentVisiblePage = pageNum
                 }
             , AppCmd.batch
                 [ Dom.setViewportOf model.table.name 0 scrollTo
@@ -645,28 +572,13 @@ update msg model =
             ( model, AppCmd.none )
 
 
-loadUnloadedPage : Model -> Int -> List Record -> Count -> List Page
-loadUnloadedPage model offset records count =
-    model.pages
-        |> List.map
-            (\page ->
-                case page of
-                    Unloaded pageOffset ->
-                        if pageOffset == offset then
-                            Page records
-
-                        else
-                            page
-
-                    _ ->
-                        page
-            )
-        |> (if offset + List.length records >= count.total then
-                (::) LastPage
-
-            else
-                identity
-           )
+currentPage : { a | pageHeight : Float, pages : List b } -> Float -> Int
+currentPage { pageHeight, pages } scrollPosition =
+    let
+        pageNumber =
+            floor (scrollPosition / pageHeight) + 1
+    in
+    max 1 (min pageNumber (max 1 (List.length pages)))
 
 
 reload : Table -> AppCmd Msg
@@ -699,6 +611,22 @@ getUnloadedInView model { viewport } =
             )
         |> List.filterMap identity
         |> List.head
+
+
+unloadedMissing : Model -> Int -> Bool
+unloadedMissing model offset =
+    List.find
+        (\page ->
+            case page of
+                Unloaded pageOffset ->
+                    pageOffset == offset
+
+                _ ->
+                    False
+        )
+        model.pages
+        |> Maybe.map (always False)
+        |> Maybe.withDefault True
 
 
 searchChanged : Search.Msg -> Cmd Search.Msg -> AppCmd Msg
@@ -798,12 +726,7 @@ view model =
         , Html.div
             [ Attrs.id model.table.name
             , Attrs.class "resources-listing-results"
-            , case model.pages of
-                LastPage :: _ ->
-                    Attrs.class ""
-
-                _ ->
-                    Events.on "scroll" (Decode.succeed Scrolled)
+            , Events.on "scroll" (Decode.succeed Scrolled)
             ]
             [ case model.uploadState of
                 UploadWithPreview file records ->
@@ -973,9 +896,6 @@ viewRecordsTable model =
                                                 ]
                                             ]
                                         ]
-
-                                LastPage ->
-                                    Html.text ""
                         )
                )
         )
@@ -1091,11 +1011,8 @@ viewPageSelect model =
     let
         totalPagesCount =
             model.total
-                |> Maybe.map (\total -> ceiling (toFloat total / toFloat model.recordsPerPage))
+                |> Maybe.map (\total -> total // model.recordsPerPage)
                 |> Maybe.withDefault 0
-
-        currentPage =
-            model.currentVisiblePage
     in
     Html.select
         [ Attrs.class "page-select"
@@ -1117,7 +1034,8 @@ viewPageSelect model =
                 (\pageNum ->
                     Html.option
                         [ Attrs.value (String.fromInt pageNum)
-                        , Attrs.selected (pageNum == currentPage)
+                        , Attrs.selected
+                            (pageNum == currentPage model model.scrollPosition)
                         ]
                         [ Html.text ("Page " ++ String.fromInt pageNum) ]
                 )
