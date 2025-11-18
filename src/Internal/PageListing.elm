@@ -100,7 +100,7 @@ type Msg
     | Reload
     | Scrolled
     | ScrollInfo (Result Dom.Error Viewport)
-    | RowHeightCalculated (Result Dom.Error Float)
+    | PageHeightCalculated (Result Dom.Error Float)
     | JumpToPage Int
     | SearchChanged Search.Msg
     | DownloadRequested Format
@@ -128,7 +128,7 @@ type alias Model =
     , pages : List Page
     , page : Int
     , currentVisiblePage : Int
-    , rowHeight : Int
+    , pageHeight : Int
     , total : Maybe Int
     , order : SortOrder
     , search : Search
@@ -170,7 +170,7 @@ init { client, mountPath, table, parent, recordsPerPage } url key =
             , parentLabel = Nothing
             , page = 0
             , currentVisiblePage = 1
-            , rowHeight = 0
+            , pageHeight = 0
             , total = Nothing
             , scrollPosition = 0
             , pages = []
@@ -185,13 +185,7 @@ init { client, mountPath, table, parent, recordsPerPage } url key =
     , AppCmd.batch
         [ Client.fetchRecords
             { client = client
-            , path =
-                listingPath
-                    { limit = True
-                    , selectAll = False
-                    , nest = False
-                    }
-                    model
+            , path = listingPath { limit = True, selectAll = False, nest = False } model
             , table = table
             }
             |> Task.attempt Fetched
@@ -206,11 +200,6 @@ init { client, mountPath, table, parent, recordsPerPage } url key =
             |> Maybe.withDefault AppCmd.none
         ]
     )
-
-
-isSearchVisible : Model -> Bool
-isSearchVisible { searchOpen, search } =
-    searchOpen || Search.isBlank search
 
 
 fetch : Model -> AppCmd Msg
@@ -282,10 +271,10 @@ update msg model =
                                 Page records :: pages
                 , total = Just count.total
               }
-            , if model.rowHeight == 0 then
-                Dom.getViewportOf model.table.name
-                    |> Task.andThen (\viewp -> Task.succeed (viewp.scene.height / toFloat recordCount))
-                    |> Task.attempt RowHeightCalculated
+            , if model.pageHeight == 0 then
+                Dom.getElement "page-0"
+                    |> Task.map (\elem -> elem.element.height)
+                    |> Task.attempt PageHeightCalculated
                     |> AppCmd.wrap
 
               else
@@ -325,8 +314,8 @@ update msg model =
         FetchedOffset _ (Err err) ->
             ( model, AppCmd.clientError err )
 
-        RowHeightCalculated result ->
-            ( { model | rowHeight = result |> Result.map round |> Result.withDefault 0 }
+        PageHeightCalculated result ->
+            ( { model | pageHeight = result |> Result.map round |> Result.withDefault 0 }
             , AppCmd.none
             )
 
@@ -364,11 +353,8 @@ update msg model =
             let
                 visiblePage =
                     let
-                        scrolledRecords =
-                            floor (viewport.y / toFloat model.rowHeight)
-
                         pageNumber =
-                            (scrolledRecords // model.recordsPerPage) + 1
+                            floor (viewport.y / toFloat model.pageHeight) + 1
                     in
                     max 1 (min pageNumber (max 1 (List.length model.pages)))
 
@@ -396,7 +382,9 @@ update msg model =
                             ( newModel, AppCmd.none )
 
                         ( True, _ ) ->
-                            fetchListing { newModel | pages = Blank :: model.pages }
+                            ( { newModel | pages = Blank :: model.pages }
+                            , fetch { newModel | pages = Blank :: model.pages }
+                            )
 
         ScrollInfo (Err _) ->
             ( model, AppCmd.none )
@@ -407,7 +395,7 @@ update msg model =
                     List.length model.pages
 
                 scrollTo =
-                    toFloat ((pageNum - 1) * model.recordsPerPage) * toFloat model.rowHeight
+                    toFloat (pageNum - 1) * toFloat model.pageHeight
             in
             ( if pageNum <= loadedCount then
                 model
@@ -421,9 +409,12 @@ update msg model =
                                 model.pages
                     , currentVisiblePage = pageNum
                 }
-            , Dom.setViewportOf model.table.name 0 scrollTo
-                |> Task.attempt (always NoOp)
-                |> AppCmd.wrap
+            , AppCmd.batch
+                [ Dom.setViewportOf model.table.name 0 scrollTo
+                    |> Task.attempt (always NoOp)
+                    |> AppCmd.wrap
+                , fetchOffset model ((pageNum - 1) * model.recordsPerPage)
+                ]
             )
 
         SearchChanged searchMsg ->
@@ -665,21 +656,17 @@ reload table =
 
 getUnloadedInView : Model -> Viewport -> Maybe Int
 getUnloadedInView model { viewport } =
-    let
-        pageHeight =
-            toFloat model.recordsPerPage * toFloat model.rowHeight
-    in
     model.pages
         |> List.reverse
         |> List.indexedMap
             (\index page ->
                 let
                     pageTop =
-                        toFloat index * pageHeight
+                        toFloat index * toFloat model.pageHeight
 
                     isInViewPort =
                         (pageTop <= (viewport.y + viewport.height))
-                            && ((pageTop + pageHeight) >= viewport.y)
+                            && ((pageTop + toFloat model.pageHeight) >= viewport.y)
                 in
                 case ( page, isInViewPort ) of
                     ( Unloaded offset, True ) ->
@@ -690,11 +677,6 @@ getUnloadedInView model { viewport } =
             )
         |> List.filterMap identity
         |> List.head
-
-
-fetchListing : Model -> ( Model, AppCmd Msg )
-fetchListing listing =
-    ( listing, fetch listing )
 
 
 searchChanged : Search.Msg -> Cmd Search.Msg -> AppCmd Msg
@@ -853,7 +835,7 @@ view model =
                     ]
                 ]
             , Html.map SearchChanged
-                (Search.view (isSearchVisible model) model.search)
+                (Search.view (model.searchOpen || Search.isBlank model.search) model.search)
             ]
         ]
 
@@ -925,7 +907,7 @@ viewRecordsTable : Model -> Html Msg
 viewRecordsTable model =
     let
         pageHeight =
-            String.fromFloat (toFloat model.recordsPerPage * toFloat model.rowHeight) ++ "px"
+            String.fromInt model.pageHeight ++ "px"
     in
     Html.table []
         (Html.thead []
@@ -1069,11 +1051,11 @@ toggleSearchButton model =
     Html.button
         [ Attrs.class "toggle-button"
         , Attrs.class "button-clear"
-        , Attrs.classList [ ( "open", isSearchVisible model ) ]
+        , Attrs.classList [ ( "open", model.searchOpen || Search.isBlank model.search ) ]
         , Events.onClick ToggleSearchOpen
         ]
         [ Html.i [ Attrs.class "icono-play" ] []
-        , if isSearchVisible model then
+        , if model.searchOpen || Search.isBlank model.search then
             Html.text "Hide"
 
           else
