@@ -41,7 +41,7 @@ import PostgRestAdmin.Client as Client exposing (Client, Count, Error)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath)
 import PostgRestAdmin.Views as Views
 import Postgrest.Client as PG
-import Set
+import Set exposing (Set)
 import String.Extra as String
 import Task
 import Time
@@ -78,7 +78,7 @@ type alias CsvUpload =
 
 type UploadState
     = Idle
-    | Fetching
+    | FetchingIds
     | BadCsvSchema CsvUpload
     | UploadWithoutPreview File
     | UploadWithPreview File (List CsvRow)
@@ -125,12 +125,13 @@ type alias Model =
     , scrollPosition : Float
     , pages : List Page
     , pageHeight : Float
-    , total : Maybe Int
+    , total : Int
     , order : SortOrder
     , search : Search
     , searchOpen : Bool
     , uploadState : UploadState
     , recordsPerPage : Int
+    , requested : Set Int
     }
 
 
@@ -163,7 +164,7 @@ init { client, mountPath, table, parent, recordsPerPage } url key =
             , parent = parent
             , parentLabel = Nothing
             , pageHeight = 0
-            , total = Nothing
+            , total = 0
             , scrollPosition = 0
             , pages = [ Unloaded 0 ]
             , order = order
@@ -171,6 +172,7 @@ init { client, mountPath, table, parent, recordsPerPage } url key =
             , searchOpen = False
             , uploadState = Idle
             , recordsPerPage = recordsPerPage
+            , requested = Set.empty
             }
     in
     ( model
@@ -226,7 +228,7 @@ update msg model =
                                     _ ->
                                         page
                             )
-                , total = Just count.total
+                , total = count.total
               }
             , if model.pageHeight == 0 then
                 Dom.getElement "page-0"
@@ -238,8 +240,10 @@ update msg model =
                 AppCmd.none
             )
 
-        Fetched _ (Err err) ->
-            ( model, AppCmd.clientError err )
+        Fetched offset (Err err) ->
+            ( { model | requested = Set.remove offset model.requested }
+            , AppCmd.clientError err
+            )
 
         PageHeightCalculated result ->
             ( { model | pageHeight = result |> Result.withDefault 0 }
@@ -282,13 +286,18 @@ update msg model =
             )
 
         ScrollInfo (Ok ({ scene, viewport } as viewPortRec)) ->
-            let
-                newModel =
-                    { model | scrollPosition = viewport.y }
-            in
-            case getUnloadedInView model viewPortRec of
+            case unloadedPageInView model viewPortRec of
                 Just offset ->
-                    ( newModel, fetchOffset model offset )
+                    ( { model
+                        | scrollPosition = viewport.y
+                        , requested = Set.insert offset model.requested
+                      }
+                    , if Set.member offset model.requested then
+                        AppCmd.none
+
+                      else
+                        fetchOffset model offset
+                    )
 
                 Nothing ->
                     let
@@ -299,13 +308,20 @@ update msg model =
                         offset =
                             model.recordsPerPage * currentPage model viewport.y
                     in
-                    if scrolledToBottom && unloadedMissing model offset then
-                        ( { newModel | pages = Unloaded offset :: model.pages }
+                    if
+                        (scrolledToBottom && unloadedMissing model offset)
+                            && (offset <= model.total)
+                    then
+                        ( { model
+                            | scrollPosition = viewport.y
+                            , requested = Set.insert offset model.requested
+                            , pages = Unloaded offset :: model.pages
+                          }
                         , fetchOffset model offset
                         )
 
                     else
-                        ( newModel, AppCmd.none )
+                        ( { model | scrollPosition = viewport.y }, AppCmd.none )
 
         ScrollInfo (Err _) ->
             ( model, AppCmd.none )
@@ -463,7 +479,7 @@ update msg model =
                                 csv.records
                     in
                     if Set.isEmpty extra && Set.isEmpty missing then
-                        ( { model | uploadState = Fetching }
+                        ( { model | uploadState = FetchingIds }
                         , (if List.isEmpty ids then
                             CsvProcessed file (Ok records)
                                 |> Task.succeed
@@ -542,7 +558,7 @@ update msg model =
             ( model, AppCmd.clientError err )
 
         CsvUploadAccepted file ->
-            ( { model | uploadState = Fetching }
+            ( { model | uploadState = FetchingIds }
             , Client.jsonRequest
                 { client = model.client
                 , method = "POST"
@@ -588,8 +604,8 @@ reload table =
         |> AppCmd.wrap
 
 
-getUnloadedInView : Model -> Viewport -> Maybe Int
-getUnloadedInView model { viewport } =
+unloadedPageInView : Model -> Viewport -> Maybe Int
+unloadedPageInView model { viewport } =
     model.pages
         |> List.reverse
         |> List.indexedMap
@@ -744,7 +760,7 @@ view model =
                 Idle ->
                     Html.text ""
 
-                Fetching ->
+                FetchingIds ->
                     Html.text ""
             , viewRecordsTable model
             ]
@@ -806,14 +822,11 @@ viewPageHeader ({ mountPath, table } as model) =
             , Html.div
                 []
                 [ viewPageSelect model
-                , Maybe.map
-                    (\total ->
-                        Html.span
-                            [ Attrs.class "total-records" ]
-                            [ Html.text (String.fromInt total ++ " records") ]
-                    )
-                    model.total
-                    |> Maybe.withDefault (Html.text "")
+                , Html.span
+                    [ Attrs.class "total-records" ]
+                    [ Html.text
+                        (String.fromInt model.total ++ " records")
+                    ]
                 ]
             ]
         , Html.div
@@ -1010,9 +1023,7 @@ viewPageSelect : Model -> Html Msg
 viewPageSelect model =
     let
         totalPagesCount =
-            model.total
-                |> Maybe.map (\total -> total // model.recordsPerPage)
-                |> Maybe.withDefault 0
+            ceiling (toFloat model.total / toFloat model.recordsPerPage)
     in
     Html.select
         [ Attrs.class "page-select"
@@ -1337,7 +1348,7 @@ subscriptions model =
                             Idle ->
                                 Decode.fail "upload not ready"
 
-                            Fetching ->
+                            FetchingIds ->
                                 Decode.fail "upload not ready"
 
                     _ ->
