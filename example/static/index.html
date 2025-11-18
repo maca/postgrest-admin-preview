@@ -12,18 +12,28 @@
 
 <body>
     <script type="text/javascript">
-      console.log("token: ", sessionStorage.getItem("jwt"))
-      const app = Elm.Main.init({
+        console.log("token: ", sessionStorage.getItem("jwt"))
+        const app = Elm.Main.init({
           flags : { jwt: sessionStorage.getItem("jwt") }
-      })
+        })
 
-      app.ports.gotToken.subscribe(jwt => {
+        app.ports.gotToken.subscribe(jwt => {
           console.log("got token: ", jwt)
           sessionStorage.setItem("jwt", jwt)
-      });
+        });
 
-      <!-- app.ports.loggedOut.subscribe(_ => { -->
-          <!-- sessionStorage.removeItem("jwt") -->
-      <!-- }); -->
+        app.ports.loggedOut.subscribe(_ => {
+          sessionStorage.removeItem("jwt")
+        });
+
+        // elm-watch: reload page when HTML or other non-CSS files change
+        window.addEventListener("elm-watch:changed-file-url-paths", (event) => {
+            // Let elm-watch handle CSS hot reloading, only force reload for non-CSS files
+            const changedFiles = event.detail.changedFileUrlPaths;
+            const hasNonCssChanges = changedFiles.some(path => !path.endsWith('.css'));
+            if (hasNonCssChanges) {
+                window.location.reload();
+            }
+        });
     </script>
 <body>

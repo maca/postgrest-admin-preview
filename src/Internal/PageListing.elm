@@ -265,17 +265,13 @@ update msg model =
             ( { model | order = order }, reload model.table )
 
         Reload ->
-            ( model
-            , model
-                |> listingPath
-                    { limit = False
-                    , selectAll = True
-                    , nest = True
-                    , offset = 0
-                    }
-                |> MountPath.path model.mountPath
-                |> Nav.replaceUrl model.key
-                |> AppCmd.wrap
+            ( { model | pages = [ Unloaded 0 ] }
+            , AppCmd.batch
+                [ fetchOffset model 0
+                , listingPath { limit = False, selectAll = True, nest = True, offset = 0 } model
+                    |> Nav.replaceUrl model.key
+                    |> AppCmd.wrap
+                ]
             )
 
         Scrolled ->
@@ -759,7 +755,17 @@ view model =
 
                 FetchingIds ->
                     Html.text ""
-            , viewRecordsTable model
+            , Html.table []
+                (Html.thead []
+                    [ Html.tr []
+                        (List.map (viewHeaderCell model) model.columns
+                            ++ [ Html.th [] [] ]
+                        )
+                    ]
+                    :: (List.reverse model.pages
+                            |> List.indexedMap (viewPage model)
+                       )
+                )
             ]
         , Html.aside
             [ Attrs.class "listing-controls" ]
@@ -799,55 +805,44 @@ view model =
 
 
 viewPageHeader : Model -> Html Msg
-viewPageHeader ({ mountPath, table } as model) =
+viewPageHeader model =
     Html.header
         []
         [ Html.div
-            []
-            [ MountPath.breadcrumbs mountPath
-                table.name
+            [ Attrs.class "listing-breadcrumbs" ]
+            [ MountPath.breadcrumbs model.mountPath
+                model.table.name
                 (case model.parent of
                     Just parent ->
                         [ ( parent.tableName, Nothing )
                         , ( parent.id, model.parentLabel )
-                        , ( table.name, Nothing )
+                        , ( model.table.name, Nothing )
                         ]
 
                     Nothing ->
-                        [ ( table.name, Nothing ) ]
+                        [ ( model.table.name, Nothing ) ]
                 )
-            , Html.div
-                []
-                [ viewPageSelect model
-                , Html.span
-                    [ Attrs.class "total-records" ]
-                    [ Html.text
-                        (model.total
-                            |> Maybe.map (\num -> String.fromInt num ++ " records")
-                            |> Maybe.withDefault ""
-                        )
-                    ]
-                ]
+            , viewPageSelect model
             ]
         , Html.div
-            []
+            [ Attrs.class "listing-actions" ]
             [ Html.button
                 [ Attrs.id "upload-csv-button"
                 , Attrs.class "button"
-                , Attrs.class ("button-upload-csv-" ++ table.name)
+                , Attrs.class ("button-upload-csv-" ++ model.table.name)
                 , Events.onClick CsvUploadRequested
                 ]
                 [ Html.text "Upload CSV" ]
             , Html.a
                 [ Attrs.class "button"
-                , Attrs.class ("button-new-" ++ table.name)
+                , Attrs.class ("button-new-" ++ model.table.name)
                 , Attrs.href
-                    (MountPath.path mountPath <|
+                    (MountPath.path model.mountPath <|
                         Url.absolute
                             (List.filterMap identity
                                 [ Maybe.map .tableName model.parent
                                 , Maybe.map .id model.parent
-                                , Just table.name
+                                , Just model.table.name
                                 , Just "new"
                                 ]
                             )
@@ -855,63 +850,55 @@ viewPageHeader ({ mountPath, table } as model) =
                     )
                 ]
                 [ Html.text
-                    ("New " ++ (String.humanize table.name |> Inflect.toSingular))
+                    ("New " ++ (String.humanize model.table.name |> Inflect.toSingular))
                 ]
             ]
         ]
 
 
-viewRecordsTable : Model -> Html Msg
-viewRecordsTable model =
+viewPage : Model -> Int -> Page -> Html Msg
+viewPage model pageNum page =
     let
         pageHeight =
             String.fromInt model.pageHeight ++ "px"
     in
-    Html.table []
-        (Html.thead []
-            [ Html.tr [] (List.map (viewHeaderCell model) model.columns ++ [ Html.th [] [] ]) ]
-            :: (List.reverse model.pages
-                    |> List.indexedMap
-                        (\pageNum page ->
-                            case page of
-                                Page records ->
-                                    Html.tbody
-                                        [ Attrs.id ("page-" ++ String.fromInt pageNum) ]
-                                        (List.map
-                                            (\record ->
-                                                Html.tr
-                                                    [ Attrs.class "listing-row" ]
-                                                    (viewRowCells model record
-                                                        ++ [ viewActions model record ]
-                                                    )
-                                            )
-                                            records
-                                        )
+    case page of
+        Page records ->
+            Html.tbody
+                [ Attrs.id ("page-" ++ String.fromInt pageNum) ]
+                (List.map
+                    (\record ->
+                        Html.tr
+                            [ Attrs.class "listing-row" ]
+                            (viewRowCells model record ++ [ viewActions model record ])
+                    )
+                    records
+                )
 
-                                Unloaded offset ->
-                                    Html.tbody
-                                        [ Attrs.id ("page-" ++ String.fromInt pageNum)
-                                        , Attrs.style "height" pageHeight
-                                        , Attrs.class "unloaded-page"
-                                        ]
-                                        [ Html.tr []
-                                            [ Html.td
-                                                [ Attrs.colspan (List.length model.columns + 1)
-                                                , Attrs.style "text-align" "center"
-                                                , Attrs.style "padding" "2rem"
-                                                ]
-                                                [ Html.div
-                                                    [ Attrs.style "font-size" "3rem"
-                                                    , Attrs.style "font-weight" "bold"
-                                                    , Attrs.style "color" "#333"
-                                                    ]
-                                                    [ Html.text ("Offset: " ++ String.fromInt offset) ]
-                                                ]
+        Unloaded _ ->
+            Html.tbody
+                [ Attrs.id ("page-" ++ String.fromInt pageNum)
+                , Attrs.style "height" pageHeight
+                , Attrs.class "unloaded-page"
+                ]
+                (List.range 0 model.recordsPerPage
+                    |> List.map
+                        (\_ ->
+                            Html.tr
+                                [ Attrs.class "skeleton-row"
+                                ]
+                                (List.map
+                                    (\_ ->
+                                        Html.td
+                                            []
+                                            [ Html.div [ Attrs.class "skeleton-box" ] []
                                             ]
-                                        ]
+                                    )
+                                    model.columns
+                                    ++ [ Html.td [] [] ]
+                                )
                         )
-               )
-        )
+                )
 
 
 viewHeaderCell : Model -> ( String, Column ) -> Html Msg
@@ -1023,36 +1010,56 @@ viewPageSelect : Model -> Html Msg
 viewPageSelect model =
     case model.total of
         Just total ->
-            let
-                totalPagesCount =
-                    ceiling (toFloat total / toFloat model.recordsPerPage)
-            in
-            Html.select
-                [ Attrs.class "page-select"
-                , Events.on "change"
-                    (Decode.at [ "target", "value" ] Decode.string
-                        |> Decode.andThen
-                            (\value ->
-                                case String.toInt value of
-                                    Just pageNum ->
-                                        Decode.succeed (JumpToPage pageNum)
+            Html.div
+                [ Attrs.class "record-count-info" ]
+                [ let
+                    totalPagesCount =
+                        ceiling (toFloat total / toFloat model.recordsPerPage)
+                  in
+                  Html.select
+                    [ Attrs.class "page-select"
+                    , Attrs.name "page-number"
+                    , Events.on "change"
+                        (Decode.at [ "target", "value" ] Decode.string
+                            |> Decode.andThen
+                                (\value ->
+                                    case String.toInt value of
+                                        Just pageNum ->
+                                            Decode.succeed (JumpToPage pageNum)
 
-                                    Nothing ->
-                                        Decode.fail "Invalid page number"
+                                        Nothing ->
+                                            Decode.fail "Invalid page number"
+                                )
+                        )
+                    ]
+                    (List.range 1 totalPagesCount
+                        |> List.map
+                            (\pageNum ->
+                                Html.option
+                                    [ Attrs.value (String.fromInt pageNum)
+                                    , Attrs.selected
+                                        (pageNum == currentPage model model.scrollPosition)
+                                    ]
+                                    [ Html.text
+                                        (String.concat
+                                            [ "Page "
+                                            , String.fromInt pageNum
+                                            , " - from "
+                                            , String.fromInt (((pageNum - 1) * model.recordsPerPage) + 1)
+                                            ]
+                                        )
+                                    ]
                             )
                     )
-                ]
-                (List.range 1 totalPagesCount
-                    |> List.map
-                        (\pageNum ->
-                            Html.option
-                                [ Attrs.value (String.fromInt pageNum)
-                                , Attrs.selected
-                                    (pageNum == currentPage model model.scrollPosition)
-                                ]
-                                [ Html.text ("Page " ++ String.fromInt pageNum) ]
+                , Html.span
+                    [ Attrs.class "total-records" ]
+                    [ Html.text
+                        (model.total
+                            |> Maybe.map (\num -> String.fromInt num ++ " records")
+                            |> Maybe.withDefault ""
                         )
-                )
+                    ]
+                ]
 
         _ ->
             Html.text ""

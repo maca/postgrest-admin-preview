@@ -6,8 +6,7 @@ module PostgRestAdmin exposing
     , menuLinks, formFields, detailActions
     , tables, tableAliases
     , routes
-    , configDecoder
-    , recordsPerPage
+    , configDecoder, recordsPerPage
     )
 
 {-|
@@ -455,13 +454,15 @@ update msg model =
             ( model, Nav.load href )
 
         UrlChanged url ->
-            let
-                ( route, cmd ) =
-                    parseRoute url model
-            in
-            ( { model | route = route, currentUrl = url }
-            , cmd
-            )
+            if model.currentUrl.path /= url.path then
+                let
+                    ( route, cmd ) =
+                        parseRoute url model
+                in
+                ( { model | route = route, currentUrl = url }, cmd )
+
+            else
+                ( { model | currentUrl = url }, Cmd.none )
 
         LoggedIn params ->
             ( { model | client = Client.updateJwt params.accessToken model.client }

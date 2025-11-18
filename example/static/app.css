@@ -1,5 +1,3 @@
-@import url("https://css.gg/log-out.css");
-@import url("https://css.gg/spinner-alt.css");
 
 
 /* ------------ */
@@ -98,21 +96,35 @@
 
 .resources-listing header,
 .resources-listing aside,
-.resources-listing .resources-listing-results
-{
+.resources-listing .resources-listing-results {
     padding: 0 4rem;
 }
 
-.resources-listing header
-{
+.resources-listing header {
     padding-top: 4rem;
 }
 
 .resources-listing header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     padding-right: 4rem;
+    flex-wrap: wrap;
+    gap: 2rem;
+}
+
+.resources-listing .listing-actions {
+    min-width: 450px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.resources-listing .listing-breadcrumbs {
+    min-width: 450px;
+}
+
+.resources-listing .record-count-info {
+    display: flex;
 }
 
 .resources-listing header *:not(:last-child) {
@@ -214,6 +226,19 @@
 
 .toggle-button.open i {
     transform: scale(0.6) rotate(90deg) translateX(2px);
+}
+
+.record-count-info {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+}
+
+.page-select {
+    width: auto;
+    min-width: max-content;
+    padding-left: 1rem;
+    padding-right: 4rem;
 }
 /* Listing      */
 /* ------------ */
@@ -577,7 +602,6 @@ a.button:hover {
     margin-left: 1.5rem;
 }
 
-
 /* ---------- */
 /* CSV upload */
 .upload-preview .modal-dialog {
@@ -643,3 +667,12 @@ a.button:hover {
 }
 /* Breadcrumbs */
 /* ---------- */
+
+
+/* -------------- */
+/* Skeleton loader */
+.unloaded-page {
+    background: #fafafa;
+}
+/* Skeleton loader */
+/* -------------- */
