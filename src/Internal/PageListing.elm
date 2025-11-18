@@ -99,6 +99,7 @@ type Msg
     | Scrolled
     | ScrollInfo (Result Dom.Error Viewport)
     | PageHeightCalculated (Result Dom.Error Float)
+    | ColumnWidthsCalculated (Result Dom.Error (List Float))
     | JumpToPage Int
     | SearchChanged Search.Msg
     | DownloadRequested Format
@@ -125,6 +126,7 @@ type alias Model =
     , scrollPosition : Float
     , pages : List Page
     , pageHeight : Int
+    , columnWidths : List Float
     , total : Maybe Int
     , order : SortOrder
     , search : Search
@@ -164,6 +166,7 @@ init { client, mountPath, table, parent, recordsPerPage } url key =
             , parent = parent
             , parentLabel = Nothing
             , pageHeight = 0
+            , columnWidths = []
             , total = Nothing
             , scrollPosition = 0
             , pages = [ Unloaded 0 ]
@@ -231,10 +234,27 @@ update msg model =
                 , total = Just count.total
               }
             , if model.pageHeight == 0 then
-                Dom.getElement "page-0"
-                    |> Task.map (\elem -> elem.element.height)
-                    |> Task.attempt PageHeightCalculated
-                    |> AppCmd.wrap
+                AppCmd.batch
+                    [ Dom.getElement "page-0"
+                        |> Task.map (\elem -> elem.element.height)
+                        |> Task.attempt PageHeightCalculated
+                        |> AppCmd.wrap
+                    , Task.map2
+                        (\tableWidth -> List.map (\w -> min w (tableWidth / 2)))
+                        (Dom.getElement model.table.name
+                            |> Task.map (\elem -> elem.element.width)
+                        )
+                        (model.columns
+                            |> List.indexedMap
+                                (\idx _ ->
+                                    Dom.getElement ("col-" ++ String.fromInt idx)
+                                        |> Task.map (\elem -> elem.element.width)
+                                )
+                            |> Task.sequence
+                        )
+                        |> Task.attempt ColumnWidthsCalculated
+                        |> AppCmd.wrap
+                    ]
 
               else
                 AppCmd.none
@@ -247,6 +267,11 @@ update msg model =
 
         PageHeightCalculated result ->
             ( { model | pageHeight = Result.map ceiling result |> Result.withDefault 0 }
+            , AppCmd.none
+            )
+
+        ColumnWidthsCalculated result ->
+            ( { model | columnWidths = Result.withDefault [] result }
             , AppCmd.none
             )
 
@@ -755,17 +780,7 @@ view model =
 
                 FetchingIds ->
                     Html.text ""
-            , Html.table []
-                (Html.thead []
-                    [ Html.tr []
-                        (List.map (viewHeaderCell model) model.columns
-                            ++ [ Html.th [] [] ]
-                        )
-                    ]
-                    :: (List.reverse model.pages
-                            |> List.indexedMap (viewPage model)
-                       )
-                )
+            , viewTable model
             ]
         , Html.aside
             [ Attrs.class "listing-controls" ]
@@ -802,6 +817,51 @@ view model =
                 (Search.view (model.searchOpen || Search.isBlank model.search) model.search)
             ]
         ]
+
+
+viewTable : Model -> Html Msg
+viewTable model =
+    Html.table
+        [ Attrs.style "position" "relative"
+        , Attrs.style "table-layout" "fixed"
+        , Attrs.style "width" "max-content"
+        , Attrs.style "min-width" "100%"
+        ]
+        (Html.colgroup []
+            (List.map
+                (\width ->
+                    Html.col
+                        (if width > 0 then
+                            [ Attrs.style "width" (String.fromFloat width ++ "px") ]
+
+                         else
+                            []
+                        )
+                        []
+                )
+                (model.columnWidths ++ [ 0 ])
+            )
+            :: (case model.total of
+                    Just _ ->
+                        Html.thead []
+                            [ Html.tr []
+                                (List.indexedMap (viewHeaderCell model) model.columns
+                                    ++ [ Html.th [] [] ]
+                                )
+                            ]
+
+                    Nothing ->
+                        Html.text ""
+               )
+            :: (case model.pages of
+                    [ Unloaded _ ] ->
+                        []
+
+                    _ ->
+                        List.reverse model.pages
+                            |> List.indexedMap (viewPage model)
+               )
+        )
 
 
 viewPageHeader : Model -> Html Msg
@@ -901,8 +961,8 @@ viewPage model pageNum page =
                 )
 
 
-viewHeaderCell : Model -> ( String, Column ) -> Html Msg
-viewHeaderCell { order } ( name, _ ) =
+viewHeaderCell : Model -> Int -> ( String, Column ) -> Html Msg
+viewHeaderCell { order } idx ( name, _ ) =
     let
         defaultHeader =
             Html.span
@@ -915,7 +975,7 @@ viewHeaderCell { order } ( name, _ ) =
                 ]
     in
     Html.th
-        []
+        [ Attrs.id ("col-" ++ String.fromInt idx) ]
         [ case order of
             Asc col ->
                 if col == name then

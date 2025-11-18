@@ -150,13 +150,6 @@
     overflow-x: auto;
 }
 
-.resources-listing table {
-    position: relative;
-    table-layout: auto;
-    width: max-content;
-    min-width: 100%;
-}
-
 .resources-listing th {
     background: white;
     position: sticky;
