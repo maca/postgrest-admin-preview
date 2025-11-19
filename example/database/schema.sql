@@ -91,7 +91,7 @@ BEGIN
       'user_id', _user.id,
       'email', _user.email,
       'schema', _schema_name,
-      'exp', extract(epoch from now() + interval '30 minutes')::integer
+      'exp', extract(epoch from now() + interval '4 hours')::integer
     ),
     'DL+P8+muauKgOSqRKqIKMkjcUpLZ5ajXScgA965i/Bg='
   );
