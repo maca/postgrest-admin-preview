@@ -28,16 +28,12 @@
             scriptsEnv = scripts env;
           in
           pkgs.mkShell {
-            buildInputs = with pkgs; [
-              curl
-              elmPackages.elm
-              nodejs
-            ]
-            ++ postgres.buildInputs
-            ++ postgres.scripts
-            ++ postgrestEnv.buildInputs
-            ++ postgrestEnv.scripts
-            ++ scriptsEnv.scripts;
+            buildInputs = with pkgs; [ elmPackages.elm nodejs ]
+              ++ postgres.buildInputs
+              ++ postgres.scripts
+              ++ postgrestEnv.buildInputs
+              ++ postgrestEnv.scripts
+              ++ scriptsEnv.scripts;
 
             shellHook = ''
               export PGDATA=$PWD/database/pgdata
@@ -48,11 +44,7 @@
               # Add elm-watch from nix to PATH
               export PATH="${elmWatch.nodeModules}/node_modules/.bin:$PATH"
               '' else ''
-              # Compile Elm to production JS
-              echo "Compiling Elm application..."
-              mkdir -p "$PWD/static"
               elm make src/Main.elm --optimize --output=static/main.js
-              echo "Elm compilation complete: static/main.js"
               ''}
 
               # Setup static assets
