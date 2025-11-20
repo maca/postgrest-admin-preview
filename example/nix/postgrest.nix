@@ -12,7 +12,7 @@ let
     ${if env == "develop" then ''
     server-port = 9080
     '' else ''
-    server-unix-socket = "/tmp/postgrest-example.sock"
+    server-unix-socket = "/var/run/pga.sock"
     ''}log-level = "info"
   '';
 
