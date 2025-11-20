@@ -1,4 +1,4 @@
-{ pkgs, postgresql }:
+{ pkgs, postgresql, env }:
 
 let
   run = pkgs.writeShellScriptBin "run" ''
@@ -25,12 +25,14 @@ let
     PIDS="$PIDS $POSTGREST_PID"
     sleep 2
 
+    ${if env == "develop" then ''
     # Start elm-watch in background
     echo "Starting elm-watch service..."
     { elm-watch hot 2>&1 1>&3 | sed 's/.*/\x1b[31mELM-WATCH: &\x1b[0m/' >&2; } 3>&1 | sed 's/.*/\x1b[32mELM-WATCH: &\x1b[0m/' &
     ELM_WATCH_PID=$!
     PIDS="$PIDS $ELM_WATCH_PID"
     sleep 2
+    '' else ""}
 
     # Trap to cleanup all services on exit
     cleanup() {
@@ -63,8 +65,10 @@ let
     echo "All services started successfully!"
     echo "- PostgreSQL: Database server running on unix socket"
     echo "- PostgREST: API server on http://localhost:9080"
+    ${if env == "develop" then ''
     echo "- elm-watch: Elm compiler with hot reload"
     echo "- Development server: http://localhost:$PORT"
+    '' else ""}
     echo ""
     echo "Services running with PIDs: $PIDS"
     echo "Press Ctrl+C to stop all services."
@@ -98,6 +102,7 @@ let
       echo "PostgREST is not running"
     fi
 
+    ${if env == "develop" then ''
     # Stop elm-watch if running
     if pgrep -f "elm-watch" > /dev/null; then
       echo "Stopping elm-watch..."
@@ -106,6 +111,7 @@ let
     else
       echo "elm-watch is not running"
     fi
+    '' else ""}
 
     echo "All services stopped"
   '';
