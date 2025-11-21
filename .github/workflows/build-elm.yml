@@ -1,0 +1,49 @@
+name: Build Elm App
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'example/src/**'
+      - 'src/**'
+      - 'example/elm.json'
+      - '.github/workflows/build-elm.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Elm
+        uses: jorelali/setup-elm@v6
+        with:
+          elm-version: 0.19.1
+
+      - name: Build optimized Elm app
+        working-directory: ./example
+        run: |
+          elm make src/Main.elm --optimize --output=postgrest-admin.js
+
+      - name: Create release
+        id: create_release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: "build-${{ github.run_number }}"
+          name: "Build ${{ github.run_number }}"
+          body: "Automated Elm build from commit ${{ github.sha }}"
+          artifacts: "example/postgrest-admin.js"
+          allowUpdates: true
+          removeArtifacts: true
+          makeLatest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: elm-app
+          path: example/postgrest-admin.js

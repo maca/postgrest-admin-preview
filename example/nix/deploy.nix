@@ -10,27 +10,13 @@ let
   staticAssets = import ./static-assets.nix { inherit pkgs; };
   bluebox = import ./bluebox.nix { inherit pkgs; };
 
-  # Build Elm application using mkElmDerivation
-  # Create a source tree with example/ content and parent src/ symlinked
-  elmSrc = pkgs.runCommand "elm-src" {} ''
+  # Fetch pre-built Elm application from GitHub releases
+  # Note: This downloads without hash verification for easier CI/CD
+  elmApp = pkgs.runCommand "pga-elm" {} ''
     mkdir -p $out
-    cp -r ${../.}/* $out/
-    ln -s ${../../src} $out/src-parent
-    # Patch elm.json to use src-parent instead of ../src
-    ${pkgs.jq}/bin/jq '.["source-directories"] = ["src", "src-parent"]' $out/elm.json > $out/elm.json.tmp
-    mv $out/elm.json.tmp $out/elm.json
+    ${pkgs.curl}/bin/curl -L -o $out/main.js \
+      https://github.com/maca/postgrest-admin-preview/releases/latest/download/postgrest-admin.js
   '';
-
-  elmApp = pkgs.mkElmDerivation {
-    pname = "pga-elm";
-    version = "0.0.1";
-    src = elmSrc;
-
-    buildPhase = ''
-      mkdir -p $out
-      elm make src/Main.elm --optimize --output=$out/main.js
-    '';
-  };
 
 
   # Package all static assets together

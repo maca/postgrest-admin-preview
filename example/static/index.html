@@ -14,16 +14,23 @@
     <script type="text/javascript">
         console.log("token: ", sessionStorage.getItem("jwt"))
         const app = Elm.Main.init({
-          flags : { jwt: sessionStorage.getItem("jwt") }
+            flags: {
+                jwt: sessionStorage.getItem("jwt"),
+                host: "http://localhost:9080",
+                clientHeaders: {
+                  "Accept-Profile": "bluebox",
+                  "Content-Profile": "bluebox"
+                }
+            }
         })
-
-        app.ports.gotToken.subscribe(jwt => {
-          console.log("got token: ", jwt)
-          sessionStorage.setItem("jwt", jwt)
+  
+        app.ports.loggedIn.subscribe(jwt => {
+            console.log("got token: ", jwt)
+            sessionStorage.setItem("jwt", jwt)
         });
 
         app.ports.loggedOut.subscribe(_ => {
-          sessionStorage.removeItem("jwt")
+            sessionStorage.removeItem("jwt")
         });
 
         // elm-watch: reload page when HTML or other non-CSS files change
