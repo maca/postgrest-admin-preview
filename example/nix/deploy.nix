@@ -150,10 +150,11 @@ in
           index = "index.html";
           tryFiles = "$uri $uri/ /index.html";
         };
+      };
 
-        locations."/api/" = {
-          # Trailing slash removes /api/ prefix when proxying
-          proxyPass = "http://unix:${postgrestSocket}:/";
+      virtualHosts."pga-api.bitmunge.com" = {
+        locations."/" = {
+          proxyPass = "http://unix:${postgrestSocket}";
           extraConfig = ''
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
