@@ -11,7 +11,7 @@ CREATE EXTENSION IF NOT EXISTS pgjwt CASCADE;
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'authenticator') THEN
-    CREATE ROLE authenticator NOINHERIT LOGIN PASSWORD 'mysecretpassword';
+    CREATE ROLE authenticator NOINHERIT LOGIN;
   END IF;
 END
 $$;
@@ -36,9 +36,15 @@ BEGIN
 END
 $$;
 
--- Grant the authenticator role permission to switch to web_anon and bluebox
-GRANT web_anon TO authenticator;
-GRANT bluebox TO authenticator;
+DO $$
+BEGIN
+  GRANT web_anon TO authenticator;
+  GRANT bluebox TO authenticator;
+EXCEPTION
+  WHEN OTHERS THEN
+    NULL;
+END
+$$;
 
 -- Configure search_path for bluebox role to use bluebox schema
 -- Users table stays in public schema (default)
