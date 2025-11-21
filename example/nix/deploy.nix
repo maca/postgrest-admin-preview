@@ -17,10 +17,11 @@ let
 
     buildPhase = ''
       cd example
+      mkdir -p $out
       elm make src/Main.elm --optimize --output=$out/main.js
     '';
 
-    installPhase = "mkdir -p $out";
+    installPhase = ": # already done in buildPhase";
   };
 
 
