@@ -179,8 +179,10 @@ in
         {
           name = serviceName;
           ensureDBOwnership = true;
-          superuser = true;
-          # createrole = true;
+          ensureClauses = {
+            superuser = true;
+            # createrole = true;
+          };
         }
         # { name = "authenticator"; }
         # { name = "web_anon"; }
