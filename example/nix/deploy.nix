@@ -31,51 +31,51 @@ let
 
   # Package all static assets together
   staticBundle = pkgs.runCommand "pga-static" { } ''
-    mkdir -p $out
-    cp ${elmApp}/main.js $out/main.js
-    cp ${staticAssets.redoc}/redoc.standalone.js $out/redoc.standalone.js
-    cp ${staticAssets.icono}/icono.min.css $out/icono.min.css
-    cp ${staticAssets.milligram}/milligram.min.css $out/milligram.min.css
-    cp ${../static/app.css} $out/app.css
+        mkdir -p $out
+        cp ${elmApp}/main.js $out/main.js
+        cp ${staticAssets.redoc}/redoc.standalone.js $out/redoc.standalone.js
+        cp ${staticAssets.icono}/icono.min.css $out/icono.min.css
+        cp ${staticAssets.milligram}/milligram.min.css $out/milligram.min.css
+        cp ${../static/app.css} $out/app.css
 
-    cat > $out/index.html <<'EOF'
-<!DOCTYPE HTML>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Main</title>
-  <style>body { padding: 0; margin: 0; }</style>
-  <link rel="stylesheet" href="/icono.min.css" />
-  <link rel="stylesheet" href="/milligram.min.css" />
-  <link rel="stylesheet" href="/app.css" type="text/css" media="screen" />
-  <script src="/main.js"></script>
-</head>
+        cat > $out/index.html <<'EOF'
+    <!DOCTYPE HTML>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Main</title>
+      <style>body { padding: 0; margin: 0; }</style>
+      <link rel="stylesheet" href="/icono.min.css" />
+      <link rel="stylesheet" href="/milligram.min.css" />
+      <link rel="stylesheet" href="/app.css" type="text/css" media="screen" />
+      <script src="/main.js"></script>
+    </head>
 
-<body>
-    <script type="text/javascript">
-        console.log("token: ", sessionStorage.getItem("jwt"))
-        const app = Elm.Main.init({
-            flags: {
-                jwt: sessionStorage.getItem("jwt"),
-                host: "http://pga-api.bitmunge.com",
-                clientHeaders: {
-                  "Accept-Profile": "bluebox",
-                  "Content-Profile": "bluebox"
+    <body>
+        <script type="text/javascript">
+            console.log("token: ", sessionStorage.getItem("jwt"))
+            const app = Elm.Main.init({
+                flags: {
+                    jwt: sessionStorage.getItem("jwt"),
+                    host: "http://pga-api.bitmunge.com",
+                    clientHeaders: {
+                      "Accept-Profile": "bluebox",
+                      "Content-Profile": "bluebox"
+                    }
                 }
-            }
-        })
+            })
 
-        app.ports.loggedIn.subscribe(jwt => {
-            console.log("got token: ", jwt)
-            sessionStorage.setItem("jwt", jwt)
-        });
+            app.ports.loggedIn.subscribe(jwt => {
+                console.log("got token: ", jwt)
+                sessionStorage.setItem("jwt", jwt)
+            });
 
-        app.ports.loggedOut.subscribe(_ => {
-            sessionStorage.removeItem("jwt")
-        });
-    </script>
-<body>
-EOF
+            app.ports.loggedOut.subscribe(_ => {
+                sessionStorage.removeItem("jwt")
+            });
+        </script>
+    <body>
+    EOF
   '';
 
 
@@ -124,6 +124,8 @@ in
       };
 
       script = ''
+        set -xeuo pipefail
+
         echo "Loading PGA database schema and data..."
 
         ${config.services.postgresql.package}/bin/psql -d ${serviceName} -f ${../database/schema.sql}
