@@ -183,6 +183,9 @@ in
       initialScript = pkgs.writeText "pga-init.sql" ''
         -- Grant CREATE privilege on the pga database to allow extension creation
         GRANT CREATE ON DATABASE ${serviceName} TO ${serviceName};
+
+        -- Grant CREATEROLE privilege to allow creating authenticator and other roles
+        ALTER ROLE ${serviceName} WITH CREATEROLE;
       '';
     };
 
