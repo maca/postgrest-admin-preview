@@ -173,7 +173,7 @@ in
       package = pkgs.postgresql_17;
       enable = true;
       enableTCPIP = false;
-      extensions = with pkgs.postgresql_17.pkgs; [ postgis pgjwt pg_stat_statements ];
+      extensions = with pkgs.postgresql_17.pkgs; [ postgis pgjwt ];
       ensureDatabases = [ serviceName ];
       ensureUsers = [
         {
@@ -185,6 +185,9 @@ in
         { name = "bluebox"; }
       ];
       initialScript = pkgs.writeText "pga-init.sql" ''
+        \c ${serviceName}
+        CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+
         GRANT web_anon TO authenticator;
         GRANT bluebox TO authenticator;
         ALTER ROLE bluebox SET search_path TO bluebox, public;
