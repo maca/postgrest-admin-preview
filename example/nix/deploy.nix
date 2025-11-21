@@ -15,6 +15,7 @@ let
     pname = "pga-elm";
     version = "0.0.1";
     src = ../..;
+    srcDir = "example";
 
     buildPhase = ''
       cd example
