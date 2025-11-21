@@ -7,7 +7,11 @@
   };
 
   outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
+    {
+      # Export NixOS module for deployment
+      nixosModules.default = import ./nix/deploy.nix;
+    }
+    // flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
 
