@@ -48,7 +48,14 @@ $$;
 
 -- Configure search_path for bluebox role to use bluebox schema
 -- Users table stays in public schema (default)
-ALTER ROLE bluebox SET search_path TO bluebox, public;
+DO $$
+BEGIN
+  ALTER ROLE bluebox SET search_path TO bluebox, public;
+EXCEPTION
+  WHEN OTHERS THEN
+    NULL;
+END
+$$;
 
 -- Create users table for authentication
 CREATE TABLE IF NOT EXISTS users (
