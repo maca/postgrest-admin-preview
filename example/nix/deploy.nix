@@ -125,9 +125,7 @@ in
 
       script = ''
         set -xeuo pipefail
-
         echo "Loading PGA database schema and data..."
-
         ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${../database/schema.sql}
         ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${bluebox.schema}
 
@@ -138,7 +136,6 @@ in
 
         ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${../database/data.sql}
         ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${../database/permissions.sql}
-
         echo "Database setup completed successfully"
       '';
     };
@@ -174,11 +171,19 @@ in
 
     services.postgresql = {
       enable = true;
+      package = pkgs.postgresql_17.withPackages (ps: [
+        ps.pgjwt
+        ps.postgis
+      ]);
       ensureDatabases = [ serviceName ];
       ensureUsers = [{
         name = serviceName;
         ensureDBOwnership = true;
       }];
+      initialScript = pkgs.writeText "pga-init.sql" ''
+        -- Grant CREATE privilege on the pga database to allow extension creation
+        GRANT CREATE ON DATABASE ${serviceName} TO ${serviceName};
+      '';
     };
 
 
