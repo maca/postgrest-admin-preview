@@ -11,12 +11,22 @@ let
   bluebox = import ./bluebox.nix { inherit pkgs; };
 
   # Fetch pre-built Elm application from GitHub releases
-  # Note: This downloads without hash verification for easier CI/CD
-  elmApp = pkgs.runCommand "pga-elm" {} ''
-    mkdir -p $out
-    ${pkgs.curl}/bin/curl -L -o $out/main.js \
-      https://github.com/maca/postgrest-admin-preview/releases/latest/download/postgrest-admin.js
-  '';
+  elmApp = pkgs.stdenv.mkDerivation {
+    pname = "pga-elm";
+    version = "latest";
+
+    src = pkgs.fetchurl {
+      url = "https://github.com/maca/postgrest-admin-preview/releases/latest/download/postgrest-admin.js";
+      sha256 = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+    };
+
+    dontUnpack = true;
+
+    installPhase = ''
+      mkdir -p $out
+      cp $src $out/main.js
+    '';
+  };
 
 
   # Package all static assets together
