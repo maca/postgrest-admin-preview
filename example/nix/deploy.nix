@@ -147,11 +147,13 @@ in
         root = staticBundle;
 
         locations."/" = {
+          index = "index.html";
           tryFiles = "$uri $uri/ /index.html";
         };
 
         locations."/api/" = {
-          proxyPass = "http://unix:${postgrestSocket}";
+          # Trailing slash removes /api/ prefix when proxying
+          proxyPass = "http://unix:${postgrestSocket}:/";
           extraConfig = ''
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
