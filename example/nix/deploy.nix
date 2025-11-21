@@ -36,7 +36,46 @@ let
     cp ${staticAssets.redoc}/redoc.standalone.js $out/
     cp ${staticAssets.icono}/icono.min.css $out/
     cp ${staticAssets.milligram}/milligram.min.css $out/
-    cp ${../static/index.html} $out/
+    cp ${../static/app.css} $out/
+
+    cat > $out/index.html <<'EOF'
+<!DOCTYPE HTML>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Main</title>
+  <style>body { padding: 0; margin: 0; }</style>
+  <link rel="stylesheet" href="/icono.min.css" />
+  <link rel="stylesheet" href="/milligram.min.css" />
+  <link rel="stylesheet" href="/app.css" type="text/css" media="screen" />
+  <script src="/main.js"></script>
+</head>
+
+<body>
+    <script type="text/javascript">
+        console.log("token: ", sessionStorage.getItem("jwt"))
+        const app = Elm.Main.init({
+            flags: {
+                jwt: sessionStorage.getItem("jwt"),
+                host: "http://pga-api.bitmunge.com",
+                clientHeaders: {
+                  "Accept-Profile": "bluebox",
+                  "Content-Profile": "bluebox"
+                }
+            }
+        })
+
+        app.ports.loggedIn.subscribe(jwt => {
+            console.log("got token: ", jwt)
+            sessionStorage.setItem("jwt", jwt)
+        });
+
+        app.ports.loggedOut.subscribe(_ => {
+            sessionStorage.removeItem("jwt")
+        });
+    </script>
+<body>
+EOF
   '';
 
 
@@ -63,7 +102,8 @@ in
 
   config = mkIf cfg.enable {
     users.users.pga = {
-      isSystemUser = true;
+      isNormalUser = true;
+      # isSystemUser = true;
       group = "web";
       home = dataDir;
       createHome = true;
@@ -147,8 +187,7 @@ in
         root = staticBundle;
 
         locations."/" = {
-          index = "index.html";
-          tryFiles = "$uri $uri/ /index.html";
+          tryFiles = "$uri $uri/ /index.html =404";
         };
       };
 
