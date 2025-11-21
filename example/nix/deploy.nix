@@ -11,14 +11,22 @@ let
   bluebox = import ./bluebox.nix { inherit pkgs; };
 
   # Build Elm application using mkElmDerivation
+  # Create a source tree with example/ content and parent src/ symlinked
+  elmSrc = pkgs.runCommand "elm-src" {} ''
+    mkdir -p $out
+    cp -r ${../.}/* $out/
+    ln -s ${../../src} $out/src-parent
+    # Patch elm.json to use src-parent instead of ../src
+    ${pkgs.jq}/bin/jq '.["source-directories"] = ["src", "src-parent"]' $out/elm.json > $out/elm.json.tmp
+    mv $out/elm.json.tmp $out/elm.json
+  '';
+
   elmApp = pkgs.mkElmDerivation {
     pname = "pga-elm";
     version = "0.0.1";
-    src = ../..;
-    srcDir = "example";
+    src = elmSrc;
 
     buildPhase = ''
-      cd example
       mkdir -p $out
       elm make src/Main.elm --optimize --output=$out/main.js
     '';
