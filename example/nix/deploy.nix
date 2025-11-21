@@ -128,16 +128,16 @@ in
 
         echo "Loading PGA database schema and data..."
 
-        ${config.services.postgresql.package}/bin/psql -d ${serviceName} -f ${../database/schema.sql}
-        ${config.services.postgresql.package}/bin/psql -d ${serviceName} -f ${bluebox.schema}
+        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${../database/schema.sql}
+        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${bluebox.schema}
 
         TMPDIR=$(mktemp -d)
         ${pkgs.unzip}/bin/unzip -q ${bluebox.data} -d "$TMPDIR"
-        ${config.services.postgresql.package}/bin/psql -d ${serviceName} -f "$TMPDIR/bluebox_dataonly_v0.4.sql"
+        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f "$TMPDIR/bluebox_dataonly_v0.4.sql"
         rm -rf "$TMPDIR"
 
-        ${config.services.postgresql.package}/bin/psql -d ${serviceName} -f ${../database/data.sql}
-        ${config.services.postgresql.package}/bin/psql -d ${serviceName} -f ${../database/permissions.sql}
+        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${../database/data.sql}
+        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${../database/permissions.sql}
 
         echo "Database setup completed successfully"
       '';
