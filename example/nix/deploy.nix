@@ -32,11 +32,11 @@ let
   # Package all static assets together
   staticBundle = pkgs.runCommand "pga-static" { } ''
     mkdir -p $out
-    cp ${elmApp}/main.js $out/
-    cp ${staticAssets.redoc}/redoc.standalone.js $out/
-    cp ${staticAssets.icono}/icono.min.css $out/
-    cp ${staticAssets.milligram}/milligram.min.css $out/
-    cp ${../static/app.css} $out/
+    cp ${elmApp}/main.js $out/main.js
+    cp ${staticAssets.redoc}/redoc.standalone.js $out/redoc.standalone.js
+    cp ${staticAssets.icono}/icono.min.css $out/icono.min.css
+    cp ${staticAssets.milligram}/milligram.min.css $out/milligram.min.css
+    cp ${../static/app.css} $out/app.css
 
     cat > $out/index.html <<'EOF'
 <!DOCTYPE HTML>
