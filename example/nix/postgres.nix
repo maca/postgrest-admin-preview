@@ -45,28 +45,14 @@ let
   # Helper script to load all SQL files
   load-sql = pkgs.writeShellScriptBin "load-sql" ''
     ${pgEnvSetup}
+    ${postgresql}/bin/psql --host="$PGHOST" -v ON_ERROR_STOP=1 -d example -f "${bluebox.schema}"
 
-    echo "Loading database schema from database/schema.sql..."
-    ${postgresql}/bin/psql --host="$PGHOST" -d example -f "$PWD/database/schema.sql"
-
-    echo "Loading BlueBox schema from ${bluebox.schema}..."
-    ${postgresql}/bin/psql --host="$PGHOST" -d example -f "${bluebox.schema}"
-
-    echo "Extracting BlueBox data from ${bluebox.data}..."
     TMPDIR=$(mktemp -d)
     ${pkgs.unzip}/bin/unzip -q "${bluebox.data}" -d "$TMPDIR"
-
-    echo "Loading BlueBox data..."
-    ${postgresql}/bin/psql --host="$PGHOST" -d example -f "$TMPDIR/bluebox_dataonly_v0.4.sql"
+    ${postgresql}/bin/psql --host="$PGHOST" -v ON_ERROR_STOP=1 -d example -f "$TMPDIR/bluebox_dataonly_v0.4.sql"
     rm -rf "$TMPDIR"
 
-    echo "Loading sample data from database/data.sql..."
-    ${postgresql}/bin/psql --host="$PGHOST" -d example -f "$PWD/database/data.sql"
-
-    echo "Loading permissions from database/permissions.sql..."
-    ${postgresql}/bin/psql --host="$PGHOST" -d example -f "$PWD/database/permissions.sql"
-
-    echo "Database loaded successfully (BlueBox + custom schema + permissions)"
+    ${postgresql}/bin/psql --host="$PGHOST" -v ON_ERROR_STOP=1 -d example -f "$PWD/database/permissions.sql"
   '';
 
   setup = pkgs.writeShellScriptBin "setup" ''

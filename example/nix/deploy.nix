@@ -133,8 +133,6 @@ in
         ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f "$TMPDIR/bluebox_dataonly_v0.4.sql"
         rm -rf "$TMPDIR"
 
-        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${../database/schema.sql}
-        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${../database/data.sql}
         ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${../database/permissions.sql}
         echo "Database setup completed successfully"
       '';
