@@ -31,7 +31,7 @@ let
     cp ${staticAssets.redoc}/redoc.standalone.js $out/
     cp ${staticAssets.icono}/icono.min.css $out/
     cp ${staticAssets.milligram}/milligram.min.css $out/
-    cp ${../index.html} $out/
+    cp ${../static/index.html} $out/
   '';
 
 
