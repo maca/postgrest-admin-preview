@@ -170,6 +170,7 @@ in
 
 
     services.postgresql = {
+      package = pkgs.postgresql_17;
       enable = true;
       enableTCPIP = false;
       extensions = with pkgs.postgresql_17.pkgs; [ postgis pgjwt ];
