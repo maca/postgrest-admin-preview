@@ -176,16 +176,20 @@ in
         ps.postgis
       ]);
       ensureDatabases = [ serviceName ];
-      ensureUsers = [{
-        name = serviceName;
-        ensureDBOwnership = true;
-      }];
+      ensureUsers = [
+        {
+          name = serviceName;
+          ensureDBOwnership = true;
+          ensurePermissions = { "DATABASE ${serviceName}" = "CREATE"; };
+        }
+        { name = "authenticator"; }
+        { name = "web_anon"; }
+        { name = "bluebox"; }
+      ];
       initialScript = pkgs.writeText "pga-init.sql" ''
-        -- Grant CREATE privilege on the pga database to allow extension creation
-        GRANT CREATE ON DATABASE ${serviceName} TO ${serviceName};
-
-        -- Grant CREATEROLE privilege to allow creating authenticator and other roles
-        ALTER ROLE ${serviceName} WITH CREATEROLE;
+        GRANT web_anon TO authenticator;
+        GRANT bluebox TO authenticator;
+        ALTER ROLE bluebox SET search_path TO bluebox, public;
       '';
     };
 
