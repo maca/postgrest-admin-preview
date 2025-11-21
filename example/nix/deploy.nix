@@ -5,7 +5,7 @@ with lib;
 let
   cfg = config.services.pga;
   dataDir = "/var/lib/pga";
-  postgrestSocket = "/var/run/pga.sock";
+  postgrestSocket = "/run/pga/pga.sock";
   serviceName = "pga";
   staticAssets = import ./static-assets.nix { inherit pkgs; };
   bluebox = import ./bluebox.nix { inherit pkgs; };
