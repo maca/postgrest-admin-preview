@@ -171,10 +171,7 @@ in
 
     services.postgresql = {
       enable = true;
-      package = pkgs.postgresql_17.withPackages (ps: [
-        ps.pgjwt
-        ps.postgis
-      ]);
+      extraPlugins = with pkgs.postgresql_17.pkgs; [ postgis pgjwt ];
       ensureDatabases = [ serviceName ];
       ensureUsers = [
         {
