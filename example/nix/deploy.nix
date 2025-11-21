@@ -172,15 +172,12 @@ in
     services.postgresql = {
       enable = true;
       enableTCPIP = false;
-      extraPlugins = with pkgs.postgresql_17.pkgs; [ postgis pgjwt ];
+      extensions = with pkgs.postgresql_17.pkgs; [ postgis pgjwt ];
       ensureDatabases = [ serviceName ];
       ensureUsers = [
         {
           name = serviceName;
           ensureDBOwnership = true;
-          ensureClauses = {
-            createrole = true;
-          };
         }
         { name = "authenticator"; }
         { name = "web_anon"; }
