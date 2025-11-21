@@ -187,7 +187,17 @@ in
         root = staticBundle;
 
         locations."/" = {
-          tryFiles = "$uri $uri/ /index.html =404";
+          tryFiles = "$uri @fallback";
+        };
+
+        locations."@fallback" = {
+          extraConfig = ''
+            # Only serve index.html if the request has no file extension
+            if ($uri !~ \.[a-zA-Z0-9]+$) {
+              rewrite ^ /index.html break;
+            }
+            return 404;
+          '';
         };
       };
 
