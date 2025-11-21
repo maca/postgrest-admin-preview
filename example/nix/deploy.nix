@@ -10,15 +10,17 @@ let
   staticAssets = import ./static-assets.nix { inherit pkgs; };
   bluebox = import ./bluebox.nix { inherit pkgs; };
 
-
-  # Build Elm application
-  elmApp = pkgs.mkElmPackage {
+  # Build Elm application using mkElmDerivation
+  elmApp = pkgs.mkElmDerivation {
     pname = "pga-elm";
     src = ../..;
-    srcs = import ../elm-srcs.nix;
-    targets = [ "example/src/Main.elm" ];
-    outputJavaScript = true;
-    optimize = true;
+
+    buildPhase = ''
+      cd example
+      elm make src/Main.elm --optimize --output=$out/main.js
+    '';
+
+    installPhase = "mkdir -p $out";
   };
 
 

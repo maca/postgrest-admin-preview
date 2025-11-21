@@ -3,11 +3,19 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    mkElmDerivation.url = "github:jeslie0/mkElmDerivation";
   };
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, nixpkgs, mkElmDerivation }:
     {
       # Export the deployment module from example/
-      nixosModules.default = import ./example/nix/deploy.nix;
+      nixosModules.default = { config, lib, pkgs, ... }:
+        import ./example/nix/deploy.nix {
+          inherit config lib;
+          pkgs = import nixpkgs {
+            system = pkgs.system;
+            overlays = [ mkElmDerivation.overlays.default ];
+          };
+        };
     };
 }
