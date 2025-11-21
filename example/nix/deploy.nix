@@ -13,6 +13,7 @@ let
   # Build Elm application using mkElmDerivation
   elmApp = pkgs.mkElmDerivation {
     pname = "pga-elm";
+    version = "0.0.1";
     src = ../..;
 
     buildPhase = ''
@@ -20,8 +21,6 @@ let
       mkdir -p $out
       elm make src/Main.elm --optimize --output=$out/main.js
     '';
-
-    installPhase = ": # already done in buildPhase";
   };
 
 
