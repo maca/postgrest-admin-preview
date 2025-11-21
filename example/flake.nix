@@ -32,12 +32,12 @@
             scriptsEnv = scripts env;
           in
           pkgs.mkShell {
-            buildInputs = with pkgs; [ elmPackages.elm nodejs ]
-              ++ postgres.buildInputs
-              ++ postgres.scripts
-              ++ postgrestEnv.buildInputs
-              ++ postgrestEnv.scripts
-              ++ scriptsEnv.scripts;
+            buildInputs = with pkgs; [ elmPackages.elm ]
+            ++ postgres.buildInputs
+            ++ postgres.scripts
+            ++ postgrestEnv.buildInputs
+            ++ postgrestEnv.scripts
+            ++ scriptsEnv.scripts;
 
             shellHook = ''
               export PGDATA=$PWD/database/pgdata
