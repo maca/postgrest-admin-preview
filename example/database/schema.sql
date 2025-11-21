@@ -8,54 +8,22 @@ CREATE EXTENSION IF NOT EXISTS pgjwt CASCADE;
 -- Create roles for PostgREST authentication
 -- The authenticator role is used by PostgREST to connect to the database
 -- It can switch to other roles based on the JWT
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'authenticator') THEN
-    CREATE ROLE authenticator NOINHERIT LOGIN;
-  END IF;
-END
-$$;
+CREATE ROLE authenticator NOINHERIT LOGIN;
 
 -- Create web_anon role if it doesn't exist
 -- This is the anonymous/unauthenticated role
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'web_anon') THEN
-    CREATE ROLE web_anon NOLOGIN;
-  END IF;
-END
-$$;
+CREATE ROLE web_anon NOLOGIN;
 
 -- Create authenticated user role for bluebox
 -- This role is used for authenticated users
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'bluebox') THEN
-    CREATE ROLE bluebox NOLOGIN;
-  END IF;
-END
-$$;
+CREATE ROLE bluebox NOLOGIN;
 
-DO $$
-BEGIN
-  GRANT web_anon TO authenticator;
-  GRANT bluebox TO authenticator;
-EXCEPTION
-  WHEN OTHERS THEN
-    NULL;
-END
-$$;
+GRANT web_anon TO authenticator;
+GRANT bluebox TO authenticator;
 
 -- Configure search_path for bluebox role to use bluebox schema
 -- Users table stays in public schema (default)
-DO $$
-BEGIN
-  ALTER ROLE bluebox SET search_path TO bluebox, public;
-EXCEPTION
-  WHEN OTHERS THEN
-    NULL;
-END
-$$;
+ALTER ROLE bluebox SET search_path TO bluebox, public;
 
 -- Create users table for authentication
 CREATE TABLE IF NOT EXISTS users (

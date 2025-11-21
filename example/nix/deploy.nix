@@ -126,7 +126,6 @@ in
       script = ''
         set -xeuo pipefail
         echo "Loading PGA database schema and data..."
-        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${../database/schema.sql}
         ${config.services.postgresql.package}/bin/psql -d ${serviceName} -f ${bluebox.schema}
 
         TMPDIR=$(mktemp -d)
@@ -134,6 +133,7 @@ in
         ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f "$TMPDIR/bluebox_dataonly_v0.4.sql"
         rm -rf "$TMPDIR"
 
+        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${../database/schema.sql}
         ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${../database/data.sql}
         ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${../database/permissions.sql}
         echo "Database setup completed successfully"
@@ -179,19 +179,12 @@ in
         {
           name = serviceName;
           ensureDBOwnership = true;
+          superUser = true;
         }
-        { name = "authenticator"; }
-        { name = "web_anon"; }
-        { name = "bluebox"; }
+        # { name = "authenticator"; }
+        # { name = "web_anon"; }
+        # { name = "bluebox"; }
       ];
-      initialScript = pkgs.writeText "pga-init.sql" ''
-        \c ${serviceName}
-        CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
-
-        GRANT web_anon TO authenticator;
-        GRANT bluebox TO authenticator;
-        ALTER ROLE bluebox SET search_path TO bluebox, public;
-      '';
     };
 
 
