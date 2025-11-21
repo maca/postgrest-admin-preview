@@ -126,7 +126,7 @@ in
       script = ''
         set -xeuo pipefail
         echo "Loading PGA database schema and data..."
-        ${config.services.postgresql.package}/bin/psql -d ${serviceName} -f ${bluebox.schema}
+        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${bluebox.schema}
 
         TMPDIR=$(mktemp -d)
         ${pkgs.unzip}/bin/unzip -q ${bluebox.data} -d "$TMPDIR"
