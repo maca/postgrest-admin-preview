@@ -14,9 +14,10 @@ let
   # Build Elm application
   elmApp = pkgs.stdenv.mkDerivation {
     name = "pga-elm";
-    src = ../.;
+    src = ../..;  # Use repo root to include both src/ and example/src/
     buildInputs = [ pkgs.elmPackages.elm ];
     buildPhase = ''
+      cd example
       mkdir -p $out
       elm make src/Main.elm --optimize --output=$out/main.js
     '';

@@ -10,6 +10,7 @@
     {
       # Export NixOS module for deployment
       nixosModules.default = import ./nix/deploy.nix;
+      nixosModules.pga = import ./nix/deploy.nix;  # Also export with a named attribute
     }
     // flake-utils.lib.eachDefaultSystem (system:
       let
