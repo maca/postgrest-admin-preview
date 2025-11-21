@@ -10,12 +10,11 @@
     {
       # Export the deployment module from example/
       nixosModules.default = { config, lib, pkgs, ... }:
-        import ./example/nix/deploy.nix {
-          inherit config lib;
-          pkgs = import nixpkgs {
-            system = pkgs.system;
-            overlays = [ mkElmDerivation.overlays.default ];
-          };
+        {
+          imports = [ ./example/nix/deploy.nix ];
+
+          # Apply mkElmDerivation overlay
+          nixpkgs.overlays = [ mkElmDerivation.overlays.default ];
         };
     };
 }
