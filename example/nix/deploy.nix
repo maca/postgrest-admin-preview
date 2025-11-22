@@ -187,7 +187,7 @@ in
           name = "authenticator";
           ensureClauses = {
             login = false;
-            inherit = false;
+            "inherit" = false;
           };
         }
         {
