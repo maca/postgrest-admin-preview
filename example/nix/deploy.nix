@@ -146,12 +146,8 @@ in
       enable = true;
       enableTCPIP = false;
       extensions = with pkgs.postgresql_17.pkgs; [ postgis pgjwt ];
-      ensureDatabases = [ serviceName ];
       ensureUsers = [
-        {
-          name = serviceName;
-          ensureDBOwnership = true;
-        }
+        { name = serviceName; }
         {
           name = "authenticator";
           ensureClauses = {
