@@ -115,7 +115,8 @@ in
     systemd.services.pga = {
       description = "PostgREST Admin (PGA)";
       wantedBy = [ "multi-user.target" ];
-      after = [ "network.target" "postgresql.service" ];
+      after = [ "network.target" "postgresql.service" "pga-setup.service" ];
+      requires = [ "pga-setup.service" ];
 
       serviceConfig = {
         Type = "simple";
@@ -199,17 +200,6 @@ in
           tryFiles = "$uri @fallback";
         };
 
-        locations."@fallback" =
-          {
-            extraConfig = ''
-              # Only serve index.html if the request has no file extension
-              if ($uri !~ \.[a-zA-Z0-9]+$) {
-                rewrite ^ /index.html break;
-              }
-              return 404;
-            '';
-          };
-
         locations."/api" = {
           proxyPass = "http://unix:${postgrestSocket}:/";
           extraConfig = ''
@@ -217,6 +207,16 @@ in
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+          '';
+        };
+
+        locations."@fallback" = {
+          extraConfig = ''
+            # Only serve index.html if the request has no file extension
+            if ($uri !~ \.[a-zA-Z0-9]+$) {
+              rewrite ^ /index.html break;
+            }
+            return 404;
           '';
         };
       };
