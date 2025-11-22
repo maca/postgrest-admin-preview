@@ -177,7 +177,7 @@ in
       package = pkgs.postgresql_17;
       enable = true;
       enableTCPIP = false;
-      extensions = with pkgs.postgresql_17.pkgs; [ postgis pgjwt pgcrypto ];
+      extensions = with pkgs.postgresql_17.pkgs; [ postgis pgjwt ];
       ensureDatabases = [ serviceName ];
       ensureUsers = [
         {
