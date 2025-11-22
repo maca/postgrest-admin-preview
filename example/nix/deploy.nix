@@ -156,6 +156,7 @@ in
         set -xeuo pipefail
         echo "Cleaning PGA database schemas..."
         ${config.services.postgresql.package}/bin/psql -d ${serviceName} -c "DROP SCHEMA IF EXISTS bluebox CASCADE;"
+        ${config.services.postgresql.package}/bin/psql -d ${serviceName} -c "DROP SCHEMA IF EXISTS staging CASCADE;"
         ${config.services.postgresql.package}/bin/psql -d ${serviceName} -c "DROP SCHEMA IF EXISTS public CASCADE;"
         ${config.services.postgresql.package}/bin/psql -d ${serviceName} -c "CREATE SCHEMA public;"
 
