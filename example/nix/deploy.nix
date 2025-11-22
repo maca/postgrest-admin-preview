@@ -185,13 +185,13 @@ in
       script = ''
         set -xeuo pipefail
         echo "Creating PGA database..."
-        psql -d postgres -c "DROP DATABASE IF EXISTS ${serviceName};"
-        psql -d postgres -c "CREATE DATABASE ${serviceName} OWNER ${serviceName};"
+        ${config.services.postgresql.package}/bin/psql -d postgres -c "DROP DATABASE IF EXISTS ${serviceName};"
+        ${config.services.postgresql.package}/bin/psql -d postgres -c "CREATE DATABASE ${serviceName} OWNER ${serviceName};"
 
         echo "Creating extensions..."
-        psql -d ${serviceName} -c "CREATE EXTENSION IF NOT EXISTS pgcrypto CASCADE;"
-        psql -d ${serviceName} -c "CREATE EXTENSION IF NOT EXISTS pgjwt CASCADE;"
-        psql -d ${serviceName} -c "CREATE EXTENSION IF NOT EXISTS postgis CASCADE;"
+        ${config.services.postgresql.package}/bin/psql -d ${serviceName} -c "CREATE EXTENSION IF NOT EXISTS pgcrypto CASCADE;"
+        ${config.services.postgresql.package}/bin/psql -d ${serviceName} -c "CREATE EXTENSION IF NOT EXISTS pgjwt CASCADE;"
+        ${config.services.postgresql.package}/bin/psql -d ${serviceName} -c "CREATE EXTENSION IF NOT EXISTS postgis CASCADE;"
       '';
     };
 
