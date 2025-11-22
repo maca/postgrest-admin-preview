@@ -116,8 +116,8 @@ in
     systemd.services.pga = {
       description = "PostgREST Admin (PGA)";
       wantedBy = [ "multi-user.target" ];
-      after = [ "network.target" "postgresql.service" "pga-setup.service" ];
-      requires = [ "pga-setup.service" ];
+      after = [ "network.target" "postgresql.service" "pga-db-load.service" ];
+      requires = [ "pga-db-load.service" ];
 
       serviceConfig = {
         Type = "simple";
@@ -138,39 +138,6 @@ in
         RuntimeDirectory = serviceName;
         RuntimeDirectoryMode = "0755";
       };
-    };
-
-
-    systemd.services.pga-setup = {
-      description = "Setup PGA database schema and load data";
-      after = [ "postgresql.service" ];
-      requires = [ "postgresql.service" ];
-
-      serviceConfig = {
-        Type = "oneshot";
-        User = serviceName;
-        Group = "web";
-      };
-
-      script = ''
-        set -xeuo pipefail
-        echo "Cleaning PGA database schemas..."
-        ${config.services.postgresql.package}/bin/psql -d ${serviceName} -c "DROP SCHEMA IF EXISTS bluebox CASCADE;"
-        ${config.services.postgresql.package}/bin/psql -d ${serviceName} -c "DROP SCHEMA IF EXISTS staging CASCADE;"
-        ${config.services.postgresql.package}/bin/psql -d ${serviceName} -c "DROP SCHEMA IF EXISTS public CASCADE;"
-        ${config.services.postgresql.package}/bin/psql -d ${serviceName} -c "CREATE SCHEMA public;"
-
-        echo "Loading PGA database schema and data..."
-        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${bluebox.schema}
-
-        TMPDIR=$(mktemp -d)
-        ${pkgs.unzip}/bin/unzip -q ${bluebox.data} -d "$TMPDIR"
-        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f "$TMPDIR/bluebox_dataonly_v0.4.sql"
-        rm -rf "$TMPDIR"
-
-        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${../database/permissions.sql}
-        echo "Database setup completed successfully"
-      '';
     };
 
 
@@ -201,13 +168,57 @@ in
           ensureClauses = { login = false; };
         }
       ];
+    };
 
-      # Create extensions in the pga database (runs once as postgres user)
-      initialScript = pkgs.writeText "pg-init-script" ''
-        \c ${serviceName}
-        CREATE EXTENSION IF NOT EXISTS pgcrypto CASCADE;
-        CREATE EXTENSION IF NOT EXISTS pgjwt CASCADE;
-        CREATE EXTENSION IF NOT EXISTS postgis CASCADE;
+
+    systemd.services.pga-db-create = {
+      description = "Create PGA database and extensions";
+      after = [ "postgresql.service" ];
+      requires = [ "postgresql.service" ];
+
+      serviceConfig = {
+        Type = "oneshot";
+        User = "postgres";
+        Group = "postgres";
+      };
+
+      script = ''
+        set -xeuo pipefail
+        echo "Creating PGA database..."
+        psql -d postgres -c "DROP DATABASE IF EXISTS ${serviceName};"
+        psql -d postgres -c "CREATE DATABASE ${serviceName} OWNER ${serviceName};"
+
+        echo "Creating extensions..."
+        psql -d ${serviceName} -c "CREATE EXTENSION IF NOT EXISTS pgcrypto CASCADE;"
+        psql -d ${serviceName} -c "CREATE EXTENSION IF NOT EXISTS pgjwt CASCADE;"
+        psql -d ${serviceName} -c "CREATE EXTENSION IF NOT EXISTS postgis CASCADE;"
+      '';
+    };
+
+
+    systemd.services.pga-db-load = {
+      description = "Load PGA database schema and data";
+      after = [ "postgresql.service" "pga-db-create.service" ];
+      requires = [ "pga-db-create.service" ];
+
+      serviceConfig = {
+        Type = "oneshot";
+        User = serviceName;
+        Group = "web";
+      };
+
+      script = ''
+        set -xeuo pipefail
+        echo "Loading PGA database schema and data..."
+        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${bluebox.schema}
+
+        TMPDIR=$(mktemp -d)
+        ${pkgs.unzip}/bin/unzip -q ${bluebox.data} -d "$TMPDIR"
+        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f "$TMPDIR/bluebox_dataonly_v0.4.sql"
+        rm -rf "$TMPDIR"
+
+        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${../database/permissions.sql}
+        echo "Database load completed successfully"
       '';
     };
 
