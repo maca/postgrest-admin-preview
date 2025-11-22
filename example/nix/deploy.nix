@@ -199,20 +199,19 @@ in
           tryFiles = "$uri @fallback";
         };
 
-        locations."@fallback" = {
-          extraConfig = ''
-            # Only serve index.html if the request has no file extension
-            if ($uri !~ \.[a-zA-Z0-9]+$) {
-              rewrite ^ /index.html break;
-            }
-            return 404;
-          '';
-        };
-      };
+        locations."@fallback" =
+          {
+            extraConfig = ''
+              # Only serve index.html if the request has no file extension
+              if ($uri !~ \.[a-zA-Z0-9]+$) {
+                rewrite ^ /index.html break;
+              }
+              return 404;
+            '';
+          };
 
-      virtualHosts."pga-api.bitmunge.com" = {
-        locations."/" = {
-          proxyPass = "http://unix:${postgrestSocket}";
+        locations."/api" = {
+          proxyPass = "http://unix:${postgrestSocket}:/";
           extraConfig = ''
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;

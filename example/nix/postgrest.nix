@@ -1,4 +1,4 @@
-{ pkgs, env }:
+{ pkgs }:
 
 let
   # Generate postgrest.conf based on environment
@@ -9,11 +9,7 @@ let
     db-anon-role = "web_anon"
     jwt-secret = "DL+P8+muauKgOSqRKqIKMkjcUpLZ5ajXScgA965i/Bg="
     server-host = "127.0.0.1"
-    ${if env == "develop" then ''
     server-port = 9080
-    '' else ''
-    server-unix-socket = "/var/run/pga.sock"
-    ''}log-level = "info"
   '';
 
   run-postgrest = pkgs.writeShellScriptBin "run-postgrest" ''
@@ -42,11 +38,7 @@ let
     trap cleanup INT TERM
 
     echo "PostgREST started with PID: $POSTGREST_PID"
-    ${if env == "develop" then ''
-    echo "Server: http://127.0.0.1:9080"
-    '' else ''
-    echo "Unix socket: /tmp/postgrest-example.sock"
-    ''}wait $POSTGREST_PID
+    wait $POSTGREST_PID
   '';
 
 in
