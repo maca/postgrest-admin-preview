@@ -154,9 +154,10 @@ in
 
       script = ''
         set -xeuo pipefail
-        echo "Resetting PGA database..."
-        ${config.services.postgresql.package}/bin/psql -d postgres -c "DROP DATABASE IF EXISTS ${serviceName};"
-        ${config.services.postgresql.package}/bin/psql -d postgres -c "CREATE DATABASE ${serviceName} OWNER ${serviceName};"
+        echo "Cleaning PGA database schemas..."
+        ${config.services.postgresql.package}/bin/psql -d ${serviceName} -c "DROP SCHEMA IF EXISTS bluebox CASCADE;"
+        ${config.services.postgresql.package}/bin/psql -d ${serviceName} -c "DROP SCHEMA IF EXISTS public CASCADE;"
+        ${config.services.postgresql.package}/bin/psql -d ${serviceName} -c "CREATE SCHEMA public;"
 
         echo "Loading PGA database schema and data..."
         ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${bluebox.schema}
@@ -176,7 +177,7 @@ in
       package = pkgs.postgresql_17;
       enable = true;
       enableTCPIP = false;
-      extensions = with pkgs.postgresql_17.pkgs; [ postgis pgjwt ];
+      extensions = with pkgs.postgresql_17.pkgs; [ postgis pgjwt pgcrypto ];
       ensureDatabases = [ serviceName ];
       ensureUsers = [
         {
@@ -199,6 +200,14 @@ in
           ensureClauses = { login = false; };
         }
       ];
+
+      # Create extensions in the pga database (runs once as postgres user)
+      initialScript = pkgs.writeText "pg-init-script" ''
+        \c ${serviceName}
+        CREATE EXTENSION IF NOT EXISTS pgcrypto CASCADE;
+        CREATE EXTENSION IF NOT EXISTS pgjwt CASCADE;
+        CREATE EXTENSION IF NOT EXISTS postgis CASCADE;
+      '';
     };
 
 
