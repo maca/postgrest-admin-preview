@@ -153,6 +153,10 @@ in
 
       script = ''
         set -xeuo pipefail
+        echo "Resetting PGA database..."
+        ${config.services.postgresql.package}/bin/psql -d postgres -c "DROP DATABASE IF EXISTS ${serviceName};"
+        ${config.services.postgresql.package}/bin/psql -d postgres -c "CREATE DATABASE ${serviceName} OWNER ${serviceName};"
+
         echo "Loading PGA database schema and data..."
         ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${bluebox.schema}
 
