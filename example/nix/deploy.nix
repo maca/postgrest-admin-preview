@@ -166,7 +166,6 @@ in
         ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f "$TMPDIR/bluebox_dataonly_v0.4.sql"
         rm -rf "$TMPDIR"
 
-        ${config.services.postgresql.package}/bin/psql -d ${serviceName} -f ${../database/roles.sql}
         ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${../database/permissions.sql}
         echo "Database setup completed successfully"
       '';
@@ -183,14 +182,22 @@ in
         {
           name = serviceName;
           ensureDBOwnership = true;
+        }
+        {
+          name = "authenticator";
           ensureClauses = {
-            superuser = true;
-            # createrole = true;
+            login = false;
+            inherit = false;
           };
         }
-        # { name = "authenticator"; }
-        # { name = "web_anon"; }
-        # { name = "bluebox"; }
+        {
+          name = "web_anon";
+          ensureClauses = { login = false; };
+        }
+        {
+          name = "bluebox";
+          ensureClauses = { login = false; };
+        }
       ];
     };
 
