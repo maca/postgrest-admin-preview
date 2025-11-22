@@ -115,8 +115,7 @@ in
     systemd.services.pga = {
       description = "PostgREST Admin (PGA)";
       wantedBy = [ "multi-user.target" ];
-      after = [ "network.target" "postgresql.service" "pga-setup.service" ];
-      requires = [ "pga-setup.service" ];
+      after = [ "network.target" "postgresql.service" ];
 
       serviceConfig = {
         Type = "simple";
