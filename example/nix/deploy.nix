@@ -112,33 +112,6 @@ in
     users.groups.web = { };
 
 
-    systemd.services.pga-setup = {
-      description = "Setup PGA database schema and load data";
-      after = [ "postgresql.service" ];
-      requires = [ "postgresql.service" ];
-
-      serviceConfig = {
-        Type = "oneshot";
-        User = serviceName;
-        Group = "web";
-      };
-
-      script = ''
-        set -xeuo pipefail
-        echo "Loading PGA database schema and data..."
-        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${bluebox.schema}
-
-        TMPDIR=$(mktemp -d)
-        ${pkgs.unzip}/bin/unzip -q ${bluebox.data} -d "$TMPDIR"
-        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f "$TMPDIR/bluebox_dataonly_v0.4.sql"
-        rm -rf "$TMPDIR"
-
-        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${../database/permissions.sql}
-        echo "Database setup completed successfully"
-      '';
-    };
-
-
     systemd.services.pga = {
       description = "PostgREST Admin (PGA)";
       wantedBy = [ "multi-user.target" ];
@@ -164,6 +137,34 @@ in
         RuntimeDirectory = serviceName;
         RuntimeDirectoryMode = "0755";
       };
+    };
+
+
+    systemd.services.pga-setup = {
+      description = "Setup PGA database schema and load data";
+      after = [ "postgresql.service" ];
+      requires = [ "postgresql.service" ];
+
+      serviceConfig = {
+        Type = "oneshot";
+        User = serviceName;
+        Group = "web";
+      };
+
+      script = ''
+        set -xeuo pipefail
+        echo "Loading PGA database schema and data..."
+        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${bluebox.schema}
+
+        TMPDIR=$(mktemp -d)
+        ${pkgs.unzip}/bin/unzip -q ${bluebox.data} -d "$TMPDIR"
+        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f "$TMPDIR/bluebox_dataonly_v0.4.sql"
+        rm -rf "$TMPDIR"
+
+        ${config.services.postgresql.package}/bin/psql -d ${serviceName} -f ${../database/roles.sql}
+        ${config.services.postgresql.package}/bin/psql -v ON_ERROR_STOP=1 -d ${serviceName} -f ${../database/permissions.sql}
+        echo "Database setup completed successfully"
+      '';
     };
 
 

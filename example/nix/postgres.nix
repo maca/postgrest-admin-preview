@@ -44,6 +44,7 @@ let
 
   # Helper script to load all SQL files
   load-sql = pkgs.writeShellScriptBin "load-sql" ''
+    set -xeuo pipefail
     ${pgEnvSetup}
     ${postgresql}/bin/psql --host="$PGHOST" -v ON_ERROR_STOP=1 -d example -f "${bluebox.schema}"
 
@@ -52,6 +53,7 @@ let
     ${postgresql}/bin/psql --host="$PGHOST" -v ON_ERROR_STOP=1 -d example -f "$TMPDIR/bluebox_dataonly_v0.4.sql"
     rm -rf "$TMPDIR"
 
+    ${postgresql}/bin/psql --host="$PGHOST" -d example -f "$PWD/database/roles.sql"
     ${postgresql}/bin/psql --host="$PGHOST" -v ON_ERROR_STOP=1 -d example -f "$PWD/database/permissions.sql"
   '';
 

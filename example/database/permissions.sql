@@ -1,14 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgjwt CASCADE;
 CREATE EXTENSION IF NOT EXISTS postgis CASCADE;
 
-CREATE ROLE authenticator NOINHERIT LOGIN;
-CREATE ROLE web_anon NOLOGIN;
-CREATE ROLE bluebox NOLOGIN;
-
-
-GRANT web_anon TO authenticator;
-GRANT bluebox TO authenticator;
-
 
 GRANT USAGE ON SCHEMA bluebox TO web_anon;
 GRANT USAGE ON SCHEMA bluebox TO bluebox;
