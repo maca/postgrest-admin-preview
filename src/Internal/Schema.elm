@@ -1,6 +1,6 @@
 module Internal.Schema exposing
     ( Schema, Column, ColumnType(..)
-    , Constraint(..), Reference
+    , Reference
     , Table, label
     , tablePrimaryKeyName
     , tableToSortedColumnList
@@ -46,14 +46,9 @@ type ColumnType
     | OtherCol String (Maybe String)
 
 
-type Constraint
-    = NoConstraint
-    | PrimaryKey
-    | ForeignKey Reference
-
-
 type alias Column =
-    { constraint : Constraint
+    { primaryKey : Bool
+    , foreignKey : Maybe Reference
     , required : Bool
     , value : Value
     , columnType : ColumnType
@@ -125,15 +120,14 @@ tableToSortedColumnList table =
         |> Dict.toList
         |> List.sortBy
             (\( _, column ) ->
-                case column.constraint of
-                    PrimaryKey ->
-                        0
+                if column.primaryKey then
+                    0
 
-                    ForeignKey _ ->
-                        1
+                else if column.foreignKey /= Nothing then
+                    1
 
-                    NoConstraint ->
-                        2
+                else
+                    2
             )
 
 
@@ -153,17 +147,10 @@ decoder params =
                     |> Decode.andThen
                         (\type_ ->
                             Decode.map3
-                                (\value options description ->
+                                (\value options { primaryKey, foreignKey } ->
                                     ( columnName
-                                    , { constraint =
-                                            description
-                                                |> Maybe.map
-                                                    (columnConstraint params.tableAliases
-                                                        (definitions
-                                                            |> Dict.map (always .properties)
-                                                        )
-                                                    )
-                                                |> Maybe.withDefault NoConstraint
+                                    , { primaryKey = primaryKey
+                                      , foreignKey = foreignKey
                                       , required = List.member columnName requiredCols
                                       , value = value
                                       , options = options
@@ -181,7 +168,19 @@ decoder params =
                                     , Decode.succeed []
                                     ]
                                 )
-                                (Decode.maybe (Decode.field "description" Decode.string))
+                                (Decode.maybe (Decode.field "description" Decode.string)
+                                    |> Decode.map
+                                        (\description ->
+                                            description
+                                                |> Maybe.map
+                                                    (columnConstraint params.tableAliases
+                                                        (definitions
+                                                            |> Dict.map (always .properties)
+                                                        )
+                                                    )
+                                                |> Maybe.withDefault { primaryKey = False, foreignKey = Nothing }
+                                        )
+                                )
                         )
                 )
     in
@@ -240,13 +239,8 @@ tablePrimaryKey : Table -> Maybe ( String, Column )
 tablePrimaryKey { columns } =
     columns
         |> Dict.filter
-            (\_ { constraint } ->
-                case constraint of
-                    PrimaryKey ->
-                        True
-
-                    _ ->
-                        False
+            (\_ column ->
+                column.primaryKey
             )
         |> Dict.toList
         |> List.head
@@ -324,7 +318,7 @@ valueDecoder =
         ]
 
 
-columnConstraint : Dict String String -> Dict String (List String) -> String -> Constraint
+columnConstraint : Dict String String -> Dict String (List String) -> String -> { primaryKey : Bool, foreignKey : Maybe Reference }
 columnConstraint tableAliases colNames description =
     case extractForeignKey description of
         [ tableName, primaryKeyName ] ->
@@ -333,26 +327,29 @@ columnConstraint tableAliases colNames description =
                     Dict.get tableName tableAliases
                         |> Maybe.withDefault tableName
             in
-            ForeignKey
-                { tableName = table
-                , foreignKey = primaryKeyName
-                , labelColumn =
-                    Dict.get table colNames
-                        |> Maybe.andThen
-                            (\requiredCols ->
-                                List.filter
-                                    (\n -> List.member n requiredCols)
-                                    identifiers
-                                    |> List.head
-                            )
-                }
+            { primaryKey = False
+            , foreignKey =
+                Just
+                    { tableName = table
+                    , foreignKey = primaryKeyName
+                    , labelColumn =
+                        Dict.get table colNames
+                            |> Maybe.andThen
+                                (\requiredCols ->
+                                    List.filter
+                                        (\n -> List.member n requiredCols)
+                                        identifiers
+                                        |> List.head
+                                )
+                    }
+            }
 
         _ ->
             if isPrimaryKeyDescription description then
-                PrimaryKey
+                { primaryKey = True, foreignKey = Nothing }
 
             else
-                NoConstraint
+                { primaryKey = False, foreignKey = Nothing }
 
 
 foreignKeyRegex : Regex
@@ -397,8 +394,8 @@ buildReferencedBy schema table =
         (\_ otherTable acc ->
             Dict.foldl
                 (\columnName column columnsAcc ->
-                    case column.constraint of
-                        ForeignKey foreignKey ->
+                    case column.foreignKey of
+                        Just foreignKey ->
                             if foreignKey.tableName == table.name then
                                 { foreignKey = columnName
                                 , tableName = otherTable.name
@@ -409,7 +406,7 @@ buildReferencedBy schema table =
                             else
                                 columnsAcc
 
-                        _ ->
+                        Nothing ->
                             columnsAcc
                 )
                 acc
@@ -423,11 +420,11 @@ buildReferences : Table -> Dict String Reference
 buildReferences table =
     Dict.foldl
         (\colName column acc ->
-            case column.constraint of
-                ForeignKey foreignKey ->
+            case column.foreignKey of
+                Just foreignKey ->
                     Dict.insert colName foreignKey acc
 
-                _ ->
+                Nothing ->
                     acc
         )
         Dict.empty

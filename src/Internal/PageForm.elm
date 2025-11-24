@@ -11,7 +11,7 @@ import Html.Attributes as Attrs
 import Html.Events as Events
 import Http
 import Internal.Cmd as AppCmd exposing (AppCmd)
-import Internal.Schema as Schema exposing (Constraint(..), Table, Value(..))
+import Internal.Schema as Schema exposing (Table, Value(..))
 import Json.Decode as Decode
 import PostgRestAdmin.Client as Client exposing (Client)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
@@ -430,16 +430,13 @@ fieldFromColumn ( name, column ) =
                 )
             ]
     in
-    case column.constraint of
-        ForeignKey _ ->
-            Just (Field.strictAutocomplete attrs)
-
-        PrimaryKey ->
-            Nothing
-
-        NoConstraint ->
-            Just
-                (case column.columnType of
+    if column.primaryKey then
+        Nothing
+    else if column.foreignKey /= Nothing then
+        Just (Field.strictAutocomplete attrs)
+    else
+        Just
+            (case column.columnType of
                     Schema.StringCol ->
                         case
                             column.options
@@ -499,18 +496,13 @@ fieldFromColumn ( name, column ) =
 
 sortColumns : ( String, Schema.Column ) -> ( String, Schema.Column ) -> Order
 sortColumns ( name, column ) ( name_, column_ ) =
-    case ( column.constraint, column_.constraint ) of
-        ( PrimaryKey, _ ) ->
-            LT
-
-        ( _, PrimaryKey ) ->
-            GT
-
-        ( ForeignKey _, _ ) ->
-            LT
-
-        ( _, ForeignKey _ ) ->
-            GT
-
-        _ ->
-            compare name name_
+    if column.primaryKey then
+        LT
+    else if column_.primaryKey then
+        GT
+    else if column.foreignKey /= Nothing then
+        LT
+    else if column_.foreignKey /= Nothing then
+        GT
+    else
+        compare name name_

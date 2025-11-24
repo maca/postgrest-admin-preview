@@ -12,11 +12,7 @@ import Html exposing (Html)
 import Html.Attributes as Attrs
 import Html.Events as Events
 import Internal.Cmd as AppCmd exposing (AppCmd)
-import Internal.Schema as Schema
-    exposing
-        ( Record
-        , Table
-        )
+import Internal.Schema as Schema exposing (Record, Table)
 import PostgRestAdmin.Client as Client exposing (Client, Error)
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath)
 import PostgRestAdmin.Views as Views

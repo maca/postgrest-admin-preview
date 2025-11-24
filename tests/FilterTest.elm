@@ -3,13 +3,7 @@ module FilterTest exposing (suite)
 import Dict
 import Expect
 import Internal.Filter as Filter exposing (..)
-import Internal.Schema
-    exposing
-        ( ColumnType(..)
-        , Constraint(..)
-        , Table
-        , Value(..)
-        )
+import Internal.Schema exposing (ColumnType(..), Table, Value(..))
 import Test exposing (..)
 
 
@@ -197,7 +191,8 @@ table : Table
 table =
     let
         column val colType =
-            { constraint = NoConstraint
+            { primaryKey = False
+            , foreignKey = Nothing
             , required = False
             , value = val
             , columnType = colType

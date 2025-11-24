@@ -26,7 +26,6 @@ import Internal.Schema as Schema
     exposing
         ( Column
         , ColumnType(..)
-        , Constraint(..)
         , Record
         , Table
         , Value
@@ -1487,15 +1486,15 @@ parentReference table =
             Dict.toList table.columns
                 |> List.filterMap
                     (\( colName, col ) ->
-                        case col.constraint of
-                            ForeignKey foreignKey ->
+                        case col.foreignKey of
+                            Just foreignKey ->
                                 if foreignKey.tableName == parent.tableName then
                                     Just ( colName, parent.id )
 
                                 else
                                     Nothing
 
-                            _ ->
+                            Nothing ->
                                 Nothing
                     )
                 |> List.head

@@ -45,7 +45,7 @@ module PostgRestAdmin.Client exposing
 import Bytes exposing (Bytes)
 import Dict exposing (Dict)
 import Http
-import Internal.Schema as Schema exposing (Column, Constraint(..), Table, Value(..))
+import Internal.Schema as Schema exposing (Column, Table, Value(..))
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 import Parser exposing ((|.), (|=), Parser)
@@ -690,9 +690,9 @@ selects table =
 
 
 associationJoin : Column -> Maybe Selectable
-associationJoin { constraint } =
-    case constraint of
-        ForeignKey fk ->
+associationJoin { foreignKey } =
+    case foreignKey of
+        Just fk ->
             fk.labelColumn
                 |> Maybe.map
                     (\n ->
@@ -700,7 +700,7 @@ associationJoin { constraint } =
                             (PG.attributes [ n, fk.foreignKey ])
                     )
 
-        _ ->
+        Nothing ->
             Nothing
 
 
@@ -722,8 +722,8 @@ recordDecoder table =
 
 columnDecoder : String -> Schema.Column -> Decoder Value
 columnDecoder name col =
-    case ( col.constraint, col ) of
-        ( ForeignKey ref, _ ) ->
+    case col.foreignKey of
+        Just ref ->
             Decode.oneOf
                 [ Decode.field ref.tableName
                     (Decode.map2 Tuple.pair
@@ -740,7 +740,7 @@ columnDecoder name col =
                         Ref { tableName = ref.tableName, primaryKey = id, label = label }
                     )
 
-        _ ->
+        Nothing ->
             Decode.field name Schema.valueDecoder
 
 
