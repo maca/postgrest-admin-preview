@@ -22,14 +22,7 @@ import Html.Events as Events
 import Http
 import Inflect
 import Internal.Cmd as AppCmd exposing (AppCmd)
-import Internal.Schema as Schema
-    exposing
-        ( Column
-        , ColumnType(..)
-        , Record
-        , Table
-        , Value
-        )
+import Internal.Schema as Schema exposing (Column, ColumnType(..), Record, Table)
 import Internal.Search as Search exposing (Search)
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -239,7 +232,7 @@ update msg model =
                         |> Task.attempt PageHeightCalculated
                         |> AppCmd.wrap
                     , Task.map2
-                        (\tableWidth -> List.map (\w -> min w (tableWidth / 2)))
+                        (\tableWidth -> List.map (min (tableWidth / 2)))
                         (Dom.getElement model.table.name
                             |> Task.map (\elem -> elem.element.width)
                         )
@@ -1534,32 +1527,4 @@ recordId : Table -> Record -> Maybe String
 recordId table record =
     Schema.tablePrimaryKeyName table
         |> Maybe.andThen (\pkName -> Dict.get pkName record)
-        |> Maybe.andThen valueToString
-
-
-valueToString : Value -> Maybe String
-valueToString val =
-    case val of
-        Schema.String s ->
-            Just s
-
-        Schema.Int i ->
-            Just (String.fromInt i)
-
-        Schema.Float f ->
-            Just (String.fromFloat f)
-
-        Schema.Bool b ->
-            Just
-                (if b then
-                    "true"
-
-                 else
-                    "false"
-                )
-
-        Schema.Blank ->
-            Nothing
-
-        _ ->
-            Nothing
+        |> Maybe.andThen Schema.valueToString

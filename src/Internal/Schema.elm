@@ -7,7 +7,7 @@ module Internal.Schema exposing
     , decoder, valueDecoder
     , Record, Value(..)
     , buildParentReference, buildReferences
-    , valueToString
+    , valueToHumanString, valueToString
     )
 
 {-|
@@ -79,6 +79,18 @@ type Value
     | Blank
 
 
+valueToHumanString : Value -> Maybe String
+valueToHumanString value =
+    case value of
+        Ref ref ->
+            List.filterMap identity [ ref.label, Just ref.primaryKey ]
+                |> String.join " - "
+                |> Just
+
+        _ ->
+            valueToString value
+
+
 valueToString : Value -> Maybe String
 valueToString value =
     case value of
@@ -98,9 +110,7 @@ valueToString value =
             Just (String.fromFloat float)
 
         Ref ref ->
-            List.filterMap identity [ ref.label, Just ref.primaryKey ]
-                |> String.join " - "
-                |> Just
+            Just ref.primaryKey
 
         Blank ->
             Nothing
@@ -147,10 +157,18 @@ decoder params =
                     |> Decode.andThen
                         (\type_ ->
                             Decode.map3
-                                (\value options { primaryKey, foreignKey } ->
+                                (\value options description ->
                                     ( columnName
-                                    , { primaryKey = primaryKey
-                                      , foreignKey = foreignKey
+                                    , { primaryKey =
+                                            description
+                                                |> Maybe.map (String.contains "Primary Key")
+                                                |> Maybe.withDefault False
+                                      , foreignKey =
+                                            description
+                                                |> Maybe.andThen
+                                                    (constraintsFromDescription params.tableAliases
+                                                        (definitions |> Dict.map (always .properties))
+                                                    )
                                       , required = List.member columnName requiredCols
                                       , value = value
                                       , options = options
@@ -168,19 +186,7 @@ decoder params =
                                     , Decode.succeed []
                                     ]
                                 )
-                                (Decode.maybe (Decode.field "description" Decode.string)
-                                    |> Decode.map
-                                        (\description ->
-                                            description
-                                                |> Maybe.map
-                                                    (columnConstraint params.tableAliases
-                                                        (definitions
-                                                            |> Dict.map (always .properties)
-                                                        )
-                                                    )
-                                                |> Maybe.withDefault { primaryKey = False, foreignKey = Nothing }
-                                        )
-                                )
+                                (Decode.maybe (Decode.field "description" Decode.string))
                         )
                 )
     in
@@ -238,10 +244,7 @@ decoder params =
 tablePrimaryKey : Table -> Maybe ( String, Column )
 tablePrimaryKey { columns } =
     columns
-        |> Dict.filter
-            (\_ column ->
-                column.primaryKey
-            )
+        |> Dict.filter (\_ column -> column.primaryKey)
         |> Dict.toList
         |> List.head
 
@@ -318,49 +321,37 @@ valueDecoder =
         ]
 
 
-columnConstraint : Dict String String -> Dict String (List String) -> String -> { primaryKey : Bool, foreignKey : Maybe Reference }
-columnConstraint tableAliases colNames description =
+constraintsFromDescription : Dict String String -> Dict String (List String) -> String -> Maybe Reference
+constraintsFromDescription tableAliases colNames description =
     case extractForeignKey description of
         [ tableName, primaryKeyName ] ->
             let
-                table =
+                foreignTable =
                     Dict.get tableName tableAliases
                         |> Maybe.withDefault tableName
             in
-            { primaryKey = False
-            , foreignKey =
-                Just
-                    { tableName = table
-                    , foreignKey = primaryKeyName
-                    , labelColumn =
-                        Dict.get table colNames
-                            |> Maybe.andThen
-                                (\requiredCols ->
-                                    List.filter
-                                        (\n -> List.member n requiredCols)
-                                        identifiers
-                                        |> List.head
-                                )
-                    }
-            }
+            Just
+                { tableName = foreignTable
+                , foreignKey = primaryKeyName
+                , labelColumn =
+                    Dict.get foreignTable colNames
+                        |> Maybe.andThen
+                            (\requiredCols ->
+                                List.filter
+                                    (\n -> List.member n requiredCols)
+                                    identifiers
+                                    |> List.head
+                            )
+                }
 
         _ ->
-            if isPrimaryKeyDescription description then
-                { primaryKey = True, foreignKey = Nothing }
-
-            else
-                { primaryKey = False, foreignKey = Nothing }
+            Nothing
 
 
 foreignKeyRegex : Regex
 foreignKeyRegex =
     Regex.fromString "fk table='(\\w+)' column='(\\w+)'"
         |> Maybe.withDefault Regex.never
-
-
-isPrimaryKeyDescription : String -> Bool
-isPrimaryKeyDescription description =
-    String.contains "Primary Key" description
 
 
 extractForeignKey : String -> List String

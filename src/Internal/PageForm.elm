@@ -432,77 +432,83 @@ fieldFromColumn ( name, column ) =
     in
     if column.primaryKey then
         Nothing
+
     else if column.foreignKey /= Nothing then
         Just (Field.strictAutocomplete attrs)
+
     else
         Just
             (case column.columnType of
-                    Schema.StringCol ->
-                        case
-                            column.options
-                                |> List.filterMap
-                                    (\value ->
-                                        case value of
-                                            String str ->
-                                                Just str
+                Schema.StringCol ->
+                    case
+                        column.options
+                            |> List.filterMap
+                                (\value ->
+                                    case value of
+                                        String str ->
+                                            Just str
 
-                                            _ ->
-                                                Nothing
-                                    )
-                        of
-                            [] ->
-                                Field.text attrs
+                                        _ ->
+                                            Nothing
+                                )
+                    of
+                        [] ->
+                            Field.text attrs
 
-                            options ->
-                                Field.select (Field.stringOptions options :: attrs)
+                        options ->
+                            Field.select (Field.stringOptions options :: attrs)
 
-                    Schema.TextCol ->
-                        Field.textarea (Field.autogrow True :: attrs)
+                Schema.TextCol ->
+                    Field.textarea (Field.autogrow True :: attrs)
 
-                    Schema.FloatCol ->
-                        Field.float attrs
+                Schema.FloatCol ->
+                    Field.float attrs
 
-                    Schema.IntegerCol ->
-                        Field.int attrs
+                Schema.IntegerCol ->
+                    Field.int attrs
 
-                    Schema.BoolCol ->
-                        Field.checkbox attrs
+                Schema.BoolCol ->
+                    Field.checkbox attrs
 
-                    Schema.TimestampWithoutTimezomeCol ->
-                        Field.datetime attrs
+                Schema.TimestampWithoutTimezomeCol ->
+                    Field.datetime attrs
 
-                    Schema.TimestampCol ->
-                        Field.datetime attrs
+                Schema.TimestampCol ->
+                    Field.datetime attrs
 
-                    Schema.TimeWithoutTimezoneCol ->
-                        Field.datetime attrs
+                Schema.TimeWithoutTimezoneCol ->
+                    Field.datetime attrs
 
-                    Schema.TimeCol ->
-                        Field.datetime attrs
+                Schema.TimeCol ->
+                    Field.datetime attrs
 
-                    Schema.DateCol ->
-                        Field.date attrs
+                Schema.DateCol ->
+                    Field.date attrs
 
-                    Schema.JsonCol ->
-                        Field.textarea (Field.autogrow True :: attrs)
+                Schema.JsonCol ->
+                    Field.textarea (Field.autogrow True :: attrs)
 
-                    Schema.UuidCol ->
-                        Field.text attrs
+                Schema.UuidCol ->
+                    Field.text attrs
 
-                    _ ->
-                        Field.text (Field.disabled True :: attrs)
-                )
+                _ ->
+                    Field.text (Field.disabled True :: attrs)
+            )
 
 
 sortColumns : ( String, Schema.Column ) -> ( String, Schema.Column ) -> Order
 sortColumns ( name, column ) ( name_, column_ ) =
     if column.primaryKey then
         LT
+
     else if column_.primaryKey then
         GT
+
     else if column.foreignKey /= Nothing then
         LT
+
     else if column_.foreignKey /= Nothing then
         GT
+
     else
         compare name name_

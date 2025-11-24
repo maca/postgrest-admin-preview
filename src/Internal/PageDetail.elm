@@ -273,5 +273,5 @@ recordLabel table record =
         |> Maybe.andThen
             (\fieldName ->
                 Dict.get fieldName record
-                    |> Maybe.andThen Schema.valueToString
+                    |> Maybe.andThen Schema.valueToHumanString
             )

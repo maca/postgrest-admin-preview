@@ -78,7 +78,7 @@ renderValue mountPath col value =
                 [ Attrs.href
                     (MountPath.path mountPath (ref.tableName ++ "/" ++ ref.primaryKey))
                 ]
-                [ Schema.valueToString value
+                [ Schema.valueToHumanString value
                     |> Maybe.withDefault ""
                     |> Html.text
                 ]
