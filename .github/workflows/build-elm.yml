@@ -28,6 +28,14 @@ jobs:
         run: |
           elm make src/Main.elm --optimize --output=postgrest-admin.js
 
+      - name: Install uglify-js
+        run: npm install -g uglify-js
+
+      - name: Minify JavaScript
+        working-directory: ./example
+        run: |
+          uglifyjs postgrest-admin.js --compress 'pure_funcs=[F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9],pure_getters,keep_fargs=false,unsafe_comps,unsafe' | uglifyjs --mangle --output postgrest-admin.min.js
+
       - name: Create release
         id: create_release
         uses: ncipollo/release-action@v1
@@ -35,7 +43,9 @@ jobs:
           tag: "build-${{ github.run_number }}"
           name: "Build ${{ github.run_number }}"
           body: "Automated Elm build from commit ${{ github.sha }}"
-          artifacts: "example/postgrest-admin.js"
+          artifacts: |
+            example/postgrest-admin.js
+            example/postgrest-admin.min.js
           allowUpdates: true
           removeArtifacts: true
           makeLatest: true
@@ -46,4 +56,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: elm-app
-          path: example/postgrest-admin.js
+          path: |
+            example/postgrest-admin.js
+            example/postgrest-admin.min.js
