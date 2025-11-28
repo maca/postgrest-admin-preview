@@ -24,7 +24,7 @@ let
 
     installPhase = ''
       mkdir -p $out
-      cp $src $out/main.js
+      cp $src $out/postgrest-admin.min.js
     '';
   };
 
@@ -43,7 +43,7 @@ let
   # Package all static assets together
   staticBundle = pkgs.runCommand "pga-static" { } ''
         mkdir -p $out
-        cp ${elmApp}/main.js $out/main.js
+        cp ${elmApp}/postgrest-admin.min.js $out/postgrest-admin.min.js
         cp ${staticAssets.redoc}/redoc.standalone.js $out/redoc.standalone.js
         cp ${staticAssets.icono}/icono.min.css $out/icono.min.css
         cp ${staticAssets.milligram}/milligram.min.css $out/milligram.min.css
@@ -59,7 +59,7 @@ let
       <link rel="stylesheet" href="/icono.min.css" />
       <link rel="stylesheet" href="/milligram.min.css" />
       <link rel="stylesheet" href="/app.css" type="text/css" media="screen" />
-      <script src="/main.js"></script>
+      <script src="/postgrest-admin.min.js"></script>
     </head>
 
     <body>
