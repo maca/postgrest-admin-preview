@@ -1,7 +1,7 @@
 module PostgRestAdmin exposing
     ( Program, application
     , host, mountPath, clientHeaders
-    , loginUrl, jwt
+    , loginUrl, jwt, loginBannerText
     , onLogin, onAuthFailed, onLogout, onExternalLogin
     , menuLinks, formFields, detailActions
     , tables, tableAliases
@@ -60,6 +60,7 @@ import Internal.PageListing as PageListing exposing (Model)
 import Internal.Schema exposing (Record, Schema)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode exposing (Value)
+import Markdown
 import PostgRestAdmin.Client as Client exposing (AuthScheme, Client, Error(..))
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
 import Postgrest.Client as PG
@@ -547,6 +548,12 @@ viewAuthForm model =
                     ]
                     [ Html.text "Login" ]
                 ]
+            , case model.config.loginBannerText of
+                Just text ->
+                    Markdown.toHtml [ Attrs.class "login-banner" ] text
+
+                Nothing ->
+                    Html.text ""
             ]
         ]
 
@@ -982,6 +989,7 @@ type alias Config flags model msg =
     , flagsDecoder : Decode.Decoder flags
     , clientHeaders : List Http.Header
     , recordsPerPage : Int
+    , loginBannerText : Maybe String
     }
 
 
@@ -1027,6 +1035,8 @@ configDecoder =
             (\headers conf -> Decode.succeed { conf | clientHeaders = headers })
         >> Flag.int "recordsPerPage"
             (\count conf -> Decode.succeed { conf | recordsPerPage = count })
+        >> Flag.string "loginBannerText"
+            (\text conf -> Decode.succeed { conf | loginBannerText = Just text })
 
 
 default : Config f m msg
@@ -1059,6 +1069,7 @@ default =
     , flagsDecoder = Decode.fail "No flags decoder provided"
     , clientHeaders = []
     , recordsPerPage = 50
+    , loginBannerText = Nothing
     }
 
 
@@ -1389,6 +1400,25 @@ Alternatively this can be specified using flags. Program flags take precedence.
 recordsPerPage : Int -> Attribute flags model msg
 recordsPerPage count =
     attrDecoder (\conf -> { conf | recordsPerPage = count })
+
+
+{-| Display a banner text below the login form. The text is rendered as markdown.
+
+    main : PostgRestAdmin.Program Never Never Never
+    main =
+        PostgRestAdmin.application
+            [ PostgRestAdmin.loginBannerText "**Welcome!** Please login to continue."
+            ]
+
+Alternatively the banner text can be specified using flags.
+Program flags take precedence.
+
+    Elm.Main.init({ flags: { loginBannerText: "**Welcome!** Please login to continue." } })
+
+-}
+loginBannerText : String -> Attribute flags model msg
+loginBannerText text =
+    attrDecoder (\conf -> { conf | loginBannerText = Just text })
 
 
 {-| Set default HTTP headers to be included in all Client requests. This is

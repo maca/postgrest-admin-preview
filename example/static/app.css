@@ -497,6 +497,23 @@ a:hover {
     border-radius: 5px;
 }
 
+.login-banner {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f4f4f4;
+    border-radius: 5px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.login-banner p {
+    margin: 0;
+}
+
+.login-banner p + p {
+    margin-top: 10px;
+}
+
 
 .card {
     padding: 2rem;

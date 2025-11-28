@@ -16,8 +16,8 @@ let
     version = "latest";
 
     src = pkgs.fetchurl {
-      url = "https://github.com/maca/postgrest-admin-preview/releases/latest/download/postgrest-admin.js";
-      sha256 = "sha256-NSG4in1Ijwsq1iKDuCzcDZe7HETY9f6rhTPsiajHg3o=";
+      url = "https://github.com/maca/postgrest-admin/releases/latest/download/postgrest-admin.min.js";
+      sha256 = "sha256-ZKF1/Y9oG5rAxqKGtVP6rjZ2j+a4Jm61mmzh1yD1fn0=";
     };
 
     dontUnpack = true;
@@ -62,7 +62,17 @@ let
                     clientHeaders: {
                       "Accept-Profile": "bluebox",
                       "Content-Profile": "bluebox"
-                    }
+                    },
+                    "loginBannerText": "
+                    **Welcome to postgrest-admin demo!**
+
+                    A back-office/admin interface for PostgREST api's.
+
+                    Login with user: 'bluebox@example.com' and password: 'password'.
+
+                    Source code at
+                    [https://github.com/maca/postgrest-admin](https://github.com/maca/postgrest-admin)
+                    "
                 }
             })
 
