@@ -17,7 +17,7 @@ let
 
     src = pkgs.fetchurl {
       url = "https://github.com/maca/postgrest-admin/releases/latest/download/postgrest-admin.min.js";
-      sha256 = "sha256-ZKF1/Y9oG5rAxqKGtVP6rjZ2j+a4Jm61mmzh1yD1fn0=";
+      sha256 = "sha256-AcKJmEihMwsBiiMuWWtSoTsT4D9qjGLQWZLDJJvrBXc=";
     };
 
     dontUnpack = true;
