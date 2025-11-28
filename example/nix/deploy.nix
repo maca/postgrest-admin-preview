@@ -29,6 +29,17 @@ let
   };
 
 
+  loginBannerText = ''
+    **Welcome to postgrest-admin demo!**
+
+    A back-office/admin interface for PostgREST api's.
+
+    Login with user: 'bluebox@example.com' and password: 'password'.
+
+    Source code at
+    [https://github.com/maca/postgrest-admin](https://github.com/maca/postgrest-admin)
+  '';
+
   # Package all static assets together
   staticBundle = pkgs.runCommand "pga-static" { } ''
         mkdir -p $out
@@ -63,16 +74,7 @@ let
                       "Accept-Profile": "bluebox",
                       "Content-Profile": "bluebox"
                     },
-                    "loginBannerText": "
-                    **Welcome to postgrest-admin demo!**
-
-                    A back-office/admin interface for PostgREST api's.
-
-                    Login with user: 'bluebox@example.com' and password: 'password'.
-
-                    Source code at
-                    [https://github.com/maca/postgrest-admin](https://github.com/maca/postgrest-admin)
-                    "
+                    "loginBannerText": ${builtins.toJSON loginBannerText}
                 }
             })
 
