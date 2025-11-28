@@ -73,8 +73,7 @@ let
                     clientHeaders: {
                       "Accept-Profile": "bluebox",
                       "Content-Profile": "bluebox"
-                    },
-                    "loginBannerText": ${builtins.toJSON loginBannerText}
+                    }
                 }
             })
 
@@ -241,10 +240,9 @@ in
           tryFiles = "$uri @fallback";
         };
 
-        locations."~ ^/api(/.*)?$" = {
-          proxyPass = "http://unix:${postgrestSocket}";
+        locations."/api/" = {
+          proxyPass = "http://unix:${postgrestSocket}/";
           extraConfig = ''
-            rewrite ^/api(/.*)?$ $1 break;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
