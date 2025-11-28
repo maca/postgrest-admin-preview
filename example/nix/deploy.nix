@@ -36,8 +36,12 @@ let
 
     Login with user: 'bluebox@example.com' and password: 'password'.
 
-    Source code at
+    postgrest-admin source is hosted at:
     [https://github.com/maca/postgrest-admin](https://github.com/maca/postgrest-admin)
+
+    The data used in this demo is a 3rd party simulation of a back-office
+    database for a DVD Rental chain, available here:
+    [https://github.com/ryanbooz/bluebox](https://github.com/ryanbooz/bluebox)
   '';
 
   # Package all static assets together
