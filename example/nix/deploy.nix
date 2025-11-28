@@ -73,7 +73,8 @@ let
                     clientHeaders: {
                       "Accept-Profile": "bluebox",
                       "Content-Profile": "bluebox"
-                    }
+                    },
+                    "loginBannerText": ${builtins.toJSON loginBannerText}
                 }
             })
 
