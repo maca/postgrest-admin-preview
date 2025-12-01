@@ -269,12 +269,12 @@ in
       };
     };
 
-    users.users.nginx.extraGroups = [ "web" ];
+    users.users.nginx.extraGroups = [ "web" "acme" ];
 
     # ACME (Let's Encrypt) configuration for this domain
     security.acme.certs."pga.bitmunge.com" = {
       webroot = mkDefault "/var/lib/acme/acme-challenge";
-      group = "nginx";
+      group = "acme";
     };
   };
 }
