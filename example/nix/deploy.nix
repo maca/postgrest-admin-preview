@@ -272,6 +272,8 @@ in
 
     users.users.nginx.extraGroups = [ "web" "acme" ];
 
+    networking.firewall.allowedTCPPorts = [ 80 443 ];
+
     security.acme.acceptTerms = mkDefault true;
     security.acme.defaults.email = mkDefault "pga@macario.fastmail.com";
 
