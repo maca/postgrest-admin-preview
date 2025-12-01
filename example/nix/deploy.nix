@@ -271,7 +271,9 @@ in
 
     users.users.nginx.extraGroups = [ "web" "acme" ];
 
-    # ACME (Let's Encrypt) configuration for this domain
+    security.acme.acceptTerms = mkDefault true;
+    security.acme.defaults.email = mkDefault "pga@macario.fastmail.com";
+
     security.acme.certs."pga.bitmunge.com" = {
       webroot = mkDefault "/var/lib/acme/acme-challenge";
       group = "acme";
