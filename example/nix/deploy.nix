@@ -73,8 +73,8 @@ let
             const app = Elm.Main.init({
                 flags: {
                     jwt: sessionStorage.getItem("jwt"),
-                    host: "http://pga.bitmunge.com/api",
-                    loginUrl: "http://pga.bitmunge.com/api/rpc/login",
+                    host: "https://pga.bitmunge.com/api",
+                    loginUrl: "https://pga.bitmunge.com/api/rpc/login",
                     clientHeaders: {
                       "Accept-Profile": "bluebox",
                       "Content-Profile": "bluebox"
