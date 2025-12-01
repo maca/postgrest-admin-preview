@@ -240,6 +240,8 @@ in
 
       virtualHosts."pga.bitmunge.com" = {
         root = staticBundle;
+        forceSSL = true;
+        enableACME = true;
 
         locations."/" = {
           tryFiles = "$uri @fallback";
@@ -268,5 +270,11 @@ in
     };
 
     users.users.nginx.extraGroups = [ "web" ];
+
+    # ACME (Let's Encrypt) configuration for this domain
+    security.acme.certs."pga.bitmunge.com" = {
+      webroot = mkDefault "/var/lib/acme/acme-challenge";
+      group = "nginx";
+    };
   };
 }
