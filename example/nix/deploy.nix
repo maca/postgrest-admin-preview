@@ -32,9 +32,10 @@ let
   loginBannerText = ''
     **Welcome to postgrest-admin demo!**
 
-    A back-office/admin interface for PostgREST api's.
+    An on-the-fly automated back-office/admin interface builder for PostgREST
+    api's, with minimalist configuration.
 
-    Login with user: 'bluebox@example.com' and password: 'password'.
+    Login with user: **bluebox@example.com** and password: **password**.
 
     postgrest-admin source is hosted at:
     [https://github.com/maca/postgrest-admin](https://github.com/maca/postgrest-admin)
