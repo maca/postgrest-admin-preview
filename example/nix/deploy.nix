@@ -116,6 +116,12 @@ in
       default = "/run/postgresql";
       description = "PostgreSQL unix socket directory";
     };
+
+    accessLog = mkOption {
+      type = types.str;
+      default = "/var/log/nginx/pga.access.log";
+      description = "Access log path for the PGA virtual host";
+    };
   };
 
   config = mkIf cfg.enable {
@@ -244,6 +250,10 @@ in
         forceSSL = true;
         enableACME = true;
 
+        extraConfig = ''
+          access_log ${cfg.accessLog};
+        '';
+
         locations."/" = {
           tryFiles = "$uri @fallback";
         };
@@ -271,15 +281,15 @@ in
     };
 
     users.users.nginx.extraGroups = [ "web" "acme" ];
-
     networking.firewall.allowedTCPPorts = [ 80 443 ];
 
-    security.acme.acceptTerms = mkDefault true;
-    security.acme.defaults.email = mkDefault "pga@macario.fastmail.com";
-
-    security.acme.certs."pga.bitmunge.com" = {
-      webroot = mkDefault "/var/lib/acme/acme-challenge";
-      group = "acme";
+    security.acme = {
+      acceptTerms = mkDefault true;
+      defaults.email = mkDefault "pga@macario.fastmail.com";
+      certs."pga.bitmunge.com" = {
+        webroot = mkDefault "/var/lib/acme/acme-challenge";
+        group = "acme";
+      };
     };
   };
 }
