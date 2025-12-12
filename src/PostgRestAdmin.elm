@@ -44,7 +44,6 @@ import Html.Attributes as Attrs
 import Html.Events as Events
 import Http
 import Internal.Cmd as AppCmd exposing (AppCmd)
-import Internal.Flag as Flag
 import Internal.PageDetail as PageDetail
 import Internal.PageForm as PageForm
 import Internal.PageListing as PageListing exposing (Model)
@@ -980,19 +979,20 @@ urlToPath url =
 
 
 configDecoder : Params msg -> Decoder (Params msg)
-configDecoder =
-    Decode.succeed
-        >> hostDecoder
-        >> loginUrlDecoder
-        >> jwtDecoder
-        >> clientHeadersDecoder
-        >> mountPathDecoder
-        >> recordsPerPageDecoder
-        >> menuLinksDecoder
-        >> formFieldsDecoder
-        >> tablesDecoder
-        >> tableAliasesDecoder
-        >> loginBannerTextDecoder
+configDecoder params =
+    Decode.succeed (Config params)
+        |> Decode.andThen hostDecoder
+        |> Decode.andThen loginUrlDecoder
+        |> Decode.andThen jwtDecoder
+        |> Decode.andThen clientHeadersDecoder
+        |> Decode.andThen mountPathDecoder
+        |> Decode.andThen recordsPerPageDecoder
+        |> Decode.andThen menuLinksDecoder
+        |> Decode.andThen formFieldsDecoder
+        |> Decode.andThen tablesDecoder
+        |> Decode.andThen tableAliasesDecoder
+        |> Decode.andThen loginBannerTextDecoder
+        |> Decode.map (\(Config conf) -> conf)
 
 
 defaultConfig : Params msg
@@ -1137,32 +1137,26 @@ withHost : String -> Config msg -> Config msg
 withHost urlStr (Config conf) =
     case Url.fromString urlStr of
         Just u ->
-            Config
-                { conf
-                    | host = u
-                    , loginUrl = { u | path = "/rpc/login" }
-                }
+            Config { conf | host = u, loginUrl = { u | path = "/rpc/login" } }
 
         Nothing ->
             Config conf
 
 
-hostDecoder : Decoder (Params msg) -> Decoder (Params msg)
-hostDecoder =
-    Flag.string "host"
-        (\urlStr conf ->
-            Url.fromString urlStr
-                |> Maybe.map
-                    (\u ->
-                        Decode.succeed
-                            { conf
-                                | host = u
-                                , loginUrl = { u | path = "/rpc/login" }
-                            }
-                    )
-                |> Maybe.withDefault
-                    (Decode.fail "`Config.host` was given an invalid URL")
-        )
+hostDecoder : Config msg -> Decoder (Config msg)
+hostDecoder config =
+    Decode.maybe (Decode.field "host" Decode.string)
+        |> Decode.andThen
+            (\maybeUrlStr ->
+                maybeUrlStr
+                    |> Maybe.map
+                        (\urlStr ->
+                            Url.fromString urlStr
+                                |> Maybe.map (\_ -> Decode.succeed (withHost urlStr config))
+                                |> Maybe.withDefault (Decode.fail "`Config.host` was given an invalid URL")
+                        )
+                    |> Maybe.withDefault (Decode.succeed config)
+            )
 
 
 {-| Specify the login URL for form authentication.
@@ -1184,15 +1178,20 @@ withLoginUrl urlStr (Config conf) =
             Config conf
 
 
-loginUrlDecoder : Decoder (Params msg) -> Decoder (Params msg)
-loginUrlDecoder =
-    Flag.string "loginUrl"
-        (\urlStr conf ->
-            Url.fromString urlStr
-                |> Maybe.map (\u -> Decode.succeed { conf | loginUrl = u })
-                |> Maybe.withDefault
-                    (Decode.fail "`Config.loginUrl` was given an invalid URL")
-        )
+loginUrlDecoder : Config msg -> Decoder (Config msg)
+loginUrlDecoder config =
+    Decode.maybe (Decode.field "loginUrl" Decode.string)
+        |> Decode.andThen
+            (\maybeUrlStr ->
+                maybeUrlStr
+                    |> Maybe.map
+                        (\urlStr ->
+                            Url.fromString urlStr
+                                |> Maybe.map (\_ -> Decode.succeed (withLoginUrl urlStr config))
+                                |> Maybe.withDefault (Decode.fail "`Config.loginUrl` was given an invalid URL")
+                        )
+                    |> Maybe.withDefault (Decode.succeed config)
+            )
 
 
 {-| Set a JWT to authenticate PostgREST requests. You can set an initial JWT
@@ -1210,10 +1209,13 @@ withJwt tokenStr (Config conf) =
     Config { conf | authScheme = Client.jwt tokenStr }
 
 
-jwtDecoder : Decoder (Params msg) -> Decoder (Params msg)
-jwtDecoder =
-    Flag.string "jwt"
-        (\tokenStr conf -> Decode.succeed { conf | authScheme = Client.jwt tokenStr })
+jwtDecoder : Config msg -> Decoder (Config msg)
+jwtDecoder config =
+    Decode.maybe (Decode.field "jwt" Decode.string)
+        |> Decode.map
+            (Maybe.map (\tokenStr -> withJwt tokenStr config)
+                >> Maybe.withDefault config
+            )
 
 
 {-| Set default HTTP headers to be included in all Client requests. This is
@@ -1235,10 +1237,20 @@ withClientHeaders headers (Config conf) =
     Config { conf | clientHeaders = headers }
 
 
-clientHeadersDecoder : Decoder (Params msg) -> Decoder (Params msg)
-clientHeadersDecoder =
-    Flag.headersList "clientHeaders"
-        (\headers conf -> Decode.succeed { conf | clientHeaders = headers })
+clientHeadersDecoder : Config msg -> Decoder (Config msg)
+clientHeadersDecoder config =
+    Decode.maybe
+        (Decode.field "clientHeaders" (Decode.dict Decode.string)
+            |> Decode.map
+                (\dict ->
+                    Dict.toList dict
+                        |> List.map (\( name, value ) -> Http.header name value)
+                )
+        )
+        |> Decode.map
+            (Maybe.map (\headers -> withClientHeaders headers config)
+                >> Maybe.withDefault config
+            )
 
 
 {-| Specify a path prefix for all routes, in case the app is not mounted in the
@@ -1256,10 +1268,13 @@ withMountPath p (Config conf) =
     Config { conf | mountPath = MountPath.fromString p }
 
 
-mountPathDecoder : Decoder (Params msg) -> Decoder (Params msg)
-mountPathDecoder =
-    Flag.string "mountPath"
-        (\p conf -> Decode.succeed { conf | mountPath = MountPath.fromString p })
+mountPathDecoder : Config msg -> Decoder (Config msg)
+mountPathDecoder config =
+    Decode.maybe (Decode.field "mountPath" Decode.string)
+        |> Decode.map
+            (Maybe.map (\p -> withMountPath p config)
+                >> Maybe.withDefault config
+            )
 
 
 {-| Set the number of records to display per page in listing views.
@@ -1276,10 +1291,13 @@ withRecordsPerPage count (Config conf) =
     Config { conf | recordsPerPage = count }
 
 
-recordsPerPageDecoder : Decoder (Params msg) -> Decoder (Params msg)
-recordsPerPageDecoder =
-    Flag.int "recordsPerPage"
-        (\count conf -> Decode.succeed { conf | recordsPerPage = count })
+recordsPerPageDecoder : Config msg -> Decoder (Config msg)
+recordsPerPageDecoder config =
+    Decode.maybe (Decode.field "recordsPerPage" Decode.int)
+        |> Decode.map
+            (Maybe.map (\count -> withRecordsPerPage count config)
+                >> Maybe.withDefault config
+            )
 
 
 {-| Pass a list of links to display in the side menu. The list consists of
@@ -1297,10 +1315,21 @@ withMenuLinks links (Config conf) =
     Config { conf | menuLinks = links }
 
 
-menuLinksDecoder : Decoder (Params msg) -> Decoder (Params msg)
-menuLinksDecoder =
-    Flag.linksList "menuLinks"
-        (\links conf -> Decode.succeed { conf | menuLinks = links })
+menuLinksDecoder : Config msg -> Decoder (Config msg)
+menuLinksDecoder config =
+    Decode.maybe
+        (Decode.field "menuLinks"
+            (Decode.list
+                (Decode.map2 Tuple.pair
+                    (Decode.field "text" Decode.string)
+                    (Decode.field "url" Decode.string)
+                )
+            )
+        )
+        |> Decode.map
+            (Maybe.map (\links -> withMenuLinks links config)
+                >> Maybe.withDefault config
+            )
 
 
 {-| Specify which fields should be present in the edit and create forms,
@@ -1322,12 +1351,15 @@ withFormFields tableName fields (Config conf) =
         }
 
 
-formFieldsDecoder : Decoder (Params msg) -> Decoder (Params msg)
-formFieldsDecoder =
-    Flag.stringListDict "formFields"
-        (\fields conf ->
-            Decode.succeed { conf | formFields = Dict.union fields conf.formFields }
-        )
+formFieldsDecoder : Config msg -> Decoder (Config msg)
+formFieldsDecoder config =
+    Decode.maybe (Decode.field "formFields" (Decode.dict (Decode.list Decode.string)))
+        |> Decode.map
+            (\maybeFields ->
+                maybeFields
+                    |> Maybe.map (Dict.foldl withFormFields config)
+                    |> Maybe.withDefault config
+            )
 
 
 {-| Specify action buttons to be shown in the detail page of a
@@ -1355,12 +1387,8 @@ withDetailActions :
     -> List ( String, Record -> String -> String )
     -> Config msg
     -> Config msg
-withDetailActions tableName actions (Config conf) =
-    Config
-        { conf
-            | detailActions =
-                Dict.insert tableName actions conf.detailActions
-        }
+withDetailActions table actions (Config conf) =
+    Config { conf | detailActions = Dict.insert table actions conf.detailActions }
 
 
 {-| Pass a list of table names to restrict the editable resources, also sets the
@@ -1378,10 +1406,13 @@ withTables tableNames (Config conf) =
     Config { conf | tables = tableNames }
 
 
-tablesDecoder : Decoder (Params msg) -> Decoder (Params msg)
-tablesDecoder =
-    Flag.stringList "tables"
-        (\tableNames conf -> Decode.succeed { conf | tables = tableNames })
+tablesDecoder : Config msg -> Decoder (Config msg)
+tablesDecoder config =
+    Decode.maybe (Decode.field "tables" (Decode.list Decode.string))
+        |> Decode.map
+            (Maybe.map (\tableNames -> withTables tableNames config)
+                >> Maybe.withDefault config
+            )
 
 
 {-| Rename a table referenced in a foreign key. PostgREST OpenAPI generated docs
@@ -1401,10 +1432,13 @@ withTableAliases aliases (Config conf) =
     Config { conf | tableAliases = aliases }
 
 
-tableAliasesDecoder : Decoder (Params msg) -> Decoder (Params msg)
-tableAliasesDecoder =
-    Flag.stringDict "tableAliases"
-        (\aliases conf -> Decode.succeed { conf | tableAliases = aliases })
+tableAliasesDecoder : Config msg -> Decoder (Config msg)
+tableAliasesDecoder config =
+    Decode.maybe (Decode.field "tableAliases" (Decode.dict Decode.string))
+        |> Decode.map
+            (Maybe.map (\aliases -> withTableAliases aliases config)
+                >> Maybe.withDefault config
+            )
 
 
 {-| Display a banner text below the login form. The text is rendered as markdown.
@@ -1421,7 +1455,10 @@ withLoginBannerText text (Config conf) =
     Config { conf | loginBannerText = Just text }
 
 
-loginBannerTextDecoder : Decoder (Params msg) -> Decoder (Params msg)
-loginBannerTextDecoder =
-    Flag.string "loginBannerText"
-        (\text conf -> Decode.succeed { conf | loginBannerText = Just text })
+loginBannerTextDecoder : Config msg -> Decoder (Config msg)
+loginBannerTextDecoder config =
+    Decode.maybe (Decode.field "loginBannerText" Decode.string)
+        |> Decode.map
+            (Maybe.map (\text -> withLoginBannerText text config)
+                >> Maybe.withDefault config
+            )
