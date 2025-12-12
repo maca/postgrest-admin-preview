@@ -27,7 +27,7 @@ path other than `/`.
 -}
 type MountPath
     = MountPath String
-    | Blank
+    | MountPathRoot
 
 
 {-| Build from `String`.
@@ -41,7 +41,7 @@ fromString : String -> MountPath
 fromString m =
     String.nonBlank (removeLeadingOrTrailingSlash m)
         |> Maybe.map MountPath
-        |> Maybe.withDefault Blank
+        |> Maybe.withDefault MountPathRoot
 
 
 {-| Convert to a list of path segments.
@@ -55,7 +55,7 @@ segments mountPath =
         MountPath s ->
             String.split "/" s
 
-        Blank ->
+        MountPathRoot ->
             []
 
 
@@ -70,7 +70,7 @@ path mountPath segment =
         MountPath m ->
             String.join "/" [ "", m, removeLeadingOrTrailingSlash segment ]
 
-        Blank ->
+        MountPathRoot ->
             "/" ++ removeLeadingOrTrailingSlash segment
 
 

@@ -1,11 +1,11 @@
 module PostgRestAdmin exposing
-    ( Program, application, Msg
+    ( Program, application, init, update, view, Msg
     , host, mountPath, clientHeaders, recordsPerPage
     , loginUrl, jwt
     , onLogin, onAuthFailed, onLogout, onExternalLogin, loginBannerText
     , menuLinks, formFields, detailActions
     , tables, tableAliases
-    , configDecoder, init, update, view
+    , configDecoder
     )
 
 {-|
@@ -13,7 +13,7 @@ module PostgRestAdmin exposing
 
 # Init
 
-@docs Program, application, Msg
+@docs Program, application, init, update, view, Msg
 
 
 # Program configuration
@@ -166,8 +166,37 @@ below for all available options.
 application : List (Attribute msg) -> Program msg
 application attrs =
     Browser.application
-        { init = init attrs
-        , update = update
+        { init =
+            \flags url key ->
+                case Decode.decodeValue (configDecoder attrs) flags of
+                    Ok config ->
+                        let
+                            model =
+                                initModel url key config
+                        in
+                        let
+                            ( route, cmd ) =
+                                parseRoute url model
+                        in
+                        ( { model | route = route }
+                        , cmd
+                        )
+
+                    Err error ->
+                        let
+                            model =
+                                initModel url key defaultConfig
+                        in
+                        ( { model | error = Just (Decode.errorToString error) }
+                        , Cmd.none
+                        )
+        , update =
+            update
+                { toInnerModel = identity
+                , toOuterModel = identity
+                , toInnerMsg = Just
+                , toOuterMsg = identity
+                }
         , view = view
         , subscriptions = subscriptions
         , onUrlRequest = LinkClicked
@@ -175,27 +204,31 @@ application attrs =
         }
 
 
-init : List (Attribute msg) -> Value -> Url -> Nav.Key -> ( Model msg, Cmd Msg )
-init attrs flags url key =
-    case
-        Decode.decodeValue (configDecoder attrs) flags
-            |> Result.map (initModel url key)
-    of
-        Ok model ->
-            let
-                ( route, cmd ) =
-                    parseRoute url model
-            in
-            ( { model | route = route }, cmd )
+init :
+    { attrs : List (Attribute msg)
+    , toInnerModel : Model msg -> model
+    , toOuterMsg : Msg -> outerMsg
+    }
+    -> Url
+    -> Nav.Key
+    -> ( model, Cmd outerMsg )
+init params url key =
+    let
+        config =
+            Encode.null
+                |> Decode.decodeValue (buildConfigDecoder params.attrs)
+                |> Result.withDefault defaultConfig
 
-        Err error ->
-            let
-                model =
-                    initModel url key default
-            in
-            ( { model | error = Just (Decode.errorToString error) }
-            , Cmd.none
-            )
+        model =
+            initModel url key config
+    in
+    let
+        ( route, cmd ) =
+            parseRoute url model
+    in
+    ( params.toInnerModel { model | route = route }
+    , Cmd.map params.toOuterMsg cmd
+    )
 
 
 initModel : Url -> Nav.Key -> Config msg -> Model msg
@@ -258,16 +291,36 @@ requestToken model =
 -- UPDATE
 
 
-update : Msg -> Model msg -> ( Model msg, Cmd Msg )
-update msg model =
+update :
+    { toInnerModel : model -> Model msg
+    , toOuterModel : Model msg -> model
+    , toInnerMsg : outerMsg -> Maybe Msg
+    , toOuterMsg : Msg -> outerMsg
+    }
+    -> outerMsg
+    -> model
+    -> ( model, Cmd outerMsg )
+update params outerMsg outerModel =
+    case params.toInnerMsg outerMsg of
+        Nothing ->
+            ( outerModel, Cmd.none )
+
+        Just msg ->
+            internalUpdate msg (params.toInnerModel outerModel)
+                |> Tuple.mapFirst params.toOuterModel
+                |> Tuple.mapSecond (Cmd.map params.toOuterMsg)
+
+
+internalUpdate : Msg -> Model msg -> ( Model msg, Cmd Msg )
+internalUpdate msg model =
     let
         client =
             model.client
     in
     case msg of
-        AuthFieldsChanged innerMsg ->
+        AuthFieldsChanged toInnerMsg ->
             ( { model
-                | authFormField = Field.update innerMsg model.authFormField
+                | authFormField = Field.update toInnerMsg model.authFormField
                 , authFormStatus = Active
               }
             , Cmd.none
@@ -405,9 +458,9 @@ update msg model =
             else
                 ( { model | currentUrl = url }, Cmd.none )
 
-        LoggedIn params ->
-            ( { model | client = Client.updateJwt params.accessToken model.client }
-            , Nav.pushUrl model.key params.path
+        LoggedIn updateParams ->
+            ( { model | client = Client.updateJwt updateParams.accessToken model.client }
+            , Nav.pushUrl model.key updateParams.path
             )
 
         LoggedOut ->
@@ -864,7 +917,6 @@ urlToPath url =
 
 
 -- CONFIG
---
 
 
 type Attribute msg
@@ -896,9 +948,14 @@ type alias Config msg =
     }
 
 
+buildConfigDecoder : List (Attribute msg) -> Decoder (Config msg)
+buildConfigDecoder =
+    List.foldl (\(Attribute attr) -> Decode.map2 (<|) attr) (Decode.succeed defaultConfig)
+
+
 configDecoder : List (Attribute msg) -> Decoder (Config msg)
 configDecoder =
-    List.foldl (\(Attribute attr) -> Decode.map2 (<|) attr) (Decode.succeed default)
+    buildConfigDecoder
         >> Flag.string "host"
             (\urlStr conf ->
                 Url.fromString urlStr
@@ -942,8 +999,8 @@ configDecoder =
             (\text conf -> Decode.succeed { conf | loginBannerText = Just text })
 
 
-default : Config msg
-default =
+defaultConfig : Config msg
+defaultConfig =
     let
         defaultHost =
             { protocol = Http
