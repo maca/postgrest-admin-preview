@@ -1,12 +1,11 @@
 module PostgRestAdmin exposing
-    ( Program, application
-    , host, mountPath, clientHeaders
-    , loginUrl, jwt, loginBannerText
-    , onLogin, onAuthFailed, onLogout, onExternalLogin
+    ( Program, application, Msg
+    , host, mountPath, clientHeaders, recordsPerPage
+    , loginUrl, jwt
+    , onLogin, onAuthFailed, onLogout, onExternalLogin, loginBannerText
     , menuLinks, formFields, detailActions
     , tables, tableAliases
-    , routes
-    , configDecoder, recordsPerPage
+    , configDecoder, init, update, view
     )
 
 {-|
@@ -14,7 +13,7 @@ module PostgRestAdmin exposing
 
 # Init
 
-@docs Program, application
+@docs Program, application, Msg
 
 
 # Program configuration
@@ -22,13 +21,13 @@ module PostgRestAdmin exposing
 
 ## Basics
 
-@docs host, mountPath, clientHeaders
+@docs host, mountPath, clientHeaders, recordsPerPage, routes
 
 
 ## Auth
 
 @docs loginUrl, jwt
-@docs onLogin, onAuthFailed, onLogout, onExternalLogin
+@docs onLogin, onAuthFailed, onLogout, onExternalLogin, loginBannerText
 
 
 ## Customization
@@ -89,28 +88,26 @@ type AuthFormStatus
 {-| An alias to elm's Platform.Program providing the type signature for a
 PostgRestAdmin program.
 -}
-type alias Program flags model msg =
-    Platform.Program Decode.Value (Model flags model msg) (Msg flags model msg)
+type alias Program msg =
+    Platform.Program Decode.Value (Model msg) Msg
 
 
-type alias InitParams flags model msg =
+type alias InitParams msg =
     { client : Client
     , key : Nav.Key
-    , config : Config flags model msg
+    , config : Config msg
     }
 
 
-type alias Model flags model msg =
-    { route : Route flags model msg
+type alias Model msg =
+    { route : Route
     , key : Nav.Key
     , notification : Notification
     , error : Maybe String
     , client : Client
-    , onLogin : String -> Cmd (Msg flags model msg)
+    , onLogin : String -> Cmd Msg
     , currentUrl : Url
-    , mountedApp : MountedApp flags model msg
-    , mountedAppFlags : Result Decode.Error flags
-    , config : Config flags model msg
+    , config : Config msg
     , authFormUrl : Url
     , authFormJwtDecoder : Decoder String
     , authFormJwtEncoder : Dict String String -> Encode.Value
@@ -125,16 +122,14 @@ type Notification
     | NoNotification
 
 
-type Msg flags model msg
-    = ApplicationInit ( MountedAppParams flags model msg, msg )
-    | AuthFieldsChanged (Field.Msg Never)
+type Msg
+    = AuthFieldsChanged (Field.Msg Never)
     | AuthFormSubmitted
     | GotToken (Result Client.Error String)
     | SchemaFetched (Result Client.Error Schema)
     | PageListingChanged PageListing.Msg
     | PageDetailChanged PageDetail.Msg
     | PageFormChanged PageForm.Msg
-    | PageApplicationChanged msg
     | NotificationDismiss
     | NotificationConfirm String
     | NotificationAlert String
@@ -146,13 +141,12 @@ type Msg flags model msg
     | NoOp
 
 
-type Route flags model msg
+type Route
     = RouteRoot
     | RouteLoadingSchema Url
     | RouteListing PageListing.Model
     | RouteDetail PageDetail.Model
     | RouteForm PageForm.Model
-    | RouteApplication
     | RouteNotFound
 
 
@@ -169,10 +163,10 @@ below for all available options.
             ]
 
 -}
-application : List (Attribute f m msg) -> Program f m msg
+application : List (Attribute msg) -> Program msg
 application attrs =
     Browser.application
-        { init = programInit (configDecoder attrs)
+        { init = init attrs
         , update = update
         , view = view
         , subscriptions = subscriptions
@@ -181,11 +175,11 @@ application attrs =
         }
 
 
-programInit : Decode.Decoder (Config f m msg) -> Value -> Url -> Nav.Key -> ( Model f m msg, Cmd (Msg f m msg) )
-programInit decoder flags url key =
+init : List (Attribute msg) -> Value -> Url -> Nav.Key -> ( Model msg, Cmd Msg )
+init attrs flags url key =
     case
-        Decode.decodeValue decoder flags
-            |> Result.map (initModel flags url key)
+        Decode.decodeValue (configDecoder attrs) flags
+            |> Result.map (initModel url key)
     of
         Ok model ->
             let
@@ -197,15 +191,15 @@ programInit decoder flags url key =
         Err error ->
             let
                 model =
-                    initModel flags url key default
+                    initModel url key default
             in
             ( { model | error = Just (Decode.errorToString error) }
             , Cmd.none
             )
 
 
-initModel : Value -> Url -> Nav.Key -> Config f m msg -> Model f m msg
-initModel flags url key configRec =
+initModel : Url -> Nav.Key -> Config msg -> Model msg
+initModel url key configRec =
     { route = RouteRoot
     , key = key
     , notification = NoNotification
@@ -213,8 +207,6 @@ initModel flags url key configRec =
     , client = Client.init configRec.host configRec.authScheme configRec.clientHeaders
     , onLogin = configRec.onLogin >> Cmd.map (always NoOp)
     , currentUrl = url
-    , mountedApp = NoMountedApp
-    , mountedAppFlags = Decode.decodeValue configRec.flagsDecoder flags
     , config = configRec
     , authFormUrl = configRec.loginUrl
     , authFormJwtDecoder = Decode.field "token" Decode.string
@@ -244,7 +236,7 @@ authFormField =
         ]
 
 
-requestToken : Model f m msg -> Cmd (Msg f m msg)
+requestToken : Model msg -> Cmd Msg
 requestToken model =
     Task.attempt GotToken
         (Http.task
@@ -266,49 +258,13 @@ requestToken model =
 -- UPDATE
 
 
-update : Msg f m msg -> Model f m msg -> ( Model f m msg, Cmd (Msg f m msg) )
+update : Msg -> Model msg -> ( Model msg, Cmd Msg )
 update msg model =
     let
         client =
             model.client
     in
     case msg of
-        ApplicationInit ( params, childMsg ) ->
-            let
-                ( app, initCmd ) =
-                    case model.mountedApp of
-                        NoMountedApp ->
-                            case model.mountedAppFlags of
-                                Ok flags ->
-                                    params.init
-                                        { flags = flags
-                                        , client = model.client
-                                        , mountPath = model.config.mountPath
-                                        }
-                                        model.key
-                                        |> Tuple.mapFirst (MountedApp params)
-
-                                Err err ->
-                                    ( MountedAppDecodeFailed err
-                                    , AppCmd.none
-                                    )
-
-                        _ ->
-                            ( model.mountedApp, AppCmd.none )
-
-                ( app_, cmd ) =
-                    updateMountedApp childMsg app
-            in
-            ( { model
-                | mountedApp = app_
-                , route = RouteApplication
-              }
-            , Cmd.batch
-                [ mapCmd PageApplicationChanged initCmd
-                , mapCmd PageApplicationChanged cmd
-                ]
-            )
-
         AuthFieldsChanged innerMsg ->
             ( { model
                 | authFormField = Field.update innerMsg model.authFormField
@@ -333,13 +289,6 @@ update msg model =
               }
             , Cmd.batch
                 [ model.onLogin tokenStr
-                , case model.mountedApp of
-                    MountedApp params _ ->
-                        Task.succeed (params.onLogin updatedClient)
-                            |> Task.perform PageApplicationChanged
-
-                    _ ->
-                        Cmd.none
                 , Client.fetchSchema model.config updatedClient
                     |> Task.attempt SchemaFetched
                 ]
@@ -417,15 +366,6 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        PageApplicationChanged childMsg ->
-            let
-                ( app, cmd ) =
-                    updateMountedApp childMsg model.mountedApp
-            in
-            ( { model | mountedApp = app }
-            , mapCmd PageApplicationChanged cmd
-            )
-
         NotificationDismiss ->
             ( { model | notification = NoNotification }
             , Cmd.none
@@ -493,7 +433,7 @@ update msg model =
 -- VIEW
 
 
-view : Model f m msg -> Browser.Document (Msg f m msg)
+view : Model msg -> Browser.Document Msg
 view model =
     { title = "Admin"
     , body =
@@ -527,7 +467,7 @@ view model =
     }
 
 
-viewAuthForm : Model f m msg -> Html (Msg f m msg)
+viewAuthForm : Model msg -> Html Msg
 viewAuthForm model =
     Html.div
         [ Attrs.class "auth-modal overlay" ]
@@ -558,7 +498,7 @@ viewAuthForm model =
         ]
 
 
-errorMessage : AuthFormStatus -> Html (Msg f m msg)
+errorMessage : AuthFormStatus -> Html Msg
 errorMessage status =
     case status of
         Failure error ->
@@ -594,7 +534,7 @@ errorMessage status =
                 []
 
 
-sideMenu : Model f m msg -> Html (Msg f m msg)
+sideMenu : Model msg -> Html Msg
 sideMenu model =
     Html.div
         [ Attrs.class "side-menu" ]
@@ -616,7 +556,7 @@ sideMenu model =
         ]
 
 
-menuItem : MountPath -> String -> Html (Msg f m msg)
+menuItem : MountPath -> String -> Html Msg
 menuItem mount name =
     Html.li
         []
@@ -626,7 +566,7 @@ menuItem mount name =
         ]
 
 
-extraMenuItem : ( String, String ) -> Html (Msg f m msg)
+extraMenuItem : ( String, String ) -> Html Msg
 extraMenuItem ( linkText, url ) =
     Html.li
         []
@@ -636,7 +576,7 @@ extraMenuItem ( linkText, url ) =
         ]
 
 
-viewNotification : Notification -> Html (Msg f m msg)
+viewNotification : Notification -> Html Msg
 viewNotification notification =
     case notification of
         Confirmation text ->
@@ -649,7 +589,7 @@ viewNotification notification =
             Html.text ""
 
 
-viewNotificationHelp : String -> String -> Html (Msg f m msg)
+viewNotificationHelp : String -> String -> Html Msg
 viewNotificationHelp notificationType message =
     Html.div
         [ Attrs.class "notification"
@@ -661,7 +601,7 @@ viewNotificationHelp notificationType message =
         ]
 
 
-mainContent : Model f m msg -> Html (Msg f m msg)
+mainContent : Model msg -> Html Msg
 mainContent model =
     case model.route of
         RouteRoot ->
@@ -679,19 +619,6 @@ mainContent model =
         RouteForm form ->
             Html.map PageFormChanged (PageForm.view form)
 
-        RouteApplication ->
-            case model.mountedApp of
-                MountedApp program childModel ->
-                    Html.map PageApplicationChanged (program.view childModel)
-
-                MountedAppDecodeFailed err ->
-                    Html.pre
-                        [ Attrs.class "error" ]
-                        [ Html.text (Decode.errorToString err) ]
-
-                NoMountedApp ->
-                    Html.text "Not found"
-
         RouteNotFound ->
             Html.text "Not found"
 
@@ -700,11 +627,10 @@ mainContent model =
 -- SUBSCRIPTIONS
 
 
-subscriptions : Model f m msg -> Sub (Msg f m msg)
+subscriptions : Model msg -> Sub Msg
 subscriptions model =
     Sub.batch
-        [ Sub.map PageApplicationChanged (mountedAppSubscriptions model.mountedApp)
-        , case model.route of
+        [ case model.route of
             RouteListing pageListing ->
                 Sub.map PageListingChanged
                     (PageListing.subscriptions pageListing)
@@ -719,7 +645,7 @@ subscriptions model =
 -- ROUTES
 
 
-parseRoute : Url -> Model f m msg -> ( Route f m msg, Cmd (Msg f m msg) )
+parseRoute : Url -> Model msg -> ( Route, Cmd Msg )
 parseRoute url model =
     if Client.schemaIsLoaded model.client then
         routeCons url
@@ -735,7 +661,7 @@ parseRoute url model =
         )
 
 
-routeCons : Url -> InitParams f m msg -> ( Route f m msg, Cmd (Msg f m msg) )
+routeCons : Url -> InitParams msg -> ( Route, Cmd Msg )
 routeCons url params =
     Parser.parse
         (List.foldr (\p acc -> s p </> acc)
@@ -748,86 +674,65 @@ routeCons url params =
 
 routeParser :
     Url
-    -> InitParams f m msg
-    -> Parser (( Route f m msg, Cmd (Msg f m msg) ) -> a) a
+    -> InitParams msg
+    -> Parser (( Route, Cmd Msg ) -> a) a
 routeParser url params =
-    let
-        appRoutes =
-            case params.config.application of
-                Just ( appParams, parser ) ->
-                    [ Parser.map
-                        (\msg ->
-                            ( RouteApplication
-                            , Task.succeed ( appParams, msg )
-                                |> Task.perform ApplicationInit
-                            )
-                        )
-                        (Parser.map identity parser)
-                    ]
-
-                Nothing ->
-                    []
-    in
     Parser.oneOf
-        (List.concat
-            [ appRoutes
-            , [ -- /
-                Parser.map
-                    ( RouteRoot
-                    , resources params
-                        |> List.head
-                        |> Maybe.map
-                            (\p ->
-                                Nav.pushUrl params.key
-                                    (MountPath.path params.config.mountPath p)
-                            )
-                        |> Maybe.withDefault Cmd.none
+        [ -- /
+          Parser.map
+            ( RouteRoot
+            , resources params
+                |> List.head
+                |> Maybe.map
+                    (\p ->
+                        Nav.pushUrl params.key
+                            (MountPath.path params.config.mountPath p)
                     )
-                    Parser.top
+                |> Maybe.withDefault Cmd.none
+            )
+            Parser.top
 
-              -- /posts/new
-              , Parser.map (\tableName -> initForm params Nothing tableName Nothing)
-                    (Parser.string </> s "new")
+        -- /posts/new
+        , Parser.map (\tableName -> initForm params Nothing tableName Nothing)
+            (Parser.string </> s "new")
 
-              -- /posts/edit
-              , Parser.map (\tableName id -> initForm params Nothing tableName (Just id))
-                    (Parser.string </> Parser.string </> s "edit")
+        -- /posts/edit
+        , Parser.map (\tableName id -> initForm params Nothing tableName (Just id))
+            (Parser.string </> Parser.string </> s "edit")
 
-              -- /posts
-              , Parser.map (initListing params url Nothing) Parser.string
+        -- /posts
+        , Parser.map (initListing params url Nothing) Parser.string
 
-              -- /posts/1
-              , Parser.map (initDetail params)
-                    (Parser.string </> Parser.string)
+        -- /posts/1
+        , Parser.map (initDetail params)
+            (Parser.string </> Parser.string)
 
-              -- /posts/1/comments
-              , Parser.map
-                    (\parentTable parentId ->
-                        Just { tableName = parentTable, id = parentId }
-                            |> initListing params url
-                    )
-                    (Parser.string </> Parser.string </> Parser.string)
+        -- /posts/1/comments
+        , Parser.map
+            (\parentTable parentId ->
+                Just { tableName = parentTable, id = parentId }
+                    |> initListing params url
+            )
+            (Parser.string </> Parser.string </> Parser.string)
 
-              -- /posts/1/comments/new
-              , Parser.map
-                    (\parentTable parentId tableName ->
-                        initForm params
-                            (Just { tableName = parentTable, id = parentId })
-                            tableName
-                            Nothing
-                    )
-                    (Parser.string </> Parser.string </> Parser.string </> s "new")
-              ]
-            ]
-        )
+        -- /posts/1/comments/new
+        , Parser.map
+            (\parentTable parentId tableName ->
+                initForm params
+                    (Just { tableName = parentTable, id = parentId })
+                    tableName
+                    Nothing
+            )
+            (Parser.string </> Parser.string </> Parser.string </> s "new")
+        ]
 
 
 initListing :
-    InitParams f m msg
+    InitParams msg
     -> Url
     -> Maybe { tableName : String, id : String }
     -> String
-    -> ( Route f m msg, Cmd (Msg f m msg) )
+    -> ( Route, Cmd Msg )
 initListing params url parent tableName =
     case Dict.get tableName params.client.schema of
         Just table ->
@@ -849,11 +754,11 @@ initListing params url parent tableName =
 
 
 initForm :
-    InitParams f m msg
+    InitParams msg
     -> Maybe { tableName : String, id : String }
     -> String
     -> Maybe String
-    -> ( Route f m msg, Cmd (Msg f m msg) )
+    -> ( Route, Cmd Msg )
 initForm model parent tableName id =
     case Dict.get tableName model.client.schema of
         Just table ->
@@ -875,10 +780,10 @@ initForm model parent tableName id =
 
 
 initDetail :
-    InitParams f m msg
+    InitParams msg
     -> String
     -> String
-    -> ( Route f m msg, Cmd (Msg f m msg) )
+    -> ( Route, Cmd Msg )
 initDetail model tableName id =
     case Dict.get tableName model.client.schema of
         Just table ->
@@ -906,7 +811,7 @@ initDetail model tableName id =
 -- UTILS
 
 
-resources : { a | client : Client, config : Config f m msg } -> List String
+resources : { a | client : Client, config : Config msg } -> List String
 resources params =
     if List.isEmpty params.config.tables then
         Dict.keys params.client.schema |> List.sort
@@ -915,7 +820,7 @@ resources params =
         params.config.tables
 
 
-mapCmd : (a -> Msg f m b) -> AppCmd a -> Cmd (Msg f m b)
+mapCmd : (a -> Msg) -> AppCmd a -> Cmd Msg
 mapCmd tagger appCmd =
     case appCmd of
         AppCmd.ChildCmd cmd ->
@@ -962,17 +867,16 @@ urlToPath url =
 --
 
 
-type Attribute flag model msg
-    = Attribute (Decoder (Config flag model msg -> Config flag model msg))
+type Attribute msg
+    = Attribute (Decoder (Config msg -> Config msg))
 
 
-type alias Config flags model msg =
+type alias Config msg =
     { host : Url
     , mountPath : MountPath
     , loginUrl : Url
     , authScheme : AuthScheme
     , formFields : Dict String (List String)
-    , application : Maybe ( MountedAppParams flags model msg, Parser (msg -> msg) msg )
     , detailActions : Dict String (List ( String, Record -> String -> String ))
     , tables : List String
     , menuLinks : List ( String, String )
@@ -986,14 +890,13 @@ type alias Config flags model msg =
         -> Sub { path : String, accessToken : String }
     , onLogout : () -> Cmd msg
     , tableAliases : Dict String String
-    , flagsDecoder : Decode.Decoder flags
     , clientHeaders : List Http.Header
     , recordsPerPage : Int
     , loginBannerText : Maybe String
     }
 
 
-configDecoder : List (Attribute flag model msg) -> Decoder (Config flag model msg)
+configDecoder : List (Attribute msg) -> Decoder (Config msg)
 configDecoder =
     List.foldl (\(Attribute attr) -> Decode.map2 (<|) attr) (Decode.succeed default)
         >> Flag.string "host"
@@ -1039,7 +942,7 @@ configDecoder =
             (\text conf -> Decode.succeed { conf | loginBannerText = Just text })
 
 
-default : Config f m msg
+default : Config msg
 default =
     let
         defaultHost =
@@ -1056,7 +959,6 @@ default =
     , mountPath = MountPath.fromString ""
     , loginUrl = { defaultHost | path = "/rpc/login" }
     , formFields = Dict.empty
-    , application = Nothing
     , detailActions = Dict.empty
     , tables = []
     , menuLinks = []
@@ -1066,14 +968,13 @@ default =
     , onExternalLogin = always Sub.none
     , onLogout = always Cmd.none
     , tableAliases = Dict.empty
-    , flagsDecoder = Decode.fail "No flags decoder provided"
     , clientHeaders = []
     , recordsPerPage = 50
     , loginBannerText = Nothing
     }
 
 
-attrDecoder : (Config flags model msg -> Config flags model msg) -> Attribute flags model msg
+attrDecoder : (Config msg -> Config msg) -> Attribute msg
 attrDecoder f =
     Attribute (Decode.succeed f)
 
@@ -1092,7 +993,7 @@ Program flags take precedence.
     Elm.Main.init { flags = { host = "http://localhost:3000" } }
 
 -}
-host : String -> Attribute flags model msg
+host : String -> Attribute msg
 host urlStr =
     case Url.fromString urlStr of
         Just u ->
@@ -1123,7 +1024,7 @@ Program flags take precedence.
     Elm.Main.init { flags = { mountPath = "/back-office" } }
 
 -}
-mountPath : String -> Attribute flags model msg
+mountPath : String -> Attribute msg
 mountPath p =
     attrDecoder (\conf -> { conf | mountPath = MountPath.fromString p })
 
@@ -1142,7 +1043,7 @@ Program flags take precedence.
     Elm.Main.init { flags = { loginUrl = "http://localhost:3000/rpc/login" } }
 
 -}
-loginUrl : String -> Attribute flags model msg
+loginUrl : String -> Attribute msg
 loginUrl urlStr =
     case Url.fromString urlStr of
         Just u ->
@@ -1169,7 +1070,7 @@ Program flags take precedence.
         }
 
 -}
-jwt : String -> Attribute flags model msg
+jwt : String -> Attribute msg
 jwt tokenStr =
     attrDecoder (\conf -> { conf | authScheme = Client.jwt tokenStr })
 
@@ -1196,7 +1097,7 @@ Then subscribe to the corresponding port.
     });
 
 -}
-onLogin : (String -> Cmd msg) -> Attribute flags model msg
+onLogin : (String -> Cmd msg) -> Attribute msg
 onLogin f =
     attrDecoder (\conf -> { conf | onLogin = f })
 
@@ -1231,7 +1132,7 @@ Then wire to the corresponding ports.
     });
 
 -}
-onAuthFailed : (String -> Cmd msg) -> Attribute flags model msg
+onAuthFailed : (String -> Cmd msg) -> Attribute msg
 onAuthFailed f =
     attrDecoder (\conf -> { conf | onAuthFailed = f })
 
@@ -1248,7 +1149,7 @@ onExternalLogin :
      )
      -> Sub { path : String, accessToken : String }
     )
-    -> Attribute flags model msg
+    -> Attribute msg
 onExternalLogin sub =
     attrDecoder (\conf -> { conf | onExternalLogin = sub })
 
@@ -1273,7 +1174,7 @@ Then subscribe to the corresponding port.
     });
 
 -}
-onLogout : (() -> Cmd msg) -> Attribute flags model msg
+onLogout : (() -> Cmd msg) -> Attribute msg
 onLogout f =
     attrDecoder (\conf -> { conf | onLogout = f })
 
@@ -1296,7 +1197,7 @@ Program flags take precedence.
         }
 
 -}
-formFields : String -> List String -> Attribute flags model msg
+formFields : String -> List String -> Attribute msg
 formFields tableName fields =
     attrDecoder
         (\conf ->
@@ -1329,7 +1230,7 @@ and an ID and returns a URL string.
 detailActions :
     String
     -> List ( String, Record -> String -> String )
-    -> Attribute flags model msg
+    -> Attribute msg
 detailActions tableName actions =
     attrDecoder
         (\conf ->
@@ -1355,7 +1256,7 @@ Program flags take precedence.
     Elm.Main.init { flags = { tables = [ "posts", "comments" ] } }
 
 -}
-tables : List String -> Attribute flags model msg
+tables : List String -> Attribute msg
 tables tableNames =
     attrDecoder (\conf -> { conf | tables = tableNames })
 
@@ -1381,7 +1282,7 @@ Program flags take precedence.
         }
 
 -}
-menuLinks : List ( String, String ) -> Attribute flags model msg
+menuLinks : List ( String, String ) -> Attribute msg
 menuLinks links =
     attrDecoder (\conf -> { conf | menuLinks = links })
 
@@ -1397,7 +1298,7 @@ menuLinks links =
 Alternatively this can be specified using flags. Program flags take precedence.
 
 -}
-recordsPerPage : Int -> Attribute flags model msg
+recordsPerPage : Int -> Attribute msg
 recordsPerPage count =
     attrDecoder (\conf -> { conf | recordsPerPage = count })
 
@@ -1413,10 +1314,10 @@ recordsPerPage count =
 Alternatively the banner text can be specified using flags.
 Program flags take precedence.
 
-    Elm.Main.init({ flags: { loginBannerText: "**Welcome!** Please login to continue." } })
+    Elm.Main.init { flags = { loginBannerText = "**Welcome!** Please login to continue." } }
 
 -}
-loginBannerText : String -> Attribute flags model msg
+loginBannerText : String -> Attribute msg
 loginBannerText text =
     attrDecoder (\conf -> { conf | loginBannerText = Just text })
 
@@ -1447,7 +1348,7 @@ Program flags take precedence.
     })
 
 -}
-clientHeaders : List Http.Header -> Attribute flags model msg
+clientHeaders : List Http.Header -> Attribute msg
 clientHeaders headers =
     attrDecoder (\conf -> { conf | clientHeaders = headers })
 
@@ -1473,110 +1374,6 @@ Program flags take precedence.
     })
 
 -}
-tableAliases : Dict String String -> Attribute flags model msg
+tableAliases : Dict String String -> Attribute msg
 tableAliases aliases =
     attrDecoder (\conf -> { conf | tableAliases = aliases })
-
-
-{-| Mount an application on a given path using
-[Url.Parser](https://package.elm-lang.org/packages/elm/url/latest/Url.Parser).
-This is useful if you want to override an existing page or add additional
-behaviour.
-
-The component specification is similar to the specification for
-[Browser.element](https://package.elm-lang.org/packages/elm/browser/latest/Browser#element),
-with the addition of `onLogin` param for which a msg should be provided to be
-sent on successful login.
-
-Note that the type signature changes from
-`PostgRestAdmin.Program Never Never Never` to
-`PostgRestAdmin.Program flags Model Msg` where
-`flags`, `Model` and `Msg` are defined by your application.
-
-The url parser should map to a Msg to be used to `update` your application when
-navigating to this route built with the parameters that the parser defines. You can
-use
-[Url.Parser.oneOf](https://package.elm-lang.org/packages/elm/url/latest/Url.Parser#oneOf)
-to parse many routes.
-
-    main : PostgRestAdmin.Program Flags Model Msg
-    main =
-        PostgRestAdmin.application
-            [ PostgRestAdmin.routes
-                { view = view
-                , update = update
-                , init = init
-                , subscriptions = subscriptions
-                , onLogin = LoggedIn
-                }
-                (Parser.map MyPostLoadedMsg
-                    (s "posts" </> Parser.string </> s "comments")
-                )
-            ]
-
-The mounted application is initialized with a [Client](PostgRestAdmin-Client)
-you can use to perform requests.
-
--}
-routes :
-    { init :
-        { flags : flags
-        , client : Client
-        , mountPath : MountPath
-        }
-        -> Nav.Key
-        -> ( model, AppCmd msg )
-    , view : model -> Html msg
-    , update : msg -> model -> ( model, AppCmd msg )
-    , subscriptions : model -> Sub msg
-    , onLogin : Client -> msg
-    }
-    -> Parser (msg -> msg) msg
-    -> Attribute flags model msg
-routes program parser =
-    attrDecoder (\conf -> { conf | application = Just ( program, parser ) })
-
-
-
--- MOUNTED APP
-
-
-type alias MountedAppParams flags model msg =
-    { init :
-        { flags : flags
-        , client : Client
-        , mountPath : MountPath
-        }
-        -> Nav.Key
-        -> ( model, AppCmd msg )
-    , view : model -> Html msg
-    , update : msg -> model -> ( model, AppCmd msg )
-    , subscriptions : model -> Sub msg
-    , onLogin : Client -> msg
-    }
-
-
-type MountedApp flags model msg
-    = MountedApp (MountedAppParams flags model msg) model
-    | MountedAppDecodeFailed Decode.Error
-    | NoMountedApp
-
-
-updateMountedApp : msg -> MountedApp f m msg -> ( MountedApp f m msg, AppCmd msg )
-updateMountedApp msg mountedApp =
-    case mountedApp of
-        MountedApp params model ->
-            params.update msg model |> Tuple.mapFirst (MountedApp params)
-
-        _ ->
-            ( mountedApp, AppCmd.none )
-
-
-mountedAppSubscriptions : MountedApp f m msg -> Sub msg
-mountedAppSubscriptions mountedApp =
-    case mountedApp of
-        MountedApp params model ->
-            params.subscriptions model
-
-        _ ->
-            Sub.none
