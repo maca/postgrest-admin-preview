@@ -1,11 +1,11 @@
 module PostgRestAdmin exposing
-    ( Program, application, init, update, view, Msg
+    ( Program, application, Msg
     , host, mountPath, clientHeaders, recordsPerPage
     , loginUrl, jwt
     , onLogin, onAuthFailed, onLogout, onExternalLogin, loginBannerText
     , menuLinks, formFields, detailActions
     , tables, tableAliases
-    , configDecoder
+    , Config, configDecoder
     )
 
 {-|
@@ -13,7 +13,7 @@ module PostgRestAdmin exposing
 
 # Init
 
-@docs Program, application, init, update, view, Msg
+@docs Program, application, Msg
 
 
 # Program configuration
@@ -58,7 +58,7 @@ import Internal.PageForm as PageForm
 import Internal.PageListing as PageListing exposing (Model)
 import Internal.Schema exposing (Record, Schema)
 import Json.Decode as Decode exposing (Decoder)
-import Json.Encode as Encode exposing (Value)
+import Json.Encode as Encode
 import Markdown
 import PostgRestAdmin.Client as Client exposing (AuthScheme, Client, Error(..))
 import PostgRestAdmin.MountPath as MountPath exposing (MountPath, path)
@@ -95,7 +95,7 @@ type alias Program msg =
 type alias InitParams msg =
     { client : Client
     , key : Nav.Key
-    , config : Config msg
+    , config : Params msg
     }
 
 
@@ -107,7 +107,7 @@ type alias Model msg =
     , client : Client
     , onLogin : String -> Cmd Msg
     , currentUrl : Url
-    , config : Config msg
+    , config : Params msg
     , authFormUrl : Url
     , authFormJwtDecoder : Decoder String
     , authFormJwtEncoder : Dict String String -> Encode.Value
@@ -172,7 +172,7 @@ application attrs =
                     Ok config ->
                         let
                             model =
-                                initModel url key config
+                                init url key config
                         in
                         let
                             ( route, cmd ) =
@@ -185,54 +185,82 @@ application attrs =
                     Err error ->
                         let
                             model =
-                                initModel url key defaultConfig
+                                init url key defaultConfig
                         in
                         ( { model | error = Just (Decode.errorToString error) }
                         , Cmd.none
                         )
-        , update =
-            update
-                { toInnerModel = identity
-                , toOuterModel = identity
-                , toInnerMsg = Just
-                , toOuterMsg = identity
+        , update = update
+        , view =
+            \model ->
+                { title = "Admin"
+                , body = view model
                 }
-        , view = view
         , subscriptions = subscriptions
         , onUrlRequest = LinkClicked
         , onUrlChange = UrlChanged
         }
 
 
-init :
-    { attrs : List (Attribute msg)
-    , toInnerModel : Model msg -> model
+applicationParams :
+    { toInnerModel : model -> Model msg
+    , toOuterModel : Model msg -> model
+    , toInnerMsg : outerMsg -> Maybe Msg
     , toOuterMsg : Msg -> outerMsg
     }
-    -> Url
-    -> Nav.Key
-    -> ( model, Cmd outerMsg )
-init params url key =
-    let
-        config =
-            Encode.null
-                |> Decode.decodeValue (buildConfigDecoder params.attrs)
-                |> Result.withDefault defaultConfig
+    -> Config msg
+    ->
+        { init : Url -> Nav.Key -> ( model, Cmd outerMsg )
+        , view : model -> Html outerMsg
+        , update : outerMsg -> model -> ( model, Cmd outerMsg )
+        , subscriptions : model -> Sub outerMsg
+        , onUrlRequest : Browser.UrlRequest -> outerMsg
+        , onUrlChange : Url -> outerMsg
+        }
+applicationParams mappings (Config config) =
+    -- config =
+    --     Encode.null
+    --         |> Decode.decodeValue (buildConfigDecoder params.attrs)
+    --         |> Result.withDefault defaultConfig
+    { init =
+        \url key ->
+            let
+                model =
+                    init url key config
 
-        model =
-            initModel url key config
-    in
-    let
-        ( route, cmd ) =
-            parseRoute url model
-    in
-    ( params.toInnerModel { model | route = route }
-    , Cmd.map params.toOuterMsg cmd
-    )
+                ( route, cmd ) =
+                    parseRoute url model
+            in
+            ( mappings.toOuterModel { model | route = route }
+            , Cmd.map mappings.toOuterMsg cmd
+            )
+    , update =
+        \outerMsg outerModel ->
+            case mappings.toInnerMsg outerMsg of
+                Nothing ->
+                    ( outerModel, Cmd.none )
+
+                Just msg ->
+                    update msg (mappings.toInnerModel outerModel)
+                        |> Tuple.mapFirst mappings.toOuterModel
+                        |> Tuple.mapSecond
+                            (Cmd.map mappings.toOuterMsg)
+    , view =
+        mappings.toInnerModel
+            >> view
+            >> Html.div []
+            >> Html.map mappings.toOuterMsg
+    , subscriptions =
+        mappings.toInnerModel
+            >> subscriptions
+            >> Sub.map mappings.toOuterMsg
+    , onUrlRequest = mappings.toOuterMsg << LinkClicked
+    , onUrlChange = mappings.toOuterMsg << UrlChanged
+    }
 
 
-initModel : Url -> Nav.Key -> Config msg -> Model msg
-initModel url key configRec =
+init : Url -> Nav.Key -> Params msg -> Model msg
+init url key configRec =
     { route = RouteRoot
     , key = key
     , notification = NoNotification
@@ -291,28 +319,8 @@ requestToken model =
 -- UPDATE
 
 
-update :
-    { toInnerModel : model -> Model msg
-    , toOuterModel : Model msg -> model
-    , toInnerMsg : outerMsg -> Maybe Msg
-    , toOuterMsg : Msg -> outerMsg
-    }
-    -> outerMsg
-    -> model
-    -> ( model, Cmd outerMsg )
-update params outerMsg outerModel =
-    case params.toInnerMsg outerMsg of
-        Nothing ->
-            ( outerModel, Cmd.none )
-
-        Just msg ->
-            internalUpdate msg (params.toInnerModel outerModel)
-                |> Tuple.mapFirst params.toOuterModel
-                |> Tuple.mapSecond (Cmd.map params.toOuterMsg)
-
-
-internalUpdate : Msg -> Model msg -> ( Model msg, Cmd Msg )
-internalUpdate msg model =
+update : Msg -> Model msg -> ( Model msg, Cmd Msg )
+update msg model =
     let
         client =
             model.client
@@ -486,38 +494,35 @@ internalUpdate msg model =
 -- VIEW
 
 
-view : Model msg -> Browser.Document Msg
+view : Model msg -> List (Html Msg)
 view model =
-    { title = "Admin"
-    , body =
-        case model.error of
-            Just error ->
-                [ Html.h1 [] [ Html.text "Init failed" ]
-                , Html.pre
-                    [ Attrs.class "parse-errors" ]
-                    [ Html.text error ]
-                ]
+    case model.error of
+        Just error ->
+            [ Html.h1 [] [ Html.text "Init failed" ]
+            , Html.pre
+                [ Attrs.class "parse-errors" ]
+                [ Html.text error ]
+            ]
 
-            Nothing ->
-                case model.client.authScheme of
-                    Client.Unset ->
-                        [ viewAuthForm model ]
+        Nothing ->
+            case model.client.authScheme of
+                Client.Unset ->
+                    [ viewAuthForm model ]
 
-                    _ ->
+                _ ->
+                    [ Html.div
+                        []
                         [ Html.div
-                            []
-                            [ Html.div
-                                [ Attrs.class "main-container" ]
-                                [ sideMenu model
-                                , Html.div
-                                    [ Attrs.class "main-area" ]
-                                    [ viewNotification model.notification
-                                    , mainContent model
-                                    ]
+                            [ Attrs.class "main-container" ]
+                            [ sideMenu model
+                            , Html.div
+                                [ Attrs.class "main-area" ]
+                                [ viewNotification model.notification
+                                , mainContent model
                                 ]
                             ]
                         ]
-    }
+                    ]
 
 
 viewAuthForm : Model msg -> Html Msg
@@ -864,7 +869,7 @@ initDetail model tableName id =
 -- UTILS
 
 
-resources : { a | client : Client, config : Config msg } -> List String
+resources : { a | client : Client, config : Params msg } -> List String
 resources params =
     if List.isEmpty params.config.tables then
         Dict.keys params.client.schema |> List.sort
@@ -920,10 +925,10 @@ urlToPath url =
 
 
 type Attribute msg
-    = Attribute (Decoder (Config msg -> Config msg))
+    = Attribute (Decoder (Params msg -> Params msg))
 
 
-type alias Config msg =
+type alias Params msg =
     { host : Url
     , mountPath : MountPath
     , loginUrl : Url
@@ -948,12 +953,16 @@ type alias Config msg =
     }
 
 
-buildConfigDecoder : List (Attribute msg) -> Decoder (Config msg)
+type Config msg
+    = Config (Params msg)
+
+
+buildConfigDecoder : List (Attribute msg) -> Decoder (Params msg)
 buildConfigDecoder =
     List.foldl (\(Attribute attr) -> Decode.map2 (<|) attr) (Decode.succeed defaultConfig)
 
 
-configDecoder : List (Attribute msg) -> Decoder (Config msg)
+configDecoder : List (Attribute msg) -> Decoder (Params msg)
 configDecoder =
     buildConfigDecoder
         >> Flag.string "host"
@@ -999,7 +1008,7 @@ configDecoder =
             (\text conf -> Decode.succeed { conf | loginBannerText = Just text })
 
 
-defaultConfig : Config msg
+defaultConfig : Params msg
 defaultConfig =
     let
         defaultHost =
@@ -1031,7 +1040,7 @@ defaultConfig =
     }
 
 
-attrDecoder : (Config msg -> Config msg) -> Attribute msg
+attrDecoder : (Params msg -> Params msg) -> Attribute msg
 attrDecoder f =
     Attribute (Decode.succeed f)
 
