@@ -11,9 +11,9 @@ port loggedIn : String -> Cmd msg
 port loggedOut : () -> Cmd msg
 
 
-main : PostgRestAdmin.Program Never
+main : PostgRestAdmin.Program
 main =
-    PostgRestAdmin.application
-        [ PostgRestAdmin.onLogin loggedIn
-        , PostgRestAdmin.onLogout loggedOut
-        ]
+    PostgRestAdmin.configure
+        |> PostgRestAdmin.onLogin loggedIn
+        |> PostgRestAdmin.onLogout loggedOut
+        |> PostgRestAdmin.buildProgram

@@ -69,9 +69,11 @@ from PostgREST Open API description.
     import PostgRestAdmin
 
 
-    main : PostgRestAdmin.Program Never Never Never
+    main : PostgRestAdmin.Program
     main =
-        PostgRestAdmin.application []
+        PostgRestAdmin.configure
+            |> PostgRestAdmin.withHost "https://postgrest.example.com"
+            |> PostgRestAdmin.buildProgram
 
 
 Then flags can be passed on `Elm.init`
@@ -88,11 +90,11 @@ Then flags can be passed on `Elm.init`
 
 ### **In Elm configuration**
 
-Configuration params are passed to the PostgRestAdmin program as attributes
+Configuration params are passed to the PostgRestAdmin program using a pipeline
 in the example below.
 
-- [host](https://package.elm-lang.org/packages/maca/postgrest-admin-preview/14.0.3/PostgRestAdmin#host) sets the PostgREST instance host
-- [loginUrl](https://package.elm-lang.org/packages/maca/postgrest-admin-preview/14.0.3/PostgRestAdmin#loginUrl) specifies the URL to POST credentials,
+- [withHost](https://package.elm-lang.org/packages/maca/postgrest-admin-preview/14.0.3/PostgRestAdmin#withHost) sets the PostgREST instance host
+- [withLoginUrl](https://package.elm-lang.org/packages/maca/postgrest-admin-preview/14.0.3/PostgRestAdmin#withLoginUrl) specifies the URL to POST credentials,
   which can be a PostgREST function or an external service if CORS is
   configured correctly
 - [onLogin](https://package.elm-lang.org/packages/maca/postgrest-admin-preview/14.0.3/PostgRestAdmin#onLogin) is a callback triggered with a JWT string
@@ -107,13 +109,13 @@ in the example below.
     port loginSuccess : String -> Cmd msg
 
 
-    main : PostgRestAdmin.Program Never Never Never
+    main : PostgRestAdmin.Program
     main =
-        PostgRestAdmin.application
-            [ PostgRestAdmin.host "https://postgrest.example.com"
-            , PostgRestAdmin.loginUrl "https://postgrest.example.com/rpc/login"
-            , PostgRestAdmin.onLogin loginSuccess
-            ]
+        PostgRestAdmin.configure
+            |> PostgRestAdmin.withHost "https://postgrest.example.com"
+            |> PostgRestAdmin.withLoginUrl "https://postgrest.example.com/rpc/login"
+            |> PostgRestAdmin.onLogin loginSuccess
+            |> PostgRestAdmin.buildProgram
 
 
 
@@ -145,4 +147,4 @@ You can override some listing, the detail for a resource, a form or add
 additional behaviour by *mounting your own application* in as many routes as you
 want.
 
-See [PostgRestAdmin.routes](https://package.elm-lang.org/packages/maca/postgrest-admin-preview/14.0.3/PostgRestAdmin#routes).
+See [PostgRestAdmin.buildAppParams](https://package.elm-lang.org/packages/maca/postgrest-admin-preview/14.0.3/PostgRestAdmin#buildAppParams).
