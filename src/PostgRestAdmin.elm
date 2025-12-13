@@ -226,6 +226,7 @@ buildAppParams mappings (Config config _) =
 
                 ( route, cmd ) =
                     parseRoute newParams model
+                        |> Debug.log "init parse"
             in
             ( mappings.toOuterModel { model | route = route }
             , Cmd.map mappings.toOuterMsg cmd
@@ -367,10 +368,13 @@ update config msg ({ client } as model) =
                 updatedClient =
                     { client | schema = schema }
 
+                updatedModel =
+                    { model | client = updatedClient }
+
                 ( route, cmd ) =
-                    routeCons config model
+                    routeCons config updatedModel
             in
-            ( { model | client = updatedClient, route = route }
+            ( { updatedModel | route = route }
             , cmd
             )
 
@@ -684,7 +688,7 @@ mainContent model =
             Html.text ""
 
         RouteLoadingSchema _ ->
-            Html.text "Not found"
+            Html.text "Not loaded"
 
         RouteListing listing ->
             Html.map PageListingChanged (PageListing.view listing)
@@ -723,7 +727,10 @@ subscriptions config model =
 
 parseRoute : Params msg -> Model -> ( Route, Cmd Msg )
 parseRoute config model =
-    if Client.schemaIsLoaded model.client then
+    if Client.toJwtString model.client == Nothing then
+        ( RouteLoadingSchema model.currentUrl, Cmd.none )
+
+    else if Client.schemaIsLoaded model.client then
         routeCons config model
 
     else
@@ -735,7 +742,7 @@ parseRoute config model =
 routeCons : Params msg -> Model -> ( Route, Cmd Msg )
 routeCons config model =
     Parser.parse
-        (List.foldr (\p acc -> s p </> acc)
+        (List.foldr (\segment acc -> s segment </> acc)
             (routeParser config model)
             (MountPath.segments model.mountPath)
         )
