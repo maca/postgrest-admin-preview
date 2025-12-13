@@ -97,6 +97,8 @@ type alias Client =
     , authScheme : AuthScheme
     , schema : Schema.Schema
     , headers : List Http.Header
+    , tables : List String
+    , tableAliases : Dict String String
     }
 
 
@@ -149,12 +151,21 @@ resetToken client =
 -- CLIENT FUNCTIONS
 
 
-init : Url -> AuthScheme -> List Http.Header -> Client
-init url authScheme headers =
-    { host = url
-    , authScheme = authScheme
+init :
+    { host : Url
+    , authScheme : AuthScheme
+    , headers : List Http.Header
+    , tables : List String
+    , tableAliases : Dict String String
+    }
+    -> Client
+init params =
+    { host = params.host
+    , authScheme = params.authScheme
     , schema = Dict.empty
-    , headers = headers
+    , headers = params.headers
+    , tables = params.tables
+    , tableAliases = params.tableAliases
     }
 
 
@@ -186,18 +197,21 @@ schemaIsLoaded { schema } =
     not (Dict.isEmpty schema)
 
 
-fetchSchema :
-    { a | tables : List String, tableAliases : Dict String String }
-    -> Client
-    -> Task Error Schema.Schema
-fetchSchema config client =
+fetchSchema : Client -> Task Error Schema.Schema
+fetchSchema client =
     task
         { client = client
         , method = "GET"
         , headers = []
         , path = "/"
         , body = Http.emptyBody
-        , resolver = jsonResolver (Schema.decoder config)
+        , resolver =
+            jsonResolver
+                (Schema.decoder
+                    { tables = client.tables
+                    , tableAliases = client.tableAliases
+                    }
+                )
         }
 
 

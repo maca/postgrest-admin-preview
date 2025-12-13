@@ -2,6 +2,7 @@ module PostgRestAdmin exposing
     ( Config(..), Program, configure, buildProgram, buildAppParams
     , onLogin, onAuthFailed, onLogout, onExternalLogin
     , withHost, withLoginUrl, withJwt, withClientHeaders
+    , withFlags
     , withMountPath, withRecordsPerPage
     , withMenuLinks, withFormFields, withDetailActions
     , withTables, withTableAliases
@@ -22,6 +23,7 @@ module PostgRestAdmin exposing
 ## Client
 
 @docs withHost, withLoginUrl, withJwt, withClientHeaders
+@docs withFlags
 @docs withFlags
 
 
@@ -72,7 +74,6 @@ type alias Model =
     { route : Route
     , key : Nav.Key
     , notification : Notification
-    , error : Maybe String
     , client : Client
     , currentUrl : Url
     , authFormUrl : Url
@@ -81,6 +82,11 @@ type alias Model =
     , authFormField : Field.Field Never
     , authFormStatus : AuthFormStatus
     , onLogin : String -> Cmd Msg
+    , mountPath : MountPath
+    , menuLinks : List ( String, String )
+    , loginBannerText : Maybe String
+    , recordsPerPage : Int
+    , configErrors : List String
     }
 
 
@@ -117,7 +123,7 @@ type AuthFormStatus
 
 
 type Config msg
-    = Config (Params msg)
+    = Config (Params msg) (List String)
 
 
 type Msg
@@ -166,7 +172,7 @@ type Notification
 -}
 configure : Config msg
 configure =
-    Config defaultConfig
+    Config defaultConfig []
 
 
 {-| Converts a Config into a Program.
@@ -184,7 +190,7 @@ buildProgram config =
                 config
     in
     Browser.application
-        { init = \_ -> params.init
+        { init = \flags -> params.init (withFlags flags config)
         , update = params.update
         , view = \model -> { title = "Admin", body = [ params.view model ] }
         , subscriptions = params.subscriptions
@@ -201,22 +207,25 @@ buildAppParams :
     }
     -> Config msg
     ->
-        { init : Url -> Nav.Key -> ( model, Cmd outerMsg )
+        { init : Config msg -> Url -> Nav.Key -> ( model, Cmd outerMsg )
         , view : model -> Html outerMsg
         , update : outerMsg -> model -> ( model, Cmd outerMsg )
         , subscriptions : model -> Sub outerMsg
         , onUrlRequest : Browser.UrlRequest -> outerMsg
         , onUrlChange : Url -> outerMsg
         }
-buildAppParams mappings (Config config) =
+buildAppParams mappings (Config config _) =
     { init =
-        \url key ->
+        \newConf url key ->
             let
                 model =
-                    initModel url key config
+                    initModel url key newConf
+
+                (Config newParams _) =
+                    newConf
 
                 ( route, cmd ) =
-                    parseRoute config model.client url key
+                    parseRoute newParams model
             in
             ( mappings.toOuterModel { model | route = route }
             , Cmd.map mappings.toOuterMsg cmd
@@ -234,7 +243,7 @@ buildAppParams mappings (Config config) =
                             (Cmd.map mappings.toOuterMsg)
     , view =
         mappings.toInnerModel
-            >> view config
+            >> view
             >> Html.div []
             >> Html.map mappings.toOuterMsg
     , subscriptions =
@@ -250,13 +259,19 @@ buildAppParams mappings (Config config) =
 -- INIT
 
 
-initModel : Url -> Nav.Key -> Params msg -> Model
-initModel url key configRec =
+initModel : Url -> Nav.Key -> Config msg -> Model
+initModel url key (Config configRec errors) =
     { route = RouteRoot
     , key = key
     , notification = NoNotification
-    , error = Nothing
-    , client = Client.init configRec.host configRec.authScheme configRec.clientHeaders
+    , client =
+        Client.init
+            { host = configRec.host
+            , authScheme = configRec.authScheme
+            , headers = configRec.clientHeaders
+            , tables = configRec.tables
+            , tableAliases = configRec.tableAliases
+            }
     , onLogin = configRec.onLogin >> Cmd.map (always NoOp)
     , currentUrl = url
     , authFormUrl = configRec.loginUrl
@@ -264,6 +279,11 @@ initModel url key configRec =
     , authFormJwtEncoder = Encode.dict identity Encode.string
     , authFormField = authFormField
     , authFormStatus = Ready
+    , mountPath = configRec.mountPath
+    , menuLinks = configRec.menuLinks
+    , loginBannerText = configRec.loginBannerText
+    , recordsPerPage = configRec.recordsPerPage
+    , configErrors = errors
     }
 
 
@@ -306,11 +326,7 @@ requestToken model =
 
 
 update : Params msg -> Msg -> Model -> ( Model, Cmd Msg )
-update config msg model =
-    let
-        client =
-            model.client
-    in
+update config msg ({ client } as model) =
     case msg of
         AuthFieldsChanged toInnerMsg ->
             ( { model
@@ -336,7 +352,7 @@ update config msg model =
               }
             , Cmd.batch
                 [ model.onLogin tokenStr
-                , Client.fetchSchema config updatedClient
+                , Client.fetchSchema updatedClient
                     |> Task.attempt SchemaFetched
                 ]
             )
@@ -352,7 +368,7 @@ update config msg model =
                     { client | schema = schema }
 
                 ( route, cmd ) =
-                    routeCons config client model.currentUrl model.key
+                    routeCons config model
             in
             ( { model | client = updatedClient, route = route }
             , cmd
@@ -440,10 +456,13 @@ update config msg model =
         UrlChanged url ->
             if model.currentUrl.path /= url.path then
                 let
+                    updatedModel =
+                        { model | currentUrl = url }
+
                     ( route, cmd ) =
-                        parseRoute config model.client url model.key
+                        parseRoute config updatedModel
                 in
-                ( { model | route = route, currentUrl = url }, cmd )
+                ( { updatedModel | route = route }, cmd )
 
             else
                 ( { model | currentUrl = url }, Cmd.none )
@@ -476,27 +495,20 @@ update config msg model =
 -- VIEW
 
 
-view : Params msg -> Model -> List (Html Msg)
-view config model =
-    case model.error of
-        Just error ->
-            [ Html.h1 [] [ Html.text "Init failed" ]
-            , Html.pre
-                [ Attrs.class "parse-errors" ]
-                [ Html.text error ]
-            ]
-
-        Nothing ->
+view : Model -> List (Html Msg)
+view model =
+    case model.configErrors of
+        [] ->
             case model.client.authScheme of
                 Client.Unset ->
-                    [ viewAuthForm config model ]
+                    [ viewAuthForm model ]
 
                 _ ->
                     [ Html.div
                         []
                         [ Html.div
                             [ Attrs.class "main-container" ]
-                            [ sideMenu config model
+                            [ sideMenu model
                             , Html.div
                                 [ Attrs.class "main-area" ]
                                 [ viewNotification model.notification
@@ -506,9 +518,28 @@ view config model =
                         ]
                     ]
 
+        errors ->
+            [ Html.div
+                [ Attrs.style "padding" "20px"
+                , Attrs.style "font-family" "monospace"
+                ]
+                [ Html.h1 [] [ Html.text "Configuration Errors" ]
+                , Html.ul
+                    [ Attrs.style "color" "red"
+                    , Attrs.style "line-height" "1.6"
+                    ]
+                    (List.map
+                        (\error ->
+                            Html.li [] [ Html.text error ]
+                        )
+                        errors
+                    )
+                ]
+            ]
 
-viewAuthForm : Params msg -> Model -> Html Msg
-viewAuthForm config model =
+
+viewAuthForm : Model -> Html Msg
+viewAuthForm model =
     Html.div
         [ Attrs.class "auth-modal overlay" ]
         [ Html.div
@@ -528,7 +559,7 @@ viewAuthForm config model =
                     ]
                     [ Html.text "Login" ]
                 ]
-            , case config.loginBannerText of
+            , case model.loginBannerText of
                 Just text ->
                     Markdown.toHtml [ Attrs.class "login-banner" ] text
 
@@ -574,14 +605,14 @@ errorMessage status =
                 []
 
 
-sideMenu : Params msg -> Model -> Html Msg
-sideMenu config model =
+sideMenu : Model -> Html Msg
+sideMenu model =
     Html.div
         [ Attrs.class "side-menu" ]
         [ Html.aside
             [ Attrs.class "resources-menu" ]
-            [ Html.ul [] (List.map (menuItem config.mountPath) (resources config model.client))
-            , Html.ul [] (List.map extraMenuItem config.menuLinks)
+            [ Html.ul [] (List.map (menuItem model.mountPath) (resources model.client))
+            , Html.ul [] (List.map extraMenuItem model.menuLinks)
             ]
         , Html.div
             [ Attrs.class "account-management" ]
@@ -690,58 +721,40 @@ subscriptions config model =
 -- ROUTES
 
 
-parseRoute : Params msg -> Client -> Url -> Nav.Key -> ( Route, Cmd Msg )
-parseRoute config client url key =
-    if Client.schemaIsLoaded client then
-        routeCons config client url key
+parseRoute : Params msg -> Model -> ( Route, Cmd Msg )
+parseRoute config model =
+    if Client.schemaIsLoaded model.client then
+        routeCons config model
 
     else
-        ( RouteLoadingSchema url
-        , Task.attempt SchemaFetched
-            (Client.fetchSchema config client)
+        ( RouteLoadingSchema model.currentUrl
+        , Task.attempt SchemaFetched (Client.fetchSchema model.client)
         )
 
 
-routeCons :
-    Params msg
-    -> Client
-    -> Url
-    -> Nav.Key
-    -> ( Route, Cmd Msg )
-routeCons config client url nav =
+routeCons : Params msg -> Model -> ( Route, Cmd Msg )
+routeCons config model =
     Parser.parse
         (List.foldr (\p acc -> s p </> acc)
-            (routeParser config client url nav)
-            (MountPath.segments config.mountPath)
+            (routeParser config model)
+            (MountPath.segments model.mountPath)
         )
-        url
+        model.currentUrl
         |> Maybe.withDefault ( RouteNotFound, Cmd.none )
 
 
-routeParser :
-    Params msg
-    -> Client
-    -> Url
-    -> Nav.Key
-    -> Parser (( Route, Cmd Msg ) -> a) a
-routeParser config client url key =
-    let
-        params =
-            { client = client
-            , key = key
-            , config = config
-            }
-    in
+routeParser : Params msg -> Model -> Parser (( Route, Cmd Msg ) -> a) a
+routeParser { detailActions } model =
     Parser.oneOf
         [ -- /
           Parser.map
             ( RouteRoot
-            , resources config client
+            , resources model.client
                 |> List.head
                 |> Maybe.map
                     (\p ->
-                        Nav.pushUrl key
-                            (MountPath.path config.mountPath p)
+                        Nav.pushUrl model.key
+                            (MountPath.path model.mountPath p)
                     )
                 |> Maybe.withDefault Cmd.none
             )
@@ -750,11 +763,8 @@ routeParser config client url key =
         -- /posts/new
         , Parser.map
             (\tableName ->
-                initForm
-                    { client = params.client
-                    , key = params.key
-                    , config = params.config
-                    , parent = Nothing
+                initForm model
+                    { parent = Nothing
                     , tableName = tableName
                     , id = Nothing
                     }
@@ -764,11 +774,8 @@ routeParser config client url key =
         -- /posts/edit
         , Parser.map
             (\tableName id ->
-                initForm
-                    { client = params.client
-                    , key = params.key
-                    , config = params.config
-                    , parent = Nothing
+                initForm model
+                    { parent = Nothing
                     , tableName = tableName
                     , id = Just id
                     }
@@ -778,12 +785,8 @@ routeParser config client url key =
         -- /posts
         , Parser.map
             (\tableName ->
-                initListing
-                    { client = params.client
-                    , key = params.key
-                    , config = params.config
-                    , url = url
-                    , parent = Nothing
+                initListing model
+                    { parent = Nothing
                     , tableName = tableName
                     }
             )
@@ -792,10 +795,8 @@ routeParser config client url key =
         -- /posts/1
         , Parser.map
             (\tableName id ->
-                initDetail
-                    { client = params.client
-                    , key = params.key
-                    , config = params.config
+                initDetail model
+                    { detailActions = detailActions
                     , tableName = tableName
                     , id = id
                     }
@@ -805,12 +806,8 @@ routeParser config client url key =
         -- /posts/1/comments
         , Parser.map
             (\parentTable parentId tableName ->
-                initListing
-                    { client = params.client
-                    , key = params.key
-                    , config = params.config
-                    , url = url
-                    , parent = Just { tableName = parentTable, id = parentId }
+                initListing model
+                    { parent = Just { tableName = parentTable, id = parentId }
                     , tableName = tableName
                     }
             )
@@ -819,11 +816,8 @@ routeParser config client url key =
         -- /posts/1/comments/new
         , Parser.map
             (\parentTable parentId tableName ->
-                initForm
-                    { client = params.client
-                    , key = params.key
-                    , config = params.config
-                    , parent = Just { tableName = parentTable, id = parentId }
+                initForm model
+                    { parent = Just { tableName = parentTable, id = parentId }
                     , tableName = tableName
                     , id = Nothing
                     }
@@ -833,27 +827,25 @@ routeParser config client url key =
 
 
 initListing :
-    { client : Client
-    , key : Nav.Key
-    , config : Params msg
-    , url : Url
-    , parent : Maybe { tableName : String, id : String }
-    , tableName : String
-    }
+    Model
+    ->
+        { parent : Maybe { tableName : String, id : String }
+        , tableName : String
+        }
     -> ( Route, Cmd Msg )
-initListing params =
-    case Dict.get params.tableName params.client.schema of
+initListing model params =
+    case Dict.get params.tableName model.client.schema of
         Just table ->
             let
                 listingParams =
-                    { client = params.client
-                    , mountPath = params.config.mountPath
+                    { client = model.client
+                    , mountPath = model.mountPath
                     , table = table
                     , parent = params.parent
-                    , recordsPerPage = params.config.recordsPerPage
+                    , recordsPerPage = model.recordsPerPage
                     }
             in
-            PageListing.init listingParams params.url params.key
+            PageListing.init listingParams model.currentUrl model.key
                 |> Tuple.mapFirst RouteListing
                 |> Tuple.mapSecond (mapCmd PageListingChanged)
 
@@ -862,21 +854,20 @@ initListing params =
 
 
 initForm :
-    { config : Params msg
-    , client : Client
-    , key : Nav.Key
-    , parent : Maybe { tableName : String, id : String }
-    , tableName : String
-    , id : Maybe String
-    }
+    Model
+    ->
+        { parent : Maybe { tableName : String, id : String }
+        , tableName : String
+        , id : Maybe String
+        }
     -> ( Route, Cmd Msg )
-initForm params =
-    case Dict.get params.tableName params.client.schema of
+initForm model params =
+    case Dict.get params.tableName model.client.schema of
         Just table ->
             PageForm.init
-                { client = params.client
-                , navKey = params.key
-                , mountPath = params.config.mountPath
+                { client = model.client
+                , navKey = model.key
+                , mountPath = model.mountPath
                 , parent = params.parent
                 , table = table
                 , id = params.id
@@ -889,29 +880,29 @@ initForm params =
 
 
 initDetail :
-    { client : Client
-    , key : Nav.Key
-    , config : Params msg
-    , tableName : String
-    , id : String
-    }
+    Model
+    ->
+        { detailActions : Dict String (List ( String, Record -> String -> String ))
+        , tableName : String
+        , id : String
+        }
     -> ( Route, Cmd Msg )
-initDetail params =
-    case Dict.get params.tableName params.client.schema of
+initDetail model params =
+    case Dict.get params.tableName model.client.schema of
         Just table ->
             let
                 detailParams =
-                    { client = params.client
-                    , mountPath = params.config.mountPath
+                    { client = model.client
+                    , mountPath = model.mountPath
                     , table = table
                     , id = params.id
                     , detailActions =
-                        params.config.detailActions
+                        params.detailActions
                             |> Dict.get params.tableName
                             |> Maybe.withDefault []
                     }
             in
-            PageDetail.init detailParams params.key
+            PageDetail.init detailParams model.key
                 |> Tuple.mapFirst RouteDetail
                 |> Tuple.mapSecond (mapCmd PageDetailChanged)
 
@@ -923,13 +914,13 @@ initDetail params =
 -- UTILS
 
 
-resources : Params msg -> Client -> List String
-resources config client =
-    if List.isEmpty config.tables then
+resources : Client -> List String
+resources client =
+    if List.isEmpty client.tables then
         Dict.keys client.schema |> List.sort
 
     else
-        config.tables
+        client.tables
 
 
 mapCmd : (a -> Msg) -> AppCmd a -> Cmd Msg
@@ -978,9 +969,9 @@ urlToPath url =
 -- CONFIG
 
 
-configDecoder : Params msg -> Decoder (Params msg)
-configDecoder params =
-    Decode.succeed (Config params)
+configDecoder : Config msg -> Decoder (Config msg)
+configDecoder config =
+    Decode.succeed config
         |> Decode.andThen hostDecoder
         |> Decode.andThen loginUrlDecoder
         |> Decode.andThen jwtDecoder
@@ -992,7 +983,6 @@ configDecoder params =
         |> Decode.andThen tablesDecoder
         |> Decode.andThen tableAliasesDecoder
         |> Decode.andThen loginBannerTextDecoder
-        |> Decode.map (\(Config conf) -> conf)
 
 
 defaultConfig : Params msg
@@ -1046,8 +1036,8 @@ Then subscribe to the corresponding port.
 
 -}
 onLogin : (String -> Cmd msg) -> Config msg -> Config msg
-onLogin f (Config conf) =
-    Config { conf | onLogin = f }
+onLogin f (Config conf errors) =
+    Config { conf | onLogin = f } errors
 
 
 {-| Callback triggered when authentication fails when attempting to perform a
@@ -1079,8 +1069,8 @@ Then wire to the corresponding ports.
 
 -}
 onAuthFailed : (String -> Cmd msg) -> Config msg -> Config msg
-onAuthFailed f (Config conf) =
-    Config { conf | onAuthFailed = f }
+onAuthFailed f (Config conf errors) =
+    Config { conf | onAuthFailed = f } errors
 
 
 {-| Subscribe to receive a JWT and a redirect path when login with an external
@@ -1097,8 +1087,8 @@ onExternalLogin :
     )
     -> Config msg
     -> Config msg
-onExternalLogin sub (Config conf) =
-    Config { conf | onExternalLogin = sub }
+onExternalLogin sub (Config conf errors) =
+    Config { conf | onExternalLogin = sub } errors
 
 
 {-| Callback triggered when the user logs out.
@@ -1120,8 +1110,8 @@ Then subscribe to the corresponding port.
 
 -}
 onLogout : (() -> Cmd msg) -> Config msg -> Config msg
-onLogout f (Config conf) =
-    Config { conf | onLogout = f }
+onLogout f (Config conf errors) =
+    Config { conf | onLogout = f } errors
 
 
 {-| Specify the PostgREST host.
@@ -1134,28 +1124,40 @@ onLogout f (Config conf) =
 
 -}
 withHost : String -> Config msg -> Config msg
-withHost urlStr (Config conf) =
+withHost urlStr (Config conf errors) =
     case Url.fromString urlStr of
         Just u ->
-            Config { conf | host = u, loginUrl = { u | path = "/rpc/login" } }
+            Config
+                { conf
+                    | host = u
+                    , loginUrl = { u | path = "/rpc/login" }
+                }
+                errors
 
         Nothing ->
-            Config conf
+            Config conf (("`Config.host` was given an invalid URL: " ++ urlStr) :: errors)
+
+
+withFlags : Decode.Value -> Config msg -> Config msg
+withFlags value config =
+    case Decode.decodeValue (configDecoder config) value of
+        Ok newConfig ->
+            newConfig
+
+        Err err ->
+            let
+                (Config params errs) =
+                    config
+            in
+            Config params (Decode.errorToString err :: errs)
 
 
 hostDecoder : Config msg -> Decoder (Config msg)
 hostDecoder config =
     Decode.maybe (Decode.field "host" Decode.string)
-        |> Decode.andThen
-            (\maybeUrlStr ->
-                maybeUrlStr
-                    |> Maybe.map
-                        (\urlStr ->
-                            Url.fromString urlStr
-                                |> Maybe.map (\_ -> Decode.succeed (withHost urlStr config))
-                                |> Maybe.withDefault (Decode.fail "`Config.host` was given an invalid URL")
-                        )
-                    |> Maybe.withDefault (Decode.succeed config)
+        |> Decode.map
+            (Maybe.map (\urlStr -> withHost urlStr config)
+                >> Maybe.withDefault config
             )
 
 
@@ -1169,28 +1171,21 @@ hostDecoder config =
 
 -}
 withLoginUrl : String -> Config msg -> Config msg
-withLoginUrl urlStr (Config conf) =
+withLoginUrl urlStr (Config conf errors) =
     case Url.fromString urlStr of
         Just u ->
-            Config { conf | loginUrl = u }
+            Config { conf | loginUrl = u } errors
 
         Nothing ->
-            Config conf
+            Config conf (("`Config.loginUrl` was given an invalid URL: " ++ urlStr) :: errors)
 
 
 loginUrlDecoder : Config msg -> Decoder (Config msg)
 loginUrlDecoder config =
     Decode.maybe (Decode.field "loginUrl" Decode.string)
-        |> Decode.andThen
-            (\maybeUrlStr ->
-                maybeUrlStr
-                    |> Maybe.map
-                        (\urlStr ->
-                            Url.fromString urlStr
-                                |> Maybe.map (\_ -> Decode.succeed (withLoginUrl urlStr config))
-                                |> Maybe.withDefault (Decode.fail "`Config.loginUrl` was given an invalid URL")
-                        )
-                    |> Maybe.withDefault (Decode.succeed config)
+        |> Decode.map
+            (Maybe.map (\urlStr -> withLoginUrl urlStr config)
+                >> Maybe.withDefault config
             )
 
 
@@ -1205,8 +1200,8 @@ using this attribute.
 
 -}
 withJwt : String -> Config msg -> Config msg
-withJwt tokenStr (Config conf) =
-    Config { conf | authScheme = Client.jwt tokenStr }
+withJwt tokenStr (Config conf errors) =
+    Config { conf | authScheme = Client.jwt tokenStr } errors
 
 
 jwtDecoder : Config msg -> Decoder (Config msg)
@@ -1233,8 +1228,8 @@ working with PostgREST schemas.
 
 -}
 withClientHeaders : List Http.Header -> Config msg -> Config msg
-withClientHeaders headers (Config conf) =
-    Config { conf | clientHeaders = headers }
+withClientHeaders headers (Config conf errors) =
+    Config { conf | clientHeaders = headers } errors
 
 
 clientHeadersDecoder : Config msg -> Decoder (Config msg)
@@ -1264,8 +1259,8 @@ root path.
 
 -}
 withMountPath : String -> Config msg -> Config msg
-withMountPath p (Config conf) =
-    Config { conf | mountPath = MountPath.fromString p }
+withMountPath p (Config conf errors) =
+    Config { conf | mountPath = MountPath.fromString p } errors
 
 
 mountPathDecoder : Config msg -> Decoder (Config msg)
@@ -1287,8 +1282,8 @@ mountPathDecoder config =
 
 -}
 withRecordsPerPage : Int -> Config msg -> Config msg
-withRecordsPerPage count (Config conf) =
-    Config { conf | recordsPerPage = count }
+withRecordsPerPage count (Config conf errors) =
+    Config { conf | recordsPerPage = count } errors
 
 
 recordsPerPageDecoder : Config msg -> Decoder (Config msg)
@@ -1311,8 +1306,8 @@ tuples of the link text and a url.
 
 -}
 withMenuLinks : List ( String, String ) -> Config msg -> Config msg
-withMenuLinks links (Config conf) =
-    Config { conf | menuLinks = links }
+withMenuLinks links (Config conf errors) =
+    Config { conf | menuLinks = links } errors
 
 
 menuLinksDecoder : Config msg -> Decoder (Config msg)
@@ -1344,21 +1339,21 @@ the forms.
 
 -}
 withFormFields : String -> List String -> Config msg -> Config msg
-withFormFields tableName fields (Config conf) =
+withFormFields tableName fields (Config conf errors) =
     Config
-        { conf
-            | formFields = Dict.insert tableName fields conf.formFields
-        }
+        { conf | formFields = Dict.insert tableName fields conf.formFields }
+        errors
 
 
 formFieldsDecoder : Config msg -> Decoder (Config msg)
 formFieldsDecoder config =
-    Decode.maybe (Decode.field "formFields" (Decode.dict (Decode.list Decode.string)))
+    Decode.maybe
+        (Decode.field "formFields"
+            (Decode.dict (Decode.list Decode.string))
+        )
         |> Decode.map
-            (\maybeFields ->
-                maybeFields
-                    |> Maybe.map (Dict.foldl withFormFields config)
-                    |> Maybe.withDefault config
+            (Maybe.map (Dict.foldl withFormFields config)
+                >> Maybe.withDefault config
             )
 
 
@@ -1387,8 +1382,8 @@ withDetailActions :
     -> List ( String, Record -> String -> String )
     -> Config msg
     -> Config msg
-withDetailActions table actions (Config conf) =
-    Config { conf | detailActions = Dict.insert table actions conf.detailActions }
+withDetailActions table actions (Config conf errors) =
+    Config { conf | detailActions = Dict.insert table actions conf.detailActions } errors
 
 
 {-| Pass a list of table names to restrict the editable resources, also sets the
@@ -1402,8 +1397,8 @@ order of the left resources menu.
 
 -}
 withTables : List String -> Config msg -> Config msg
-withTables tableNames (Config conf) =
-    Config { conf | tables = tableNames }
+withTables tableNames (Config conf errors) =
+    Config { conf | tables = tableNames } errors
 
 
 tablesDecoder : Config msg -> Decoder (Config msg)
@@ -1428,8 +1423,8 @@ because of this some links might be incorrectly generated.
 
 -}
 withTableAliases : Dict String String -> Config msg -> Config msg
-withTableAliases aliases (Config conf) =
-    Config { conf | tableAliases = aliases }
+withTableAliases aliases (Config conf errors) =
+    Config { conf | tableAliases = aliases } errors
 
 
 tableAliasesDecoder : Config msg -> Decoder (Config msg)
@@ -1451,8 +1446,8 @@ tableAliasesDecoder config =
 
 -}
 withLoginBannerText : String -> Config msg -> Config msg
-withLoginBannerText text (Config conf) =
-    Config { conf | loginBannerText = Just text }
+withLoginBannerText text (Config conf errors) =
+    Config { conf | loginBannerText = Just text } errors
 
 
 loginBannerTextDecoder : Config msg -> Decoder (Config msg)

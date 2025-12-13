@@ -13,8 +13,9 @@ import Url
 
 
 decodeConfig : PostgRestAdmin.Config msg -> Encode.Value -> Result Decode.Error (PostgRestAdmin.Params msg)
-decodeConfig (PostgRestAdmin.Config params) flags =
-    Decode.decodeValue (PostgRestAdmin.configDecoder params) flags
+decodeConfig config flags =
+    Decode.decodeValue (PostgRestAdmin.configDecoder config) flags
+        |> Result.map (\(PostgRestAdmin.Config c _) -> c)
 
 
 suite : Test
