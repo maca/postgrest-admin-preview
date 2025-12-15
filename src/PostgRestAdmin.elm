@@ -1,5 +1,7 @@
 module PostgRestAdmin exposing
-    ( Config(..), Program, Model, Msg, configure, buildProgram, buildAppParams
+    ( Config(..), Program, AppParams, configure, buildProgram, buildAppParams
+    , Model, Msg
+    , route
     , onLogin, onAuthFailed, onLogout, onExternalLogin
     , withHost, withLoginUrl, withJwt, withClientHeaders
     , withFlags
@@ -12,7 +14,9 @@ module PostgRestAdmin exposing
 
 {-|
 
-@docs Config, Program, Model, Msg, configure, buildProgram, buildAppParams
+@docs Config, Program, AppParams, configure, buildProgram, buildAppParams
+@docs Model, Msg
+@docs route
 
 
 ## Wiring
@@ -36,6 +40,7 @@ module PostgRestAdmin exposing
 
 -}
 
+import AppUrl exposing (AppUrl)
 import Browser
 import Browser.Navigation as Nav
 import Dict exposing (Dict)
@@ -60,22 +65,14 @@ import Process
 import String.Extra as String
 import Task
 import Url exposing (Protocol(..), Url)
-import Url.Parser as Parser exposing ((</>), Parser, s)
-
-
-{-| An alias to elm's Platform.Program providing the type signature for a
-PostgRestAdmin program.
--}
-type alias Program =
-    Platform.Program Decode.Value Model Msg
 
 
 type alias Model =
-    { route : Route
+    { appUrl : AppUrl
+    , baseUrl : { protocol : Protocol, host : String, port_ : Maybe Int }
     , key : Nav.Key
     , notification : Notification
     , client : Client
-    , currentUrl : Url
     , authFormUrl : Url
     , authFormJwtDecoder : Decoder String
     , authFormJwtEncoder : Dict String String -> Encode.Value
@@ -87,6 +84,9 @@ type alias Model =
     , loginBannerText : Maybe String
     , recordsPerPage : Int
     , configErrors : List String
+    , listing : Maybe PageListing.Model
+    , detail : Maybe PageDetail.Model
+    , form : Maybe PageForm.Model
     }
 
 
@@ -140,19 +140,16 @@ type Msg
     | NotificationAlert String
     | LinkClicked Browser.UrlRequest
     | UrlChanged Url
+    | LoadPage
     | LoggedIn { path : String, accessToken : String }
     | LoggedOut
     | AuthRequired Error
     | NoOp
 
 
-type Route
-    = RouteRoot
-    | RouteLoadingSchema Url
-    | RouteListing PageListing.Model
-    | RouteDetail PageDetail.Model
-    | RouteForm PageForm.Model
-    | RouteNotFound
+route : Model -> AppUrl
+route model =
+    model.appUrl
 
 
 type Notification
@@ -206,6 +203,13 @@ configure =
         []
 
 
+{-| An alias to elm's Platform.Program providing the type signature for a
+PostgRestAdmin program.
+-}
+type alias Program =
+    Platform.Program Decode.Value Model Msg
+
+
 {-| Converts a Config into a Program.
 -}
 buildProgram : Config msg -> Program
@@ -214,17 +218,14 @@ buildProgram config =
         params =
             buildAppParams
                 { toInnerModel = identity
-                , toOuterModel = identity
-                , toInnerMsg = Just
+                , toOuterModel = \model _ -> model
                 , toOuterMsg = identity
+                , initModel = identity
                 }
                 config
     in
     Browser.application
         { init = params.init
-
-        -- params.init
-        --     (withFlags flags config |> Decode.succeed)
         , update = params.update
         , view = \model -> { title = "Admin", body = [ params.view model ] }
         , subscriptions = params.subscriptions
@@ -233,21 +234,24 @@ buildProgram config =
         }
 
 
+type alias AppParams model outerMsg =
+    { init : Decode.Value -> Url -> Nav.Key -> ( model, Cmd outerMsg )
+    , view : model -> Html outerMsg
+    , update : Msg -> model -> ( model, Cmd outerMsg )
+    , subscriptions : model -> Sub outerMsg
+    , onUrlRequest : Browser.UrlRequest -> outerMsg
+    , onUrlChange : Url -> outerMsg
+    }
+
+
 buildAppParams :
     { toInnerModel : model -> Model
-    , toOuterModel : Model -> model
-    , toInnerMsg : outerMsg -> Maybe Msg
+    , toOuterModel : Model -> model -> model
     , toOuterMsg : Msg -> outerMsg
+    , initModel : Model -> model
     }
     -> Config msg
-    ->
-        { init : Decode.Value -> Url -> Nav.Key -> ( model, Cmd outerMsg )
-        , view : model -> Html outerMsg
-        , update : outerMsg -> model -> ( model, Cmd outerMsg )
-        , subscriptions : model -> Sub outerMsg
-        , onUrlRequest : Browser.UrlRequest -> outerMsg
-        , onUrlChange : Url -> outerMsg
-        }
+    -> AppParams model outerMsg
 buildAppParams mappings ((Config confParams errs) as config) =
     { init =
         \value url key ->
@@ -260,28 +264,21 @@ buildAppParams mappings ((Config confParams errs) as config) =
                         Err err ->
                             Config confParams (Decode.errorToString err :: errs)
 
-                model =
-                    initModel url key newConf
-
                 (Config newParams _) =
                     newConf
 
-                ( route, cmd ) =
-                    parseRoute newParams model
+                model =
+                    initModel url key newConf
             in
-            ( mappings.toOuterModel { model | route = route }
-            , Cmd.map mappings.toOuterMsg cmd
+            ( mappings.initModel model
+            , changeActionCmd newParams model
+                |> Cmd.map mappings.toOuterMsg
             )
     , update =
-        \outerMsg outerModel ->
-            case mappings.toInnerMsg outerMsg of
-                Nothing ->
-                    ( outerModel, Cmd.none )
-
-                Just msg ->
-                    update confParams msg (mappings.toInnerModel outerModel)
-                        |> Tuple.mapFirst mappings.toOuterModel
-                        |> Tuple.mapSecond (Cmd.map mappings.toOuterMsg)
+        \msg outerModel ->
+            update confParams msg (mappings.toInnerModel outerModel)
+                |> Tuple.mapFirst (\innerModel -> mappings.toOuterModel innerModel outerModel)
+                |> Tuple.mapSecond (Cmd.map mappings.toOuterMsg)
     , view =
         mappings.toInnerModel
             >> view
@@ -302,7 +299,8 @@ buildAppParams mappings ((Config confParams errs) as config) =
 
 initModel : Url -> Nav.Key -> Config msg -> Model
 initModel url key (Config configRec errors) =
-    { route = RouteRoot
+    { appUrl = AppUrl.fromUrl url
+    , baseUrl = { protocol = url.protocol, host = url.host, port_ = url.port_ }
     , key = key
     , notification = NoNotification
     , client =
@@ -314,7 +312,6 @@ initModel url key (Config configRec errors) =
             , tableAliases = configRec.tableAliases
             }
     , onLogin = configRec.onLogin >> Cmd.map (always NoOp)
-    , currentUrl = url
     , authFormUrl = configRec.loginUrl
     , authFormJwtDecoder = Decode.field "token" Decode.string
     , authFormJwtEncoder = Encode.dict identity Encode.string
@@ -325,6 +322,9 @@ initModel url key (Config configRec errors) =
     , loginBannerText = configRec.loginBannerText
     , recordsPerPage = configRec.recordsPerPage
     , configErrors = errors
+    , listing = Nothing
+    , detail = Nothing
+    , form = Nothing
     }
 
 
@@ -407,15 +407,9 @@ update config msg ({ client } as model) =
             let
                 updatedClient =
                     { client | schema = schema }
-
-                updatedModel =
-                    { model | client = updatedClient }
-
-                ( route, cmd ) =
-                    routeCons config updatedModel
             in
-            ( { updatedModel | route = route }
-            , cmd
+            ( { model | client = updatedClient }
+            , Task.succeed () |> Task.perform (always LoadPage)
             )
 
         SchemaFetched (Err err) ->
@@ -427,46 +421,45 @@ update config msg ({ client } as model) =
             )
 
         PageListingChanged childMsg ->
-            case model.route of
-                RouteListing listing ->
+            case model.listing of
+                Just listing ->
                     let
-                        ( route, appCmd ) =
+                        ( updatedListing, appCmd ) =
                             PageListing.update childMsg listing
-                                |> Tuple.mapFirst RouteListing
                     in
-                    ( { model | route = route }
+                    ( { model | listing = Just updatedListing }
                     , mapCmd PageListingChanged appCmd
                     )
 
-                _ ->
+                Nothing ->
                     ( model, Cmd.none )
 
         PageDetailChanged childMsg ->
-            case model.route of
-                RouteDetail prevDetail ->
+            case model.detail of
+                Just detail ->
                     let
-                        ( detail, cmd ) =
-                            PageDetail.update childMsg prevDetail
+                        ( updatedDetail, cmd ) =
+                            PageDetail.update childMsg detail
                     in
-                    ( { model | route = RouteDetail detail }
+                    ( { model | detail = Just updatedDetail }
                     , mapCmd PageDetailChanged cmd
                     )
 
-                _ ->
+                Nothing ->
                     ( model, Cmd.none )
 
         PageFormChanged childMsg ->
-            case model.route of
-                RouteForm prevForm ->
+            case model.form of
+                Just form ->
                     let
-                        ( form, cmd ) =
-                            PageForm.update childMsg prevForm
+                        ( updatedForm, cmd ) =
+                            PageForm.update childMsg form
                     in
-                    ( { model | route = RouteForm form }
+                    ( { model | form = Just updatedForm }
                     , mapCmd PageFormChanged cmd
                     )
 
-                _ ->
+                Nothing ->
                     ( model, Cmd.none )
 
         NotificationDismiss ->
@@ -498,18 +491,33 @@ update config msg ({ client } as model) =
             ( model, Nav.load href )
 
         UrlChanged url ->
-            if model.currentUrl.path /= url.path then
+            if (currentUrl model).path /= url.path then
                 let
                     updatedModel =
-                        { model | currentUrl = url }
+                        { model
+                            | appUrl = AppUrl.fromUrl url
+                            , baseUrl =
+                                { protocol = url.protocol
+                                , host = url.host
+                                , port_ = url.port_
+                                }
+                        }
 
-                    ( route, cmd ) =
-                        parseRoute config updatedModel
+                    ( finalModel, initCmd ) =
+                        initPageModels config updatedModel
                 in
-                ( { updatedModel | route = route }, cmd )
+                ( finalModel
+                , Cmd.batch
+                    [ changeActionCmd config updatedModel
+                    , Task.succeed () |> Task.perform (always LoadPage)
+                    ]
+                )
 
             else
-                ( { model | currentUrl = url }, Cmd.none )
+                ( model, Cmd.none )
+
+        LoadPage ->
+            initPageModels config model
 
         LoggedIn updateParams ->
             ( { model | client = Client.updateJwt updateParams.accessToken model.client }
@@ -528,11 +536,33 @@ update config msg ({ client } as model) =
                 , notification = NoNotification
               }
             , Cmd.map (always NoOp)
-                (config.onAuthFailed (urlToPath model.currentUrl))
+                (config.onAuthFailed (urlToPath (currentUrl model)))
             )
 
         NoOp ->
             ( model, Cmd.none )
+
+
+changeActionCmd : Params msg -> Model -> Cmd Msg
+changeActionCmd _ model =
+    if Client.toJwtString model.client == Nothing then
+        Cmd.none
+
+    else if Client.schemaIsLoaded model.client then
+        case appPath model of
+            [] ->
+                resources model.client
+                    |> List.head
+                    |> Maybe.map
+                        (MountPath.path model.mountPath >> Nav.pushUrl model.key)
+                    |> Maybe.withDefault Cmd.none
+
+            _ ->
+                Cmd.none
+
+    else
+        Task.attempt SchemaFetched
+            (Client.fetchSchema model.client)
 
 
 
@@ -723,23 +753,67 @@ viewNotificationHelp notificationType message =
 
 mainContent : Model -> Html Msg
 mainContent model =
-    case model.route of
-        RouteRoot ->
+    let
+        mountSegments =
+            MountPath.segments model.mountPath
+
+        -- Remove mount path segments from the beginning
+        pathAfterMount =
+            List.drop (List.length mountSegments) model.appUrl.path
+    in
+    case pathAfterMount of
+        [] ->
             Html.text ""
 
-        RouteLoadingSchema _ ->
-            Html.text "Not loaded"
+        [ _, "new" ] ->
+            case model.form of
+                Just form ->
+                    Html.map PageFormChanged (PageForm.view form)
 
-        RouteListing listing ->
-            Html.map PageListingChanged (PageListing.view listing)
+                Nothing ->
+                    Html.text ""
 
-        RouteDetail listing ->
-            Html.map PageDetailChanged (PageDetail.view listing)
+        [ _, _, _, "new" ] ->
+            case model.form of
+                Just form ->
+                    Html.map PageFormChanged (PageForm.view form)
 
-        RouteForm form ->
-            Html.map PageFormChanged (PageForm.view form)
+                Nothing ->
+                    Html.text ""
 
-        RouteNotFound ->
+        [ _, _, "edit" ] ->
+            case model.form of
+                Just form ->
+                    Html.map PageFormChanged (PageForm.view form)
+
+                Nothing ->
+                    Html.text ""
+
+        [ _ ] ->
+            case model.listing of
+                Just listing ->
+                    Html.map PageListingChanged (PageListing.view listing)
+
+                Nothing ->
+                    Html.text ""
+
+        [ _, _ ] ->
+            case model.detail of
+                Just detail ->
+                    Html.map PageDetailChanged (PageDetail.view detail)
+
+                Nothing ->
+                    Html.text ""
+
+        [ _, _, _ ] ->
+            case model.listing of
+                Just listing ->
+                    Html.map PageListingChanged (PageListing.view listing)
+
+                Nothing ->
+                    Html.text ""
+
+        _ ->
             Html.text "Not found"
 
 
@@ -750,12 +824,12 @@ mainContent model =
 subscriptions : Params msg -> Model -> Sub Msg
 subscriptions config model =
     Sub.batch
-        [ case model.route of
-            RouteListing pageListing ->
+        [ case model.listing of
+            Just pageListing ->
                 Sub.map PageListingChanged
                     (PageListing.subscriptions pageListing)
 
-            _ ->
+            Nothing ->
                 Sub.none
         , Sub.map LoggedIn (config.onExternalLogin identity)
         ]
@@ -765,196 +839,131 @@ subscriptions config model =
 -- ROUTES
 
 
-parseRoute : Params msg -> Model -> ( Route, Cmd Msg )
-parseRoute config model =
-    if Client.toJwtString model.client == Nothing then
-        ( RouteLoadingSchema model.currentUrl, Cmd.none )
-
-    else if Client.schemaIsLoaded model.client then
-        routeCons config model
-
-    else
-        ( RouteLoadingSchema model.currentUrl
-        , Task.attempt SchemaFetched (Client.fetchSchema model.client)
-        )
+appPath : Model -> List String
+appPath model =
+    List.drop
+        (List.length (MountPath.segments model.mountPath))
+        model.appUrl.path
 
 
-routeCons : Params msg -> Model -> ( Route, Cmd Msg )
-routeCons config model =
-    Parser.parse
-        (List.foldr (\segment acc -> s segment </> acc)
-            (routeParser config model)
-            (MountPath.segments model.mountPath)
-        )
-        model.currentUrl
-        |> Maybe.withDefault ( RouteNotFound, Cmd.none )
-
-
-routeParser : Params msg -> Model -> Parser (( Route, Cmd Msg ) -> a) a
-routeParser { detailActions } model =
-    Parser.oneOf
-        [ -- /
-          Parser.map
-            ( RouteRoot
-            , resources model.client
-                |> List.head
-                |> Maybe.map
-                    (\p ->
-                        Nav.pushUrl model.key
-                            (MountPath.path model.mountPath p)
-                    )
-                |> Maybe.withDefault Cmd.none
-            )
-            Parser.top
-
+initPageModels : Params msg -> Model -> ( Model, Cmd Msg )
+initPageModels config model =
+    case appPath model of
         -- /posts/new
-        , Parser.map
-            (\tableName ->
-                initForm model
-                    { parent = Nothing
-                    , tableName = tableName
-                    , id = Nothing
-                    }
-            )
-            (Parser.string </> s "new")
+        [ resource, "new" ] ->
+            case Dict.get resource model.client.schema of
+                Just table ->
+                    PageForm.init
+                        { client = model.client
+                        , navKey = model.key
+                        , mountPath = model.mountPath
+                        , parent = Nothing
+                        , table = table
+                        , id = Nothing
+                        }
+                        |> Tuple.mapFirst (\formModel -> { model | form = Just formModel })
+                        |> Tuple.mapSecond (mapCmd PageFormChanged)
 
-        -- /posts/edit
-        , Parser.map
-            (\tableName id ->
-                initForm model
-                    { parent = Nothing
-                    , tableName = tableName
-                    , id = Just id
-                    }
-            )
-            (Parser.string </> Parser.string </> s "edit")
-
-        -- /posts
-        , Parser.map
-            (\tableName ->
-                initListing model
-                    { parent = Nothing
-                    , tableName = tableName
-                    }
-            )
-            Parser.string
-
-        -- /posts/1
-        , Parser.map
-            (\tableName id ->
-                initDetail model
-                    { detailActions = detailActions
-                    , tableName = tableName
-                    , id = id
-                    }
-            )
-            (Parser.string </> Parser.string)
-
-        -- /posts/1/comments
-        , Parser.map
-            (\parentTable parentId tableName ->
-                initListing model
-                    { parent = Just { tableName = parentTable, id = parentId }
-                    , tableName = tableName
-                    }
-            )
-            (Parser.string </> Parser.string </> Parser.string)
+                Nothing ->
+                    ( model, Cmd.none )
 
         -- /posts/1/comments/new
-        , Parser.map
-            (\parentTable parentId tableName ->
-                initForm model
-                    { parent = Just { tableName = parentTable, id = parentId }
-                    , tableName = tableName
-                    , id = Nothing
-                    }
-            )
-            (Parser.string </> Parser.string </> Parser.string </> s "new")
-        ]
+        [ parentResource, parentId, resource, "new" ] ->
+            case Dict.get resource model.client.schema of
+                Just table ->
+                    PageForm.init
+                        { client = model.client
+                        , navKey = model.key
+                        , mountPath = model.mountPath
+                        , parent = Just { tableName = parentResource, id = parentId }
+                        , table = table
+                        , id = Nothing
+                        }
+                        |> Tuple.mapFirst (\formModel -> { model | form = Just formModel })
+                        |> Tuple.mapSecond (mapCmd PageFormChanged)
 
+                Nothing ->
+                    ( model, Cmd.none )
 
-initListing :
-    Model
-    ->
-        { parent : Maybe { tableName : String, id : String }
-        , tableName : String
-        }
-    -> ( Route, Cmd Msg )
-initListing model params =
-    case Dict.get params.tableName model.client.schema of
-        Just table ->
-            let
-                listingParams =
-                    { client = model.client
-                    , mountPath = model.mountPath
-                    , table = table
-                    , parent = params.parent
-                    , recordsPerPage = model.recordsPerPage
-                    }
-            in
-            PageListing.init listingParams model.currentUrl model.key
-                |> Tuple.mapFirst RouteListing
-                |> Tuple.mapSecond (mapCmd PageListingChanged)
+        -- /posts/1/edit
+        [ resource, id, "edit" ] ->
+            case Dict.get resource model.client.schema of
+                Just table ->
+                    PageForm.init
+                        { client = model.client
+                        , navKey = model.key
+                        , mountPath = model.mountPath
+                        , parent = Nothing
+                        , table = table
+                        , id = Just id
+                        }
+                        |> Tuple.mapFirst (\formModel -> { model | form = Just formModel })
+                        |> Tuple.mapSecond (mapCmd PageFormChanged)
 
-        Nothing ->
-            ( RouteNotFound, Cmd.none )
+                Nothing ->
+                    ( model, Cmd.none )
 
+        -- /posts
+        [ resource ] ->
+            case Dict.get resource model.client.schema of
+                Just table ->
+                    PageListing.init
+                        { client = model.client
+                        , mountPath = model.mountPath
+                        , table = table
+                        , parent = Nothing
+                        , recordsPerPage = model.recordsPerPage
+                        }
+                        (currentUrl model)
+                        model.key
+                        |> Tuple.mapFirst (\listingModel -> { model | listing = Just listingModel })
+                        |> Tuple.mapSecond (mapCmd PageListingChanged)
 
-initForm :
-    Model
-    ->
-        { parent : Maybe { tableName : String, id : String }
-        , tableName : String
-        , id : Maybe String
-        }
-    -> ( Route, Cmd Msg )
-initForm model params =
-    case Dict.get params.tableName model.client.schema of
-        Just table ->
-            PageForm.init
-                { client = model.client
-                , navKey = model.key
-                , mountPath = model.mountPath
-                , parent = params.parent
-                , table = table
-                , id = params.id
-                }
-                |> Tuple.mapFirst RouteForm
-                |> Tuple.mapSecond (mapCmd PageFormChanged)
+                Nothing ->
+                    ( model, Cmd.none )
 
-        Nothing ->
-            ( RouteNotFound, Cmd.none )
+        -- /posts/1
+        [ resource, id ] ->
+            case Dict.get resource model.client.schema of
+                Just table ->
+                    PageDetail.init
+                        { client = model.client
+                        , mountPath = model.mountPath
+                        , table = table
+                        , id = id
+                        , detailActions =
+                            config.detailActions
+                                |> Dict.get resource
+                                |> Maybe.withDefault []
+                        }
+                        model.key
+                        |> Tuple.mapFirst (\detailModel -> { model | detail = Just detailModel })
+                        |> Tuple.mapSecond (mapCmd PageDetailChanged)
 
+                Nothing ->
+                    ( model, Cmd.none )
 
-initDetail :
-    Model
-    ->
-        { detailActions : Dict String (List ( String, Record -> String -> String ))
-        , tableName : String
-        , id : String
-        }
-    -> ( Route, Cmd Msg )
-initDetail model params =
-    case Dict.get params.tableName model.client.schema of
-        Just table ->
-            let
-                detailParams =
-                    { client = model.client
-                    , mountPath = model.mountPath
-                    , table = table
-                    , id = params.id
-                    , detailActions =
-                        params.detailActions
-                            |> Dict.get params.tableName
-                            |> Maybe.withDefault []
-                    }
-            in
-            PageDetail.init detailParams model.key
-                |> Tuple.mapFirst RouteDetail
-                |> Tuple.mapSecond (mapCmd PageDetailChanged)
+        -- /posts/1/comments
+        [ parentResource, parentId, resource ] ->
+            case Dict.get resource model.client.schema of
+                Just table ->
+                    PageListing.init
+                        { client = model.client
+                        , mountPath = model.mountPath
+                        , table = table
+                        , parent = Just { tableName = parentResource, id = parentId }
+                        , recordsPerPage = model.recordsPerPage
+                        }
+                        (currentUrl model)
+                        model.key
+                        |> Tuple.mapFirst (\listingModel -> { model | listing = Just listingModel })
+                        |> Tuple.mapSecond (mapCmd PageListingChanged)
 
-        Nothing ->
-            ( RouteNotFound, Cmd.none )
+                Nothing ->
+                    ( model, Cmd.none )
+
+        _ ->
+            ( model, Cmd.none )
 
 
 
@@ -1003,6 +1012,29 @@ mapCmd tagger appCmd =
         AppCmd.NotificationDismiss ->
             Task.succeed NotificationDismiss
                 |> Task.perform identity
+
+
+currentUrl : Model -> Url
+currentUrl model =
+    { protocol = model.baseUrl.protocol
+    , host = model.baseUrl.host
+    , port_ = model.baseUrl.port_
+    , path = "/" ++ String.join "/" model.appUrl.path
+    , query =
+        if Dict.isEmpty model.appUrl.queryParameters then
+            Nothing
+
+        else
+            model.appUrl.queryParameters
+                |> Dict.toList
+                |> List.concatMap
+                    (\( key, values ) ->
+                        List.map (\value -> key ++ "=" ++ value) values
+                    )
+                |> String.join "&"
+                |> Just
+    , fragment = model.appUrl.fragment
+    }
 
 
 urlToPath : Url -> String

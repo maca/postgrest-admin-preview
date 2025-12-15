@@ -16,11 +16,6 @@
         const app = Elm.Main.init({
             flags: {
                 jwt: sessionStorage.getItem("jwt"),
-                host: "http://localhost:9080",
-                clientHeaders: {
-                  "Accept-Profile": "bluebox",
-                  "Content-Profile": "bluebox"
-                },
                 "loginBannerText": "**Welcome to postgrest-admin demo!**\n\nA back-office/admin interface for PostgREST api's.\n\nLogin with user: 'bluebox@example.com' and password: 'password'.\n\nSource code at\n[https://github.com/maca/postgrest-admin](https://github.com/maca/postgrest-admin)\n"
             }
         })

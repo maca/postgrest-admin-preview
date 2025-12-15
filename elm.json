@@ -33,6 +33,7 @@
         "elm-community/list-split": "1.0.3 <= v < 2.0.0",
         "elm-community/string-extra": "4.0.1 <= v < 5.0.0",
         "elm-explorations/markdown": "1.0.0 <= v < 2.0.0",
+        "lydell/elm-app-url": "1.0.4 <= v < 2.0.0",
         "maca/elm-inflect": "1.0.0 <= v < 2.0.0",
         "maca/form-toolkit": "1.0.5 <= v < 2.0.0",
         "periodic/elm-csv": "2.0.1 <= v < 3.0.0",
