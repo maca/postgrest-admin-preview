@@ -1,5 +1,5 @@
 module PostgRestAdmin exposing
-    ( Config(..), Program, configure, buildProgram, buildAppParams
+    ( Config(..), Program, Model, Msg, configure, buildProgram, buildAppParams
     , onLogin, onAuthFailed, onLogout, onExternalLogin
     , withHost, withLoginUrl, withJwt, withClientHeaders
     , withFlags
@@ -12,7 +12,7 @@ module PostgRestAdmin exposing
 
 {-|
 
-@docs Config, Program, configure, buildProgram, buildAppParams
+@docs Config, Program, Model, Msg, configure, buildProgram, buildAppParams
 
 
 ## Wiring
@@ -112,6 +112,7 @@ type alias Params msg =
         )
         -> Sub { path : String, accessToken : String }
     , onLogout : () -> Cmd msg
+    , withFlags : Bool
     }
 
 
@@ -172,7 +173,37 @@ type Notification
 -}
 configure : Config msg
 configure =
-    Config defaultConfig []
+    let
+        defaultHost =
+            { protocol = Http
+            , host = "localhost"
+            , port_ = Just 3000
+            , path = ""
+            , query = Nothing
+            , fragment = Nothing
+            }
+    in
+    Config
+        { authScheme = Client.unset
+        , host = defaultHost
+        , mountPath = MountPath.fromString ""
+        , loginUrl = { defaultHost | path = "/rpc/login" }
+        , formFields = Dict.empty
+        , detailActions = Dict.empty
+        , tables = []
+        , menuLinks = []
+        , menuActions = Dict.empty
+        , onLogin = always Cmd.none
+        , onAuthFailed = always Cmd.none
+        , onExternalLogin = always Sub.none
+        , onLogout = always Cmd.none
+        , tableAliases = Dict.empty
+        , clientHeaders = []
+        , recordsPerPage = 50
+        , loginBannerText = Nothing
+        , withFlags = True
+        }
+        []
 
 
 {-| Converts a Config into a Program.
@@ -190,7 +221,10 @@ buildProgram config =
                 config
     in
     Browser.application
-        { init = \flags -> params.init (withFlags flags config)
+        { init = params.init
+
+        -- params.init
+        --     (withFlags flags config |> Decode.succeed)
         , update = params.update
         , view = \model -> { title = "Admin", body = [ params.view model ] }
         , subscriptions = params.subscriptions
@@ -207,17 +241,25 @@ buildAppParams :
     }
     -> Config msg
     ->
-        { init : Config msg -> Url -> Nav.Key -> ( model, Cmd outerMsg )
+        { init : Decode.Value -> Url -> Nav.Key -> ( model, Cmd outerMsg )
         , view : model -> Html outerMsg
         , update : outerMsg -> model -> ( model, Cmd outerMsg )
         , subscriptions : model -> Sub outerMsg
         , onUrlRequest : Browser.UrlRequest -> outerMsg
         , onUrlChange : Url -> outerMsg
         }
-buildAppParams mappings (Config config _) =
+buildAppParams mappings ((Config confParams errs) as config) =
     { init =
-        \newConf url key ->
+        \value url key ->
             let
+                newConf =
+                    case Decode.decodeValue (configDecoder config) value of
+                        Ok newConfig ->
+                            newConfig
+
+                        Err err ->
+                            Config confParams (Decode.errorToString err :: errs)
+
                 model =
                     initModel url key newConf
 
@@ -226,7 +268,6 @@ buildAppParams mappings (Config config _) =
 
                 ( route, cmd ) =
                     parseRoute newParams model
-                        |> Debug.log "init parse"
             in
             ( mappings.toOuterModel { model | route = route }
             , Cmd.map mappings.toOuterMsg cmd
@@ -238,10 +279,9 @@ buildAppParams mappings (Config config _) =
                     ( outerModel, Cmd.none )
 
                 Just msg ->
-                    update config msg (mappings.toInnerModel outerModel)
+                    update confParams msg (mappings.toInnerModel outerModel)
                         |> Tuple.mapFirst mappings.toOuterModel
-                        |> Tuple.mapSecond
-                            (Cmd.map mappings.toOuterMsg)
+                        |> Tuple.mapSecond (Cmd.map mappings.toOuterMsg)
     , view =
         mappings.toInnerModel
             >> view
@@ -249,7 +289,7 @@ buildAppParams mappings (Config config _) =
             >> Html.map mappings.toOuterMsg
     , subscriptions =
         mappings.toInnerModel
-            >> subscriptions config
+            >> subscriptions confParams
             >> Sub.map mappings.toOuterMsg
     , onUrlRequest = mappings.toOuterMsg << LinkClicked
     , onUrlChange = mappings.toOuterMsg << UrlChanged
@@ -992,38 +1032,6 @@ configDecoder config =
         |> Decode.andThen loginBannerTextDecoder
 
 
-defaultConfig : Params msg
-defaultConfig =
-    let
-        defaultHost =
-            { protocol = Http
-            , host = "localhost"
-            , port_ = Just 3000
-            , path = ""
-            , query = Nothing
-            , fragment = Nothing
-            }
-    in
-    { authScheme = Client.unset
-    , host = defaultHost
-    , mountPath = MountPath.fromString ""
-    , loginUrl = { defaultHost | path = "/rpc/login" }
-    , formFields = Dict.empty
-    , detailActions = Dict.empty
-    , tables = []
-    , menuLinks = []
-    , menuActions = Dict.empty
-    , onLogin = always Cmd.none
-    , onAuthFailed = always Cmd.none
-    , onExternalLogin = always Sub.none
-    , onLogout = always Cmd.none
-    , tableAliases = Dict.empty
-    , clientHeaders = []
-    , recordsPerPage = 50
-    , loginBannerText = Nothing
-    }
-
-
 {-| Callback triggered with a JWT string on successful login.
 Typically used to persist the JWT to session storage.
 
@@ -1145,18 +1153,22 @@ withHost urlStr (Config conf errors) =
             Config conf (("`Config.host` was given an invalid URL: " ++ urlStr) :: errors)
 
 
-withFlags : Decode.Value -> Config msg -> Config msg
-withFlags value config =
-    case Decode.decodeValue (configDecoder config) value of
-        Ok newConfig ->
-            newConfig
+{-| If set to False no attempt to decode and apply flags will be made.
+Defaults to true.
 
-        Err err ->
-            let
-                (Config params errs) =
-                    config
-            in
-            Config params (Decode.errorToString err :: errs)
+
+    main : PostgRestAdmin.Program
+    main =
+        PostgRestAdmin.configuration
+            |> PostgRestAdmin.withFlags False
+            |> PostgRestAdmin.buildProgram
+
+    -- Flags are ignored
+
+-}
+withFlags : Bool -> Config msg -> Config msg
+withFlags decodesFlags (Config conf errors) =
+    Config { conf | withFlags = decodesFlags } errors
 
 
 hostDecoder : Config msg -> Decoder (Config msg)
