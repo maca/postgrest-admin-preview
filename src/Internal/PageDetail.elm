@@ -37,7 +37,6 @@ type alias Model =
     , table : Table
     , id : String
     , record : Maybe Record
-    , detailActions : List ( String, Record -> String -> String )
     , confirmDelete : Bool
     , countTotals : Dict String Int
     }
@@ -48,18 +47,16 @@ init :
     , mountPath : MountPath
     , table : Table
     , id : String
-    , detailActions : List ( String, Record -> String -> String )
     }
     -> Nav.Key
     -> ( Model, AppCmd Msg )
-init { client, mountPath, table, id, detailActions } key =
+init { client, mountPath, table, id } key =
     ( { client = client
       , mountPath = mountPath
       , key = key
       , table = table
       , id = id
       , record = Nothing
-      , detailActions = detailActions
       , confirmDelete = False
       , countTotals = Dict.empty
       }

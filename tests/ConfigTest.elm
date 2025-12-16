@@ -523,11 +523,11 @@ jwtTests =
                 decodeConfig PostgRestAdmin.configure (Encode.object [])
                     |> Result.map .authScheme
                     |> Expect.equal (Ok Client.unset)
-        , test "PostgRestAdmin.withJwt sets the JWT token in authScheme" <|
+        , test "PostgRestAdmin.withJWT sets the JWT token in authScheme" <|
             \_ ->
                 decodeConfig
                     (PostgRestAdmin.configure
-                        |> PostgRestAdmin.withJwt "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+                        |> PostgRestAdmin.withJWT "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
                     )
                     (Encode.object [])
                     |> Result.map .authScheme
@@ -543,10 +543,10 @@ jwtTests =
                     |> Result.map .authScheme
                     |> Expect.equal
                         (Ok (Client.jwt "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"))
-        , test "jwt flag takes precedence over PostgRestAdmin.withJwt" <|
+        , test "jwt flag takes precedence over PostgRestAdmin.withJWT" <|
             \_ ->
                 decodeConfig
-                    (PostgRestAdmin.configure |> PostgRestAdmin.withJwt "old-token")
+                    (PostgRestAdmin.configure |> PostgRestAdmin.withJWT "old-token")
                     (Encode.object
                         [ ( "jwt", Encode.string "new-token-from-flag" )
                         ]

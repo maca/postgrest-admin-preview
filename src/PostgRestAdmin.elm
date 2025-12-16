@@ -1,12 +1,13 @@
 module PostgRestAdmin exposing
-    ( Config(..), Program, AppParams, configure, buildProgram, buildAppParams
-    , Model, Msg
-    , route
+    ( Config(..), Program, AppParams, configure
+    , buildProgram, buildAppParams
+    , Model, Msg, appUrl
+    , applyConfiguration
     , onLogin, onAuthFailed, onLogout, onExternalLogin
-    , withHost, withLoginUrl, withJwt, withClientHeaders
+    , withHost, withLoginUrl, withJWT, withClientHeaders
     , withFlags
     , withMountPath, withRecordsPerPage
-    , withMenuLinks, withFormFields, withDetailActions
+    , withMenuLinks, withFormFields
     , withTables, withTableAliases
     , withLoginBannerText
     , Params, configDecoder
@@ -14,9 +15,10 @@ module PostgRestAdmin exposing
 
 {-|
 
-@docs Config, Program, AppParams, configure, buildProgram, buildAppParams
-@docs Model, Msg
-@docs route
+@docs Config, Program, AppParams, configure
+@docs buildProgram, buildAppParams, apply
+@docs Model, Msg, appUrl
+@docs applyConfiguration
 
 
 ## Wiring
@@ -26,7 +28,7 @@ module PostgRestAdmin exposing
 
 ## Client
 
-@docs withHost, withLoginUrl, withJwt, withClientHeaders
+@docs withHost, withLoginUrl, withJWT, withClientHeaders
 @docs withFlags
 @docs withFlags
 
@@ -34,7 +36,7 @@ module PostgRestAdmin exposing
 ## UI
 
 @docs withMountPath, withRecordsPerPage
-@docs withMenuLinks, withFormFields, withDetailActions
+@docs withMenuLinks, withFormFields
 @docs withTables, withTableAliases
 @docs withLoginBannerText
 
@@ -54,7 +56,7 @@ import Internal.Cmd as AppCmd exposing (AppCmd)
 import Internal.PageDetail as PageDetail
 import Internal.PageForm as PageForm
 import Internal.PageListing as PageListing exposing (Model)
-import Internal.Schema exposing (Record, Schema)
+import Internal.Schema exposing (Schema)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 import Markdown
@@ -72,38 +74,28 @@ type alias Model =
     , baseUrl : { protocol : Protocol, host : String, port_ : Maybe Int }
     , key : Nav.Key
     , notification : Notification
-    , client : Client
     , authFormUrl : Url
-    , authFormJwtDecoder : Decoder String
-    , authFormJwtEncoder : Dict String String -> Encode.Value
     , authFormField : Field.Field Never
     , authFormStatus : AuthFormStatus
-    , onLogin : String -> Cmd Msg
     , mountPath : MountPath
     , menuLinks : List ( String, String )
     , loginBannerText : Maybe String
     , recordsPerPage : Int
+    , formFields : Dict String (List String)
     , configErrors : List String
     , listing : Maybe PageListing.Model
     , detail : Maybe PageDetail.Model
     , form : Maybe PageForm.Model
+    , clientAttributes : ClientAttributes
+    , client : Client
     }
 
 
 type alias Params msg =
-    { host : Url
-    , mountPath : MountPath
-    , loginUrl : Url
-    , authScheme : AuthScheme
-    , formFields : Dict String (List String)
-    , detailActions : Dict String (List ( String, Record -> String -> String ))
-    , tables : List String
-    , menuLinks : List ( String, String )
-    , menuActions : Dict String Url
-    , tableAliases : Dict String String
-    , clientHeaders : List Http.Header
-    , recordsPerPage : Int
-    , loginBannerText : Maybe String
+    { attributes : List (Model -> Model)
+    , clientAttributes :
+        List
+            (ClientAttributes -> ClientAttributes)
     , onLogin : String -> Cmd msg
     , onAuthFailed : String -> Cmd msg
     , onExternalLogin :
@@ -113,6 +105,15 @@ type alias Params msg =
         -> Sub { path : String, accessToken : String }
     , onLogout : () -> Cmd msg
     , withFlags : Bool
+    }
+
+
+type alias ClientAttributes =
+    { host : Url
+    , authScheme : Client.AuthScheme
+    , headers : List Http.Header
+    , tables : List String
+    , tableAliases : Dict String String
     }
 
 
@@ -147,8 +148,8 @@ type Msg
     | NoOp
 
 
-route : Model -> AppUrl
-route model =
+appUrl : Model -> AppUrl
+appUrl model =
     model.appUrl
 
 
@@ -170,34 +171,13 @@ type Notification
 -}
 configure : Config msg
 configure =
-    let
-        defaultHost =
-            { protocol = Http
-            , host = "localhost"
-            , port_ = Just 3000
-            , path = ""
-            , query = Nothing
-            , fragment = Nothing
-            }
-    in
     Config
-        { authScheme = Client.unset
-        , host = defaultHost
-        , mountPath = MountPath.fromString ""
-        , loginUrl = { defaultHost | path = "/rpc/login" }
-        , formFields = Dict.empty
-        , detailActions = Dict.empty
-        , tables = []
-        , menuLinks = []
-        , menuActions = Dict.empty
+        { attributes = []
+        , clientAttributes = []
         , onLogin = always Cmd.none
         , onAuthFailed = always Cmd.none
         , onExternalLogin = always Sub.none
         , onLogout = always Cmd.none
-        , tableAliases = Dict.empty
-        , clientHeaders = []
-        , recordsPerPage = 50
-        , loginBannerText = Nothing
         , withFlags = True
         }
         []
@@ -218,9 +198,9 @@ buildProgram config =
         params =
             buildAppParams
                 { toInnerModel = identity
-                , toOuterModel = \model _ -> model
+                , toOuterModel = always identity
                 , toOuterMsg = identity
-                , initModel = identity
+                , initModel = always identity
                 }
                 config
     in
@@ -248,32 +228,24 @@ buildAppParams :
     { toInnerModel : model -> Model
     , toOuterModel : Model -> model -> model
     , toOuterMsg : Msg -> outerMsg
-    , initModel : Model -> model
+    , initModel : Decode.Value -> Model -> model
     }
     -> Config msg
     -> AppParams model outerMsg
 buildAppParams mappings ((Config confParams errs) as config) =
     { init =
         \value url key ->
-            let
-                newConf =
-                    case Decode.decodeValue (configDecoder config) value of
-                        Ok newConfig ->
-                            newConfig
+            (case Decode.decodeValue (configDecoder config) value of
+                Ok newConfig ->
+                    newConfig
 
-                        Err err ->
-                            Config confParams (Decode.errorToString err :: errs)
-
-                (Config newParams _) =
-                    newConf
-
-                model =
-                    initModel url key newConf
-            in
-            ( mappings.initModel model
-            , changeActionCmd newParams model
-                |> Cmd.map mappings.toOuterMsg
+                Err err ->
+                    Config confParams
+                        (Decode.errorToString err :: errs)
             )
+                |> initModel url key
+                |> Tuple.mapFirst (mappings.initModel value)
+                |> Tuple.mapSecond (Cmd.map mappings.toOuterMsg)
     , update =
         \msg outerModel ->
             update confParams msg (mappings.toInnerModel outerModel)
@@ -293,38 +265,82 @@ buildAppParams mappings ((Config confParams errs) as config) =
     }
 
 
-
--- INIT
-
-
-initModel : Url -> Nav.Key -> Config msg -> Model
-initModel url key (Config configRec errors) =
-    { appUrl = AppUrl.fromUrl url
-    , baseUrl = { protocol = url.protocol, host = url.host, port_ = url.port_ }
-    , key = key
-    , notification = NoNotification
-    , client =
-        Client.init
-            { host = configRec.host
-            , authScheme = configRec.authScheme
-            , headers = configRec.clientHeaders
-            , tables = configRec.tables
-            , tableAliases = configRec.tableAliases
+initModel : Url -> Nav.Key -> Config msg -> ( Model, Cmd Msg )
+initModel url key config =
+    applyConfiguration config
+        { appUrl = AppUrl.fromUrl url
+        , baseUrl = { protocol = url.protocol, host = url.host, port_ = url.port_ }
+        , key = key
+        , notification = NoNotification
+        , listing = Nothing
+        , detail = Nothing
+        , form = Nothing
+        , configErrors = []
+        , authFormField = authFormField
+        , authFormStatus = Ready
+        , authFormUrl = { defaultHost | path = "/rpc/login" }
+        , mountPath = MountPath.fromString ""
+        , menuLinks = []
+        , loginBannerText = Nothing
+        , recordsPerPage = 50
+        , formFields = Dict.empty
+        , clientAttributes =
+            { host = defaultHost
+            , authScheme = Client.unset
+            , headers = []
+            , tables = []
+            , tableAliases = Dict.empty
             }
-    , onLogin = configRec.onLogin >> Cmd.map (always NoOp)
-    , authFormUrl = configRec.loginUrl
-    , authFormJwtDecoder = Decode.field "token" Decode.string
-    , authFormJwtEncoder = Encode.dict identity Encode.string
-    , authFormField = authFormField
-    , authFormStatus = Ready
-    , mountPath = configRec.mountPath
-    , menuLinks = configRec.menuLinks
-    , loginBannerText = configRec.loginBannerText
-    , recordsPerPage = configRec.recordsPerPage
-    , configErrors = errors
-    , listing = Nothing
-    , detail = Nothing
-    , form = Nothing
+        , client = Client.init clientAttributes
+        }
+
+
+applyConfiguration : Config msg -> Model -> ( Model, Cmd Msg )
+applyConfiguration (Config config errors) model =
+    let
+        clientAttrs =
+            List.foldl (<|)
+                model.clientAttributes
+                config.clientAttributes
+
+        model2 =
+            List.foldl (<|)
+                { model
+                    | configErrors = errors
+                    , client = Client.init clientAttrs
+                    , clientAttributes = clientAttrs
+                }
+                config.attributes
+    in
+    ( model2
+    , changeActionCmd model2
+    )
+
+
+defaultHost : Url.Url
+defaultHost =
+    { protocol = Http
+    , host = "localhost"
+    , port_ = Just 3000
+    , path = ""
+    , query = Nothing
+    , fragment = Nothing
+    }
+
+
+clientAttributes :
+    { host : Url
+    , authScheme : AuthScheme
+    , headers : List Http.Header
+    , tables : List String
+    , tableAliases : Dict String String
+    }
+clientAttributes =
+    { host = defaultHost
+    , authScheme = Client.unset
+    , headers = []
+    , tables = []
+    , tableAliases = Dict.empty
     }
 
 
@@ -356,7 +372,7 @@ requestToken model =
                     (Parse.parse Parse.json model.authFormField
                         |> Result.withDefault Encode.null
                     )
-            , resolver = Client.jsonResolver model.authFormJwtDecoder
+            , resolver = Client.jsonResolver (Decode.field "token" Decode.string)
             , timeout = Nothing
             }
         )
@@ -392,7 +408,7 @@ update config msg ({ client } as model) =
                 , authFormField = authFormField
               }
             , Cmd.batch
-                [ model.onLogin tokenStr
+                [ config.onLogin tokenStr |> Cmd.map (always NoOp)
                 , Client.fetchSchema updatedClient
                     |> Task.attempt SchemaFetched
                 ]
@@ -405,12 +421,10 @@ update config msg ({ client } as model) =
 
         SchemaFetched (Ok schema) ->
             let
-                updatedClient =
-                    { client | schema = schema }
+                updatedModel =
+                    { model | client = { client | schema = schema } }
             in
-            ( { model | client = updatedClient }
-            , Task.succeed () |> Task.perform (always LoadPage)
-            )
+            ( updatedModel, changeActionCmd updatedModel )
 
         SchemaFetched (Err err) ->
             ( { model
@@ -492,25 +506,15 @@ update config msg ({ client } as model) =
 
         UrlChanged url ->
             if (currentUrl model).path /= url.path then
-                let
-                    updatedModel =
-                        { model
-                            | appUrl = AppUrl.fromUrl url
-                            , baseUrl =
-                                { protocol = url.protocol
-                                , host = url.host
-                                , port_ = url.port_
-                                }
+                ( { model
+                    | appUrl = AppUrl.fromUrl url
+                    , baseUrl =
+                        { protocol = url.protocol
+                        , host = url.host
+                        , port_ = url.port_
                         }
-
-                    ( finalModel, initCmd ) =
-                        initPageModels config updatedModel
-                in
-                ( finalModel
-                , Cmd.batch
-                    [ changeActionCmd config updatedModel
-                    , Task.succeed () |> Task.perform (always LoadPage)
-                    ]
+                  }
+                , Task.succeed () |> Task.perform (always LoadPage)
                 )
 
             else
@@ -543,8 +547,8 @@ update config msg ({ client } as model) =
             ( model, Cmd.none )
 
 
-changeActionCmd : Params msg -> Model -> Cmd Msg
-changeActionCmd _ model =
+changeActionCmd : Model -> Cmd Msg
+changeActionCmd model =
     if Client.toJwtString model.client == Nothing then
         Cmd.none
 
@@ -931,10 +935,6 @@ initPageModels config model =
                         , mountPath = model.mountPath
                         , table = table
                         , id = id
-                        , detailActions =
-                            config.detailActions
-                                |> Dict.get resource
-                                |> Maybe.withDefault []
                         }
                         model.key
                         |> Tuple.mapFirst (\detailModel -> { model | detail = Just detailModel })
@@ -1176,8 +1176,9 @@ withHost urlStr (Config conf errors) =
         Just u ->
             Config
                 { conf
-                    | host = u
-                    , loginUrl = { u | path = "/rpc/login" }
+                    | clientAttributes =
+                        (\attrs -> { attrs | host = u })
+                            :: conf.clientAttributes
                 }
                 errors
 
@@ -1225,7 +1226,13 @@ withLoginUrl : String -> Config msg -> Config msg
 withLoginUrl urlStr (Config conf errors) =
     case Url.fromString urlStr of
         Just u ->
-            Config { conf | loginUrl = u } errors
+            Config
+                { conf
+                    | attributes =
+                        (\model -> { model | authFormUrl = u })
+                            :: conf.attributes
+                }
+                errors
 
         Nothing ->
             Config conf (("`Config.loginUrl` was given an invalid URL: " ++ urlStr) :: errors)
@@ -1246,20 +1253,26 @@ using this attribute.
     main : PostgRestAdmin.Program
     main =
         PostgRestAdmin.configuration
-            |> PostgRestAdmin.withJwt "8abf3a...9ac36d"
+            |> PostgRestAdmin.withJWT "8abf3a...9ac36d"
             |> PostgRestAdmin.buildProgram
 
 -}
-withJwt : String -> Config msg -> Config msg
-withJwt tokenStr (Config conf errors) =
-    Config { conf | authScheme = Client.jwt tokenStr } errors
+withJWT : String -> Config msg -> Config msg
+withJWT tokenStr (Config conf errors) =
+    Config
+        { conf
+            | clientAttributes =
+                (\attrs -> { attrs | authScheme = Client.jwt tokenStr })
+                    :: conf.clientAttributes
+        }
+        errors
 
 
 jwtDecoder : Config msg -> Decoder (Config msg)
 jwtDecoder config =
     Decode.maybe (Decode.field "jwt" Decode.string)
         |> Decode.map
-            (Maybe.map (\tokenStr -> withJwt tokenStr config)
+            (Maybe.map (\tokenStr -> withJWT tokenStr config)
                 >> Maybe.withDefault config
             )
 
@@ -1280,7 +1293,13 @@ working with PostgREST schemas.
 -}
 withClientHeaders : List Http.Header -> Config msg -> Config msg
 withClientHeaders headers (Config conf errors) =
-    Config { conf | clientHeaders = headers } errors
+    Config
+        { conf
+            | clientAttributes =
+                (\attrs -> { attrs | headers = headers })
+                    :: conf.clientAttributes
+        }
+        errors
 
 
 clientHeadersDecoder : Config msg -> Decoder (Config msg)
@@ -1311,7 +1330,13 @@ root path.
 -}
 withMountPath : String -> Config msg -> Config msg
 withMountPath p (Config conf errors) =
-    Config { conf | mountPath = MountPath.fromString p } errors
+    Config
+        { conf
+            | attributes =
+                (\model -> { model | mountPath = MountPath.fromString p })
+                    :: conf.attributes
+        }
+        errors
 
 
 mountPathDecoder : Config msg -> Decoder (Config msg)
@@ -1334,7 +1359,13 @@ mountPathDecoder config =
 -}
 withRecordsPerPage : Int -> Config msg -> Config msg
 withRecordsPerPage count (Config conf errors) =
-    Config { conf | recordsPerPage = count } errors
+    Config
+        { conf
+            | attributes =
+                (\model -> { model | recordsPerPage = count })
+                    :: conf.attributes
+        }
+        errors
 
 
 recordsPerPageDecoder : Config msg -> Decoder (Config msg)
@@ -1358,7 +1389,13 @@ tuples of the link text and a url.
 -}
 withMenuLinks : List ( String, String ) -> Config msg -> Config msg
 withMenuLinks links (Config conf errors) =
-    Config { conf | menuLinks = links } errors
+    Config
+        { conf
+            | attributes =
+                (\model -> { model | menuLinks = links })
+                    :: conf.attributes
+        }
+        errors
 
 
 menuLinksDecoder : Config msg -> Decoder (Config msg)
@@ -1392,7 +1429,11 @@ the forms.
 withFormFields : String -> List String -> Config msg -> Config msg
 withFormFields tableName fields (Config conf errors) =
     Config
-        { conf | formFields = Dict.insert tableName fields conf.formFields }
+        { conf
+            | attributes =
+                (\model -> { model | formFields = Dict.insert tableName fields model.formFields })
+                    :: conf.attributes
+        }
         errors
 
 
@@ -1408,35 +1449,6 @@ formFieldsDecoder config =
             )
 
 
-{-| Specify action buttons to be shown in the detail page of a
-record along with Edit and Delete buttons.
-
-`detailActions` expects a table name and a list of tuples. The first element of
-each tuple is the button text and the second is a function that takes a record
-and an ID and returns a URL string.
-
-    import Url.Builder as Url
-
-    main : PostgRestAdmin.Program
-    main =
-        PostgRestAdmin.configuration
-            |> PostgRestAdmin.withDetailActions "posts"
-                [ ( "View Comments"
-                  , \_ id -> Url.absolute [ "posts", id, "comments" ] []
-                  )
-                ]
-            |> PostgRestAdmin.buildProgram
-
--}
-withDetailActions :
-    String
-    -> List ( String, Record -> String -> String )
-    -> Config msg
-    -> Config msg
-withDetailActions table actions (Config conf errors) =
-    Config { conf | detailActions = Dict.insert table actions conf.detailActions } errors
-
-
 {-| Pass a list of table names to restrict the editable resources, also sets the
 order of the left resources menu.
 
@@ -1449,7 +1461,13 @@ order of the left resources menu.
 -}
 withTables : List String -> Config msg -> Config msg
 withTables tableNames (Config conf errors) =
-    Config { conf | tables = tableNames } errors
+    Config
+        { conf
+            | clientAttributes =
+                (\attrs -> { attrs | tables = tableNames })
+                    :: conf.clientAttributes
+        }
+        errors
 
 
 tablesDecoder : Config msg -> Decoder (Config msg)
@@ -1475,7 +1493,13 @@ because of this some links might be incorrectly generated.
 -}
 withTableAliases : Dict String String -> Config msg -> Config msg
 withTableAliases aliases (Config conf errors) =
-    Config { conf | tableAliases = aliases } errors
+    Config
+        { conf
+            | clientAttributes =
+                (\attrs -> { attrs | tableAliases = aliases })
+                    :: conf.clientAttributes
+        }
+        errors
 
 
 tableAliasesDecoder : Config msg -> Decoder (Config msg)
@@ -1498,7 +1522,13 @@ tableAliasesDecoder config =
 -}
 withLoginBannerText : String -> Config msg -> Config msg
 withLoginBannerText text (Config conf errors) =
-    Config { conf | loginBannerText = Just text } errors
+    Config
+        { conf
+            | attributes =
+                (\model -> { model | loginBannerText = Just text })
+                    :: conf.attributes
+        }
+        errors
 
 
 loginBannerTextDecoder : Config msg -> Decoder (Config msg)
