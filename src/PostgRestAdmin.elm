@@ -1,8 +1,8 @@
 module PostgRestAdmin exposing
-    ( Config(..), Program, AppParams, configure
-    , buildProgram, buildAppParams
-    , Model, Msg, appUrl
-    , applyConfiguration
+    ( Model, Msg
+    , Config(..), Program, AppParams, configure
+    , buildProgram, buildAppParams, applyConfiguration
+    , appUrl
     , onLogin, onAuthFailed, onLogout, onExternalLogin
     , withHost, withLoginUrl, withJWT, withClientHeaders
     , withFlags
@@ -10,15 +10,14 @@ module PostgRestAdmin exposing
     , withMenuLinks, withFormFields
     , withTables, withTableAliases
     , withLoginBannerText
-    , Params, configDecoder
     )
 
 {-|
 
+@docs Model, Msg
 @docs Config, Program, AppParams, configure
-@docs buildProgram, buildAppParams, apply
-@docs Model, Msg, appUrl
-@docs applyConfiguration
+@docs buildProgram, buildAppParams, applyConfiguration
+@docs appUrl
 
 
 ## Wiring
@@ -29,7 +28,6 @@ module PostgRestAdmin exposing
 ## Client
 
 @docs withHost, withLoginUrl, withJWT, withClientHeaders
-@docs withFlags
 @docs withFlags
 
 
@@ -69,6 +67,7 @@ import Task
 import Url exposing (Protocol(..), Url)
 
 
+{-| -}
 type alias Model =
     { appUrl : AppUrl
     , baseUrl : { protocol : Protocol, host : String, port_ : Maybe Int }
@@ -124,10 +123,12 @@ type AuthFormStatus
     | Failure Client.Error
 
 
+{-| -}
 type Config msg
     = Config (Params msg) (List String)
 
 
+{-| -}
 type Msg
     = AuthFieldsChanged (Field.Msg Never)
     | AuthFormSubmitted
@@ -148,6 +149,7 @@ type Msg
     | NoOp
 
 
+{-| -}
 appUrl : Model -> AppUrl
 appUrl model =
     model.appUrl
@@ -214,6 +216,7 @@ buildProgram config =
         }
 
 
+{-| -}
 type alias AppParams model outerMsg =
     { init : Decode.Value -> Url -> Nav.Key -> ( model, Cmd outerMsg )
     , view : model -> Html outerMsg
@@ -224,6 +227,7 @@ type alias AppParams model outerMsg =
     }
 
 
+{-| -}
 buildAppParams :
     { toInnerModel : model -> Model
     , toOuterModel : Model -> model -> model
@@ -295,6 +299,7 @@ initModel url key config =
         }
 
 
+{-| -}
 applyConfiguration : Config msg -> Model -> ( Model, Cmd Msg )
 applyConfiguration (Config config errors) model =
     let
@@ -1048,6 +1053,7 @@ urlToPath url =
 -- CONFIG
 
 
+{-| -}
 configDecoder : Config msg -> Decoder (Config msg)
 configDecoder config =
     Decode.succeed config

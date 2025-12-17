@@ -3,15 +3,10 @@
     "name": "maca/postgrest-admin-preview",
     "summary": "Backoffice interface for PostgREST",
     "license": "BSD-3-Clause",
-    "version": "14.0.3",
+    "version": "15.0.0",
     "exposed-modules": [
         "PostgRestAdmin",
-        "PostgRestAdmin.Client",
-        "PostgRestAdmin.Cmd",
-        "PostgRestAdmin.Config",
-        "PostgRestAdmin.MountPath",
-        "PostgRestAdmin.Notification",
-        "PostgRestAdmin.Record"
+        "PostgRestAdmin.MountPath"
     ],
     "elm-version": "0.19.0 <= v < 0.20.0",
     "dependencies": {
